@@ -1,0 +1,22 @@
+#!/bin/bash
+# Quick script to check email logs in Vercel
+
+echo "📧 Checking email logs..."
+echo ""
+echo "Option 1: Via Vercel Dashboard"
+echo "  1. Go to: https://vercel.com/dashboard"
+echo "  2. Select your project"
+echo "  3. Go to: Deployments → Latest → Functions → process-index-job → Logs"
+echo "  4. Search for: 📧 or 'email'"
+echo ""
+echo "Option 2: Via Vercel CLI"
+echo "  Run: vercel logs --follow | grep '📧'"
+echo ""
+echo "What to look for:"
+echo "  ✅ [req_xxx] 📧 Starting email notification process"
+echo "  ✅ 📧 sendJobNotificationEmail called"
+echo "  ✅ ✅ User email sent successfully"
+echo "  ❌ ❌ Failed to send... (if there's an error)"
+echo ""
+echo "If you see 'RESEND_API_KEY not configured', add it in:"
+echo "  Vercel Dashboard → Settings → Environment Variables"

@@ -1,0 +1,2547 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        font-family: 'Inter', Arial, sans-serif;
+        background: #fff;
+        color: #222;
+        margin: 0;
+        padding: 0;
+        padding-bottom: 20px;
+        min-height: 100vh;
+        box-sizing: border-box;
+        width: 400px;
+        max-width: 400px;
+        min-width: 400px;
+        overflow-x: hidden;
+      }
+
+      /* Bottom Navigation Bar - REMOVED */
+
+      /* Tab Content */
+      .tab-content {
+        display: none;
+        padding: 16px;
+        padding-bottom: 20px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      /* Header */
+      .app-header {
+        padding: 12px 16px;
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .app-header .version {
+        font-size: 0.6em;
+        color: #888;
+      }
+      .debug-clear-btn {
+        font-size: 0.65em;
+        color: #888;
+        background: transparent;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 2px 6px;
+        cursor: pointer;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      .debug-clear-btn:hover {
+        color: #d32f2f;
+        border-color: #d32f2f;
+      }
+
+      .app-header .settings-icon-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 1em;
+        padding: 4px 8px;
+        color: #666;
+        transition: color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app-header .settings-icon-btn:hover {
+        color: #1976d2;
+      }
+
+      .header-connect-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 8px;
+      }
+      .header-connect-status {
+        font-size: 0.65em;
+        color: #666;
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: #f0f0f0;
+      }
+      .header-connect-status.connected {
+        color: #2e7d32;
+        background: #e8f5e9;
+        cursor: pointer;
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .header-connect-status.connected:hover {
+        background: #c8e6c9;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+      .header-connect-btn {
+        font-size: 0.65em;
+        padding: 4px 8px;
+        border: 1px solid #9e9e9e;
+        border-radius: 6px;
+        background: #fff;
+        color: #555;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+      }
+      .header-connect-btn:hover:not(:disabled) {
+        background: #f5f5f5;
+        color: #333;
+      }
+      .header-connect-btn:disabled {
+        cursor: default;
+        opacity: 0.7;
+      }
+
+      #markNoIndexBtn, #markAllIndexBtn {
+        margin-top: 8px;
+        padding: 4px 0;
+        font-size: 0.95em;
+        background: #fff;
+        color: #1976d2;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        width: 260px;
+        margin-bottom: 8px;
+        font-weight: 500;
+        box-shadow: none;
+        transition: background 0.2s, color 0.2s;
+      }
+      #markNoIndexBtn:disabled, #markAllIndexBtn:disabled {
+        background: #f3f3f3;
+        color: #b0b0b0;
+        border-color: #e0e0e0;
+        cursor: not-allowed;
+      }
+      #markNoIndexBtn:hover:enabled, #markAllIndexBtn:hover:enabled {
+        background: #e3f2fd;
+      }
+      #markAllIndexBtn { color: #43a047; border-color: #43a047; }
+      #markAllIndexBtn:hover:enabled { background: #e8f5e9; }
+      #pagesList label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 1em;
+        padding: 4px 8px;
+      }
+      #pagesList label .page-row-left {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+      }
+      #pagesList label .page-row-icon {
+        flex-shrink: 0;
+        margin-left: 8px;
+        font-size: 0.55em;
+        color: #666;
+      }
+      #pagesList label.excluded-page {
+        opacity: 0.5;
+        background-color: #f9f9f9;
+      }
+      .excluded-warning-msg {
+        font-size: 0.7em;
+        color: #ff9800;
+        margin-left: 8px;
+        font-style: italic;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #pagesList input[type="checkbox"] {
+        margin-right: 8px;
+        accent-color: #2897FB;
+        width: 12px;
+        height: 12px;
+      }
+      .page-menu-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1em;
+        color: #666;
+        padding: 2px 4px;
+        margin-left: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s;
+      }
+      .page-menu-btn:hover {
+        color: #1976d2;
+      }
+      .page-context-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        min-width: 160px;
+        padding: 4px 0;
+        font-size: 0.85em;
+      }
+      .page-context-menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        color: #333;
+        transition: background 0.2s;
+      }
+      .page-context-menu-item:hover {
+        background: #f0f0f0;
+      }
+      .checkmark {
+        color: #43a047;
+        font-size: 1.1em;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      /* Skeleton Loading Styles */
+      .skeleton-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        animation: skeleton-breathe 2s ease-in-out infinite;
+      }
+      
+      .skeleton-checkbox {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        margin-right: 12px;
+        flex-shrink: 0;
+      }
+      
+      .skeleton-text {
+        height: 14px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        flex: 1;
+        margin-right: 8px;
+      }
+      
+      .skeleton-text.short {
+        width: 60%;
+      }
+      
+      .skeleton-text.medium {
+        width: 80%;
+      }
+      
+      .skeleton-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        flex-shrink: 0;
+      }
+      
+      @keyframes skeleton-pulse {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+      
+      @keyframes skeleton-breathe {
+        0%, 100% {
+          opacity: 0.6;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      
+      .disabled-page {
+        color: #b0b0b0;
+        cursor: not-allowed;
+      }
+      #infoMsg{border:1px solid gray; padding:4px 16px 4px 16px; margin-bottom: 8px; text-align: center;border-radius: 4px;background: #f7f8fa; color: #222;width: fit-content;margin: 0 auto; margin-bottom: 8px;}
+      #overallProgressContainer { 
+        width: 100%; 
+        margin: 0 auto 12px auto; 
+        display: none;
+      }
+      #overallProgressBarBg { 
+        background: #eee; 
+        border-radius: 8px; 
+        height: 24px; 
+        width: 100%; 
+        position: relative;
+        margin-bottom: 8px;
+      }
+      #overallProgressBar { 
+        background: linear-gradient(90deg, #1976d2 0%, #42a5f5 100%); 
+        height: 100%; 
+        width: 0%; 
+        border-radius: 8px; 
+        transition: width 0.3s ease;
+      }
+      #overallProgressText { 
+        position: absolute; 
+        left: 50%; 
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: #1976d2; 
+        font-weight: 600; 
+        font-size: 0.85em; 
+        width: 100%;
+        text-align: center;
+        white-space: nowrap;
+      }
+      #overallProgressDetails {
+        font-size: 0.75em;
+        color: #666;
+        text-align: center;
+        margin-top: 8px;
+      }
+      #doneMsg { color: #2897FB; margin-top: 16px; font-weight: 500; display: none; font-size: 1em; }
+      #errorMsg { color: #d32f2f; margin-top: 16px; font-weight: 500; display: none; font-size: 1em; }
+      #loading { display: none; }
+      #runningProgressBarContainer { display: none; }
+      .spinner {
+        border: 3px solid #eee;
+        border-top: 3px solid #2897FB;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg);}
+        100% { transform: rotate(360deg);}
+      }
+      @keyframes slideIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes slideOut {
+        from { transform: translateY(0); opacity: 1; }
+        to { transform: translateY(-20px); opacity: 0; }
+      }
+      /* refresh */
+      #refreshPagesBtn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2em;
+        color: #2897FB;
+        padding: 0;
+        margin: 0;
+        display: inline-block;
+        line-height: 1;
+        vertical-align: middle;
+      }
+      #refreshPagesBtn:active { color: #0d99ff; }
+      #pagesCard {
+        width: 354px !important;
+        max-width: 354px !important;
+        min-width: 354px !important;
+        box-sizing: border-box !important;
+      }
+      #frameTagsSectionIndex {
+        width: 354px !important;
+        max-width: 354px !important;
+        min-width: 354px !important;
+        box-sizing: border-box !important;
+      }
+      #fileKeyRequiredMsg {
+        width: 354px !important;
+        max-width: 354px !important;
+        min-width: 354px !important;
+        box-sizing: border-box !important;
+      }
+      #marketingBoxCompact {
+        width: 354px !important;
+        max-width: 354px !important;
+        min-width: 354px !important;
+        box-sizing: border-box !important;
+      }
+      #indexSuccessScreen > div {
+        width: 354px !important;
+        max-width: 354px !important;
+        min-width: 354px !important;
+        box-sizing: border-box !important;
+      }
+      #pagesHeader { 
+        display: flex; 
+        align-items: center;
+        width: 100%; 
+        border-bottom: 1px solid #0d99ff; 
+        margin-bottom: 6px; 
+        padding: 4px 0;
+      }
+      #pagesHeader > div:first-child {
+        flex: 0 0 auto;
+      }
+      #pagesHeader > div:nth-child(2) {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      #pagesHeader > div:last-child {
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+      
+      /* Animation for collapsible sections */
+      #pagesListContainer, #frameTagsContent {
+        transition: max-height 0.3s ease-out, opacity 0.3s ease-out, margin-bottom 0.3s ease-out;
+        overflow: hidden;
+      }
+      
+      #advanceBtn:hover:enabled {
+        background: #e3f2fd;
+      }
+      #advanceBtn:disabled {
+        background: #e0e0e0;
+        color: #9e9e9e;
+        border-color: #e0e0e0;
+        cursor: not-allowed;
+        opacity: 0.65;
+        pointer-events: none;
+      }
+      
+      /* Tag System Styles */
+      .tag {
+        display: inline-block;
+        background: #1976d2;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7em;
+        margin: 2px;
+        cursor: pointer;
+        user-select: none;
+      }
+      
+      .tag:hover {
+        background: #1565c0;
+      }
+      
+      .tag-remove {
+        margin-left: 4px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      
+      .tag-input-container {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      
+      .tag-input-field {
+        flex: 1;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.7em;
+      }
+      
+      .tag-add-btn {
+        background: #43a047;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.7em;
+        cursor: pointer;
+      }
+      
+      .tag-add-btn:hover {
+        background: #388e3c;
+      }
+      
+      .frame-tags {
+        margin-top: 4px;
+        min-height: 20px;
+      }
+      
+      .tag-suggestions {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 4px;
+        margin-top: 4px;
+        font-size: 0.7em;
+        max-height: 100px;
+        overflow-y: auto;
+      }
+      
+      .tag-suggestion {
+        padding: 2px 4px;
+        cursor: pointer;
+        border-radius: 2px;
+      }
+      
+      .tag-suggestion:hover {
+        background: #e0e0e0;
+      }
+      
+      /* Tag Button Styles */
+      .tag-btn {
+        background: #1976d2;
+        color: white;
+        border: none;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.7em;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      
+      .tag-btn:hover {
+        background: #1565c0;
+      }
+      
+      .tag-btn.active {
+        background: #43a047;
+      }
+      
+      /* Custom Slider Styles */
+      #qualitySlider {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+        height: 20px;
+        width: 100%;
+        position: relative;
+        z-index: 2;
+      }
+      
+      #qualitySlider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        background: #1976d2;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(25, 118, 210, 0.3);
+        border: 2px solid white;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+      
+      #qualitySlider::-webkit-slider-thumb:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 8px rgba(25, 118, 210, 0.4);
+      }
+      
+      #qualitySlider::-webkit-slider-track {
+        background: transparent;
+        height: 20px;
+        border-radius: 3px;
+        width: 100%;
+      }
+      
+      #qualitySlider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        background: #1976d2;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 6px rgba(25, 118, 210, 0.3);
+        transition: all 0.2s ease;
+      }
+      
+      #saveToWebBtn:disabled {
+        background: #d9d9d9 !important;
+        color: white !important;
+        cursor: not-allowed !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        border: none !important;
+      }
+      
+      #addCustomTagBtn:hover {
+        background: #1565c0 !important;
+      }
+      
+      .tag-container:hover {
+        background: #bbdefb !important;
+      }
+      
+      .tag-delete-btn:hover {
+        color: #d32f2f !important;
+        background: rgba(244, 67, 54, 0.1) !important;
+        border-radius: 50% !important;
+      }
+      
+      #qualitySlider::-moz-range-track {
+        background: transparent;
+        height: 20px;
+        border: none;
+        border-radius: 3px;
+        width: 100%;
+      }
+      
+      /* Fixed width for quality label to prevent jumping */
+      #qualityLabel {
+        width: 130px !important;
+        min-width: 130px !important;
+        max-width: 130px !important;
+        text-align: right;
+        display: inline-block;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      
+      /* Tab Styles */
+      .tabButton {
+        transition: all 0.3s ease;
+        border-bottom: 3px solid transparent;
+      }
+      
+      .tabButton.active {
+        background: #1976d2 !important;
+        color: white !important;
+        border-bottom-color: #1565c0;
+      }
+      
+      .tabButton:not(.active) {
+        background: #f5f5f5 !important;
+        color: #666 !important;
+      }
+      
+      .tabButton:not(.active):hover {
+        background: #e0e0e0 !important;
+        color: #333 !important;
+      }
+      
+      .tabContent {
+        display: block;
+      }
+      
+      .tabContent.hidden {
+        display: none;
+      }
+      .settings-menu {
+        position: absolute;
+        right: 0;
+        top: 28px;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        min-width: 220px;
+        z-index: 1000;
+        padding: 6px 0;
+        font-size: 0.8em;
+      }
+      .settings-menu.hidden { display: none; }
+      .settings-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+        font-size: 0.8em;
+      }
+      .settings-item:hover { background: #f7f7f7; }
+      .settings-sep { height:1px; background:#eee; margin:6px 0; }
+      .quality-row { display:flex; align-items:center; gap:8px; width:100%; }
+      .quality-pills { display:flex; gap:6px; margin-left:auto; background:#fafafa; padding:4px; border:1px solid #eee; border-radius:6px; }
+      .quality-pill {
+        background:#fff; 
+        border:1px solid #e0e0e0; 
+        border-radius:12px; 
+        padding:2px 8px; 
+        font-size:0.8em; 
+        cursor:pointer;
+        transition: all .15s ease;
+      }
+      .quality-pill:hover { background:#f7faff; border-color:#cfe3ff; }
+      .quality-pill.active { background:#1976d2; color:#fff; border-color:#1976d2; box-shadow:0 1px 4px rgba(25,118,210,.35); }
+      .step-disabled { opacity: 0.55; pointer-events: none; }
+      .step-complete { border-color: #e0e0e0 !important; background: #fff !important; }
+      .step-highlight { box-shadow: 0 0 0 2px rgba(25,118,210,.2); }
+      .page-row-action-disabled { opacity: 0.35; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="app-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div class="version" id="pluginVersionLabel">v1.32.01</div>
+        <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
+        <span id="buttonClickLog" style="display: none; font-size: 0.6em; color: #1976d2; margin-left: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Last button click"></span>
+      </div>
+      
+      <!-- Notification/Marketing area - shared space -->
+      <div id="headerCenterArea" style="flex: 1; display: none; align-items: center; justify-content: center; margin: 0 8px;">
+        <!-- Notification (for connected users - hidden by default) -->
+        <div id="headerNotification" style="display: none; text-align: center; font-size: 0.75em; color: #4caf50; font-weight: 500; opacity: 0; transition: opacity 0.3s; width: 100%;"></div>
+        
+        <!-- Marketing Banner (for disconnected users - shown by default) -->
+        <div id="headerMarketingBanner" style="display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 4px 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white; font-size: 0.7em; font-weight: 500; transition: transform 0.2s, box-shadow 0.2s; overflow: hidden;" onclick="openWebLogin()" title="Connect to FigDex Web">
+          <span style="font-size: 1em;">🚀</span>
+          <span id="headerBenefitText" style="transition: opacity 0.3s; flex: 1; text-align: center;">Connect to FigDex</span>
+          <span style="background: rgba(255,255,255,0.25); padding: 1px 6px; border-radius: 8px; font-size: 0.85em; flex-shrink: 0;">Guest</span>
+        </div>
+      </div>
+
+      <!-- Persistent Connect status + action (always visible) -->
+      <div id="headerConnectControl" class="header-connect-control">
+        <span id="headerConnectStatus" class="header-connect-status">Not connected</span>
+        <button type="button" id="headerConnectBtn" class="header-connect-btn" title="Open FigDex Web to connect">Connect to FigDex</button>
+        <a href="#" id="headerSaveSyncLink" style="display:none; font-size:0.7em; color:#1976d2; margin-left:6px; text-decoration:none;" title="Save & sync (Free)">Save & sync (Free)</a>
+      </div>
+      
+      <button id="settingsIconBtn" class="settings-icon-btn" title="Settings">⚙️</button>
+    </div>
+
+    <div style="margin: 8px 16px 0 16px; font-size: 0.75em; color: #555; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
+      Index this file to browse & search all its screens in FigDex Web.
+    </div>
+    
+    <script>
+      // Animate header benefit text
+      (function() {
+        const benefits = [
+          'Connect to FigDex',
+          '☁️ Cloud backup',
+          '👥 Team sharing', 
+          '🔍 Smart search',
+          '🏷️ Custom tags',
+          '📱 Any device'
+        ];
+        let currentBenefit = 0;
+        const textEl = document.getElementById('headerBenefitText');
+        if (textEl) {
+          setInterval(() => {
+            textEl.style.opacity = '0';
+            setTimeout(() => {
+              currentBenefit = (currentBenefit + 1) % benefits.length;
+              textEl.textContent = benefits[currentBenefit];
+              textEl.style.opacity = '1';
+            }, 300);
+          }, 3000);
+        }
+      })();
+    </script>
+
+    <!-- Marketing Banner for Disconnected Users (Large version - hidden by default, using header version instead) -->
+    <div id="marketingBannerTop" style="display: none; margin: 8px 16px 0 16px; padding: 12px 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; box-shadow: 0 3px 12px rgba(102, 126, 234, 0.3); color: white; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box; overflow: hidden; position: relative;" onclick="openWebLogin()">
+      <!-- Decorative circles -->
+      <div style="position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; background: rgba(255,255,255,0.08); border-radius: 50%;"></div>
+      <div style="position: absolute; bottom: -30px; left: -30px; width: 60px; height: 60px; background: rgba(255,255,255,0.05); border-radius: 50%;"></div>
+      
+      <!-- Header row -->
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: relative; z-index: 1;">
+        <span style="font-size: 1.2em;">🚀</span>
+        <span style="font-size: 0.85em; font-weight: 700;">Connect to FigDex Web</span>
+        <span style="margin-left: auto; font-size: 0.7em; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px;">Guest</span>
+      </div>
+      
+      <!-- Animated benefits carousel -->
+      <div id="benefitsCarousel" style="height: 20px; overflow: hidden; position: relative; z-index: 1;">
+        <div id="benefitsSlider" style="display: flex; flex-direction: column; animation: slideUpBenefits 12s infinite;">
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>☁️</span> <span>Cloud storage & backup</span>
+          </div>
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>👥</span> <span>Share with your team</span>
+          </div>
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>🔍</span> <span>Advanced search & filters</span>
+          </div>
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>🏷️</span> <span>Custom tags & organization</span>
+          </div>
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>📱</span> <span>Access from any device</span>
+          </div>
+          <div style="height: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.75em; opacity: 0.95;">
+            <span>☁️</span> <span>Cloud storage & backup</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- CTA -->
+      <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px; position: relative; z-index: 1;">
+        <span style="font-size: 0.7em; background: rgba(255,255,255,0.95); color: #667eea; padding: 5px 12px; border-radius: 4px; font-weight: 600;">Login / Register →</span>
+      </div>
+    </div>
+    
+    <style>
+      @keyframes slideUpBenefits {
+        0%, 16% { transform: translateY(0); }
+        20%, 36% { transform: translateY(-20px); }
+        40%, 56% { transform: translateY(-40px); }
+        60%, 76% { transform: translateY(-60px); }
+        80%, 96% { transform: translateY(-80px); }
+        100% { transform: translateY(-100px); }
+      }
+      #marketingBannerTop:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+      }
+    </style>
+
+    <!-- Tab Content: Index -->
+    <div id="tabIndex" class="tab-content active">
+
+    <!-- Step 1: Link file -->
+    <div id="fileKeyRequiredMsg" style="display:block; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 0.75em; color: #333;">
+      <div id="fileKeyStep1Summary" style="display: none; font-size:0.85em; font-weight:600; color:#43a047;">Step 1: Linked ✓ — <span id="fileKeyStep1PagesCount">0</span> pages loaded</div>
+      <div id="fileKeyStep1Full">
+        <div style="font-size:0.85em; font-weight:600; margin-bottom:4px; color:#1976d2;">Step 1: Link this Figma file</div>
+        <div style="font-size:0.7em; color:#666; margin-bottom:8px;">This lets FigDex show this file as a searchable gallery.</div>
+        <div id="fileKeyInlineSection" style="display:block;">
+          <input id="fileKeyInlineInput" type="text" style="width:100%; margin-bottom:6px; padding:6px 8px; font-size:0.75em; border:1px solid #e0e0e0; border-radius:4px; background:#fafbfc; color:#222;" placeholder="Paste Figma file link" />
+          <div style="font-size:0.65em; color:#888; margin-bottom:8px;">Copy the full Figma file link from your browser's address bar.</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="fileKeyInlineSaveBtn" style="font-size:0.8em; background: #1976d2; color: #fff; border: 1px solid #1976d2; border-radius: 4px; cursor: pointer; width: auto; padding: 6px 12px; font-weight: 500; box-shadow: none; transition: background 0.2s, color 0.2s;">Save & continue</button>
+            <span id="fileKeySetStatus" style="font-size:0.8em; color:#43a047; min-width: 70px;"></span>
+            <span id="fileKeyInlineStatus" style="font-size:0.8em; color:#43a047;"></span>
+          </div>
+        </div>
+      </div>
+      <div id="fileKeyStep1ChangeLink" style="display: none; margin-top: 6px;">
+        <button type="button" id="fileKeyChangeLinkBtn" style="font-size:0.75em; background:transparent; color:#1976d2; border:none; cursor:pointer; padding:0; text-decoration:underline;">Change link</button>
+      </div>
+    </div>
+
+      <!-- Marketing Box (Compact) - REMOVED, using marketingBannerTop instead -->
+
+      <!-- Pages Section -->
+      <div id="pagesCard" class="step-disabled" style="margin-bottom: 12px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div id="pagesCardHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 0.8em; font-weight: 600; color: #1976d2;">Step 2: Select pages</div>
+          <button id="pagesCardToggleBtn" style="background: transparent; border: none; cursor: pointer; font-size: 0.9em; color: #666; padding: 4px 8px; transition: color 0.2s; display: flex; align-items: center; flex-shrink: 0;" title="Collapse/Expand">
+            <span id="pagesCardToggleIcon" style="display: inline-block; width: 12px; text-align: center;">▼</span>
+          </button>
+        </div>
+        <div style="font-size: 0.7em; color: #666; margin-bottom: 6px;">Select pages to include in the index</div>
+        <div id="selectedPagesCount" style="font-size: 0.7em; color: #444; margin-bottom: 6px;">0 pages selected</div>
+        
+        <!-- File Thumbnail -->
+        <div id="fileThumbnailContainer" style="display: none; margin-bottom: 12px; text-align: center;">
+          <img id="fileThumbnail" src="" alt="File thumbnail" style="max-width: 40%; max-height: 200px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        </div>
+
+        <div id="pagesLockedHint" style="display:block; font-size:0.7em; color:#999; margin-bottom: 8px;">Save the file link to continue.</div>
+        
+        <div id="pagesListContainer">
+          <!-- Pages header: single row with flex -->
+          <div id="pagesHeader">
+            <div>
+              <input type="checkbox" id="toggleSelectCheckbox" style="accent-color: #2897FB; width: 12px; height: 12px; margin-right: 8px; margin-left: 8px; vertical-align: middle;">
+              <span style="font-size: 0.7em; display: inline-block; width: 270px;">Page Name</span>
+            </div>
+            <div></div>
+            <div>
+              <button id="refreshPagesBtn" title="Refresh pages">&#x21bb;</button>
+            </div>
+          </div>
+          <div id="pagesList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px;"></div>
+          <div id="pagesListSkeleton" style="display: none; max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px; padding: 8px;"></div>
+          <div id="pageListHelperText" style="display: none; font-size: 0.7em; color: #666; margin-top: 6px; margin-bottom: 4px;"></div>
+          <div style="margin-top: 8px; text-align: center;">
+            <button type="button" id="openGalleryFromPagesBtn" style="font-size:0.75em; background: transparent; color: #1976d2; border: 1px solid #1976d2; border-radius: 6px; cursor: pointer; padding: 6px 12px;">Open FigDex Web</button>
+          </div>
+        </div>
+        
+        <!-- NEEDS_CONNECT: connect to create index -->
+        <div id="needsConnectBlock" style="display: none; text-align: center; margin-top: 8px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <div id="needsConnectMessage" style="font-size:0.8em; color:#333; margin-bottom:10px;">Connect your FigDex account to create an index.</div>
+          <button type="button" id="openFigdexWebBtn" style="font-size:0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 10px 16px; font-weight: 500;">Open FigDex Web</button>
+        </div>
+        <!-- CONNECT_TIMEOUT: try again or cancel -->
+        <div id="connectTimeoutBlock" style="display: none; text-align: center; margin-top: 8px; padding: 12px; background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px;">
+          <div style="font-size:0.8em; color:#333; margin-bottom:10px;">Connection timed out.</div>
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <button type="button" id="connectTimeoutRetryBtn" style="font-size:0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 8px 14px; font-weight: 500;">Try again</button>
+            <button type="button" id="connectTimeoutCancelBtn" style="font-size:0.8em; background: transparent; color: #666; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; padding: 8px 14px;">Cancel</button>
+          </div>
+        </div>
+        <!-- Create Index Button -->
+        <div id="actionCard" style="display:block; text-align: center; margin-top: 8px;">
+          <div id="indexOutcomeHint" style="font-size:0.7em; color:#666; margin-bottom:6px;">This will create a visual gallery of all selected screens in FigDex Web.</div>
+          <div id="indexErrorBlock" style="display: none; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; text-align: center;">
+            <div id="indexErrorText" style="font-size: 0.75em; color: #555; margin-bottom: 8px;"></div>
+            <button type="button" id="indexErrorActionBtn" style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 8px 14px; font-weight: 500;">Try again</button>
+          </div>
+          <div id="actionCardButtonsWrap" style="display: flex; gap: 8px; align-items: center;">
+            <button id="advanceBtn" type="button" disabled style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; flex: 1; padding: 10px 16px; font-weight: 500; box-shadow: 0 2px 4px rgba(25, 118, 210, 0.3); transition: background 0.2s, box-shadow 0.2s;">Index selected pages</button>
+          </div>
+        </div>
+        <!-- INDEXING: simple overlay -->
+        <div id="indexingBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <div id="indexingBlockText" style="font-size: 0.9em; color: #333; font-weight: 500;">Updating index…</div>
+          <div id="indexingBlockSubtext" style="font-size: 0.8em; color: #666; margin-top: 4px;">Your existing gallery is being updated with the selected pages.</div>
+        </div>
+        <!-- DONE: simple section + View in FigDex Web -->
+        <div id="doneBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <div id="doneBlockTitle" style="font-size: 0.9em; color: #4caf50; font-weight: 500; margin-bottom: 4px;">Index updated successfully</div>
+          <div id="doneBlockSubtitle" style="font-size: 0.75em; color: #666; margin-bottom: 10px;">Your gallery has been updated.</div>
+          <button type="button" id="doneOpenWebBtn" style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 10px 16px; font-weight: 500;">View in FigDex Web</button>
+          <div style="margin-top: 10px;">
+            <button type="button" id="doneUpdateAgainBtn" style="font-size: 0.75em; background: transparent; color: #666; border: none; cursor: pointer; padding: 6px 0; text-decoration: underline; transition: color 0.2s;">Update index again</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Frame Tags Section - Simple and Clean -->
+      <div id="frameTagsSectionIndex" style="display:none; margin-bottom: 12px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div id="frameTagsHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 0.8em; font-weight: 600; color: #1976d2;">Frame Tags (optional)</div>
+          <button id="frameTagsToggleBtn" style="background: transparent; border: none; cursor: pointer; font-size: 0.9em; color: #666; padding: 4px 8px; transition: color 0.2s; display: flex; align-items: center; flex-shrink: 0;" title="Collapse/Expand">
+            <span id="frameTagsToggleIcon" style="display: inline-block; width: 12px; text-align: center;">▶</span>
+          </button>
+        </div>
+        
+        <!-- Locked State (Not Connected) -->
+        <div id="frameTagsLocked" style="display: none;">
+          <div style="font-size: 0.75em; color: #666; padding: 8px; background: #fff; border-radius: 4px; border: 1px solid #e0e0e0;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+              <span style="font-size: 1.2em;">🔒</span>
+              <span style="font-weight: 500; color: #333;">Available after connecting to FigDex Web.</span>
+            </div>
+            <div style="font-size: 0.7em; color: #666; margin-left: 28px;">Connect to FigDex Web to add tags to your frames.</div>
+          </div>
+        </div>
+        
+        <div id="frameTagsContent" style="display: none;">
+          <div style="font-size: 0.7em; color: #666; margin-bottom: 8px;">Add tags to selected frames for better organization</div>
+          
+          <!-- Selected Frames Info -->
+          <div id="selectedFramesInfoIndex" style="font-size: 0.7em; color: #666; margin-bottom: 8px;">No frames selected</div>
+          
+          <!-- Predefined Tags -->
+          <div style="margin-bottom: 8px;">
+            <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 4px; color: #333;">Quick Tags:</div>
+            <div id="predefinedTagsIndex" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+              <button class="frame-tag-btn" data-tag="No-Index" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">No-Index</button>
+              <button class="frame-tag-btn" data-tag="Mobile" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Mobile</button>
+              <button class="frame-tag-btn" data-tag="Desktop" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Desktop</button>
+              <button class="frame-tag-btn" data-tag="iOS" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">iOS</button>
+              <button class="frame-tag-btn" data-tag="Android" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Android</button>
+              <button class="frame-tag-btn" data-tag="Web" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Web</button>
+            </div>
+          </div>
+          
+          <!-- Current Tags -->
+          <div style="margin-bottom: 8px;">
+            <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 4px; color: #333;">Current Tags:</div>
+            <div id="currentTagsIndex" style="font-size: 0.7em; color: #666; min-height: 24px;">No tags added yet</div>
+          </div>
+          
+          <!-- Custom Tag Input -->
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="customTagInputIndexNew" placeholder="Enter custom tag..." style="flex: 1; padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 0.7em; box-sizing: border-box;">
+              <button id="addCustomTagBtnIndexNew" style="font-size: 0.7em; background: #1976d2; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: 500;">Add</button>
+            </div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px;">
+            <button id="reindexWithTagsBtn" style="flex: 1; font-size: 0.75em; background: #1976d2; color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 500;">Re-index</button>
+            <button id="saveToWebBtnTags" style="flex: 1; font-size: 0.75em; background: #4caf50; color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 500;">Save to FigDex Web</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Screen after Index Creation (removed - now using drawer) -->
+      </div>
+      
+      <!-- Overlay and Drawer for Settings -->
+      <div id="settingsOverlay" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(30,30,40,0.45); z-index:1000; transition: opacity 0.3s ease;"></div>
+      <div id="settingsDrawer" style="display:none; position:fixed; left:0; bottom:0; width:100%; max-height:80vh; background:#fff; box-shadow:0 -4px 24px rgba(0,0,0,0.2); z-index:1001; border-radius:16px 16px 0 0; overflow-y:auto; transform:translateY(100%); transition:transform 0.3s ease-out;" onclick="event.stopPropagation();">
+        <div style="position:relative; padding:20px; max-width:386px; margin:0 auto;">
+          <!-- Close Button -->
+          <button id="closeSettingsDrawerBtn" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:1.5em; color:#666; cursor:pointer; padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:background 0.2s;" onmouseover="this.style.background='#f0f0f0';" onmouseout="this.style.background='transparent';" title="Close">×</button>
+          
+          <!-- Drawer Handle -->
+          <div style="width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 16px auto;"></div>
+          
+          <!-- Settings Content -->
+          <div id="settingsDrawerContent" style="margin-top: 8px;">
+            <div style="margin-top: 24px;">
+              <div style="font-size: 0.9em; font-weight: 600; margin-bottom: 16px; color: #1976d2;">Settings</div>
+              
+              <!-- Connect to FigDex Web -->
+              <div style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 0.9em; font-weight: 600; margin-bottom: 8px; color: #1976d2;">Connect to FigDex Web</div>
+                
+                <!-- Connected Status (shown when connected) -->
+                <div id="connectedAsSettings" style="display:none; margin-bottom: 8px; font-size: 0.8em; color: #2e7d32;">
+                  Connected as: <span id="connectedAsEmailSettings" style="font-weight:600;"></span>
+                </div>
+                
+                <!-- Login/Register Section (shown when not connected) -->
+                <div id="webConnectionSectionSettings" style="margin-bottom: 8px;">
+                  <button id="loginWebBtnSettings" style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%; margin-bottom: 8px;">Login / Register with Google</button>
+                  
+                  <!-- API Key Section -->
+                  <div id="apiKeySectionSettings" style="margin-top: 8px;">
+                    <div style="font-size: 0.75em; font-weight: 500; margin-bottom: 6px; color: #333;">Enter your API Key</div>
+                    <input type="password" id="apiKeyInputSettings" placeholder="Enter your API key" style="width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.75em; box-sizing: border-box; margin-bottom: 6px;">
+                    <button id="saveApiKeyBtnSettings" style="font-size: 0.75em; background: #4caf50; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; width: 100%;">Save API Key</button>
+                  </div>
+                </div>
+                
+              </div>
+              
+              <!-- Image Quality -->
+              <div style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+                <div class="quality-row" style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                  <span style="font-size: 1.2em;">🖼️</span>
+                  <span style="font-size: 0.9em; font-weight: 500; flex: 1;">Image quality</span>
+                  <div class="quality-pills" style="display: flex; gap: 6px; background: #fafafa; padding: 4px; border: 1px solid #eee; border-radius: 6px;">
+                    <button class="qualityQuickBtn quality-pill" data-q="40" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">low</button>
+                    <button class="qualityQuickBtn quality-pill" data-q="70" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">med</button>
+                    <button class="qualityQuickBtn quality-pill" data-q="100" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">hi</button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Clear local index (when server data was deleted) -->
+              <div id="clearLocalIndexCard" style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f5f5f5';" onmouseout="this.style.background='#fff';" onclick="if(typeof sendIntent==='function')sendIntent('clear-indexed-pages');if(typeof __figdexCloseSettingsDrawer==='function')__figdexCloseSettingsDrawer();">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 1.2em;">🔄</span>
+                  <div>
+                    <span style="font-size: 0.85em; font-weight: 500; color: #333;">Clear local index</span>
+                    <div style="font-size: 0.7em; color: #666; margin-top: 2px;">Use when you deleted server data and pages still show as indexed</div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Additional Settings (shown only when connected) -->
+              <div id="additionalSettingsSection" style="display:none;">
+                <div style="font-size: 0.9em; font-weight: 600; margin-bottom: 12px; color: #1976d2; margin-top: 8px;">Account Settings</div>
+                
+                <!-- My Account Card -->
+                <div id="myAccountCard" style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f5f5f5';" onmouseout="this.style.background='#fff';" onclick="openMyAccount()">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 1.2em;">👤</span>
+                      <span style="font-size: 0.85em; font-weight: 500; color: #333;">My Account</span>
+                    </div>
+                    <span style="font-size: 0.8em; color: #666;">→</span>
+                  </div>
+                  <div id="myAccountContent" style="margin-top: 8px; font-size: 0.75em; color: #666;">
+                    Loading account information...
+                  </div>
+                </div>
+                
+                <!-- Index Management Card -->
+                <div id="indexManagementCard" style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f5f5f5';" onmouseout="this.style.background='#fff';" onclick="openIndexManagement()">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 1.2em;">📑</span>
+                      <span style="font-size: 0.85em; font-weight: 500; color: #333;">Index Management</span>
+                    </div>
+                    <span style="font-size: 0.8em; color: #666;">→</span>
+                  </div>
+                  <div id="indexManagementContent" style="margin-top: 8px; font-size: 0.75em; color: #666;">
+                    Loading index information...
+                  </div>
+                </div>
+                
+                <!-- API Integration Card -->
+                <div id="apiIntegrationCard" style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f5f5f5';" onmouseout="this.style.background='#fff';" onclick="openApiIntegration()">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 1.2em;">🔑</span>
+                      <span style="font-size: 0.85em; font-weight: 500; color: #333;">API Integration</span>
+                    </div>
+                    <span style="font-size: 0.8em; color: #666;">→</span>
+                  </div>
+                  <div id="apiIntegrationContent" style="margin-top: 8px; font-size: 0.75em; color: #666;">
+                    View and manage your API keys
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Plugin Version -->
+              <div style="padding: 8px 12px; text-align: center; color: #888;">
+                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.01</span></span>
+              </div>
+
+              <!-- Debug: Clear Local Data -->
+              <div style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 0.85em; font-weight: 500; margin-bottom: 6px; color: #333;">Debug</div>
+                <button id="debugClearDataBtn" style="font-size: 0.8em; background: #fff3f3; color: #d32f2f; border: 1px solid #f5c2c7; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%;">Clear Local Data</button>
+                <div style="font-size: 0.7em; color: #666; margin-top: 6px;">Clears file key, pages, tags, and cached tokens.</div>
+              </div>
+              
+              <!-- Disconnect Button (shown when connected) -->
+              <div id="disconnectBtnSettings" style="display:none; padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+                <button id="disconnectWebBtnSettings" style="font-size: 0.8em; background: #d32f2f; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%;">Disconnect</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+        
+    <!-- Tab Content: Settings (hidden, content moved to drawer) -->
+    <div id="tabSettings" class="tab-content" style="display:none;">
+      <div style="padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 12px; width: 354px !important; max-width: 354px !important; min-width: 354px !important; box-sizing: border-box;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="font-size: 0.8em; font-weight: 600; color: #1976d2;">Settings</div>
+          <button id="backToIndexBtn" style="background: transparent; border: none; color: #1976d2; cursor: pointer; font-size: 0.8em; padding: 4px 8px; text-decoration: underline;">← Back</button>
+        </div>
+        
+        <!-- Connect to FigDex Web -->
+        <div style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+          <div style="font-size: 0.9em; font-weight: 600; margin-bottom: 8px; color: #1976d2;">Connect to FigDex Web</div>
+          
+          <!-- Connected Status (shown when connected) -->
+          <div id="connectedAsSettings" style="display:none; margin-bottom: 8px; font-size: 0.8em; color: #2e7d32;">
+            Connected as: <span id="connectedAsEmailSettings" style="font-weight:600;"></span>
+          </div>
+          
+          <!-- Login Button (shown when not connected) -->
+          <div id="webConnectionSectionSettings" style="margin-bottom: 8px;">
+            <button id="loginWebBtnSettings" style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%; margin-bottom: 8px;">Login / Register to FigDex Web</button>
+            
+            <!-- API Key Section -->
+            <div id="apiKeySectionSettings" style="margin-top: 8px;">
+              <div style="font-size: 0.75em; font-weight: 500; margin-bottom: 6px; color: #333;">Enter your API Key</div>
+              <input type="password" id="apiKeyInputSettings" placeholder="Enter your API key" style="width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.75em; box-sizing: border-box; margin-bottom: 6px;">
+              <button id="saveApiKeyBtnSettings" style="font-size: 0.75em; background: #4caf50; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; width: 100%;">Save API Key</button>
+            </div>
+          </div>
+          
+        </div>
+        
+        <!-- Image Quality -->
+        <div style="padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+          <div class="quality-row" style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span style="font-size: 1.2em;">🖼️</span>
+            <span style="font-size: 0.9em; font-weight: 500; flex: 1;">Image quality</span>
+            <div class="quality-pills" style="display: flex; gap: 6px; background: #fafafa; padding: 4px; border: 1px solid #eee; border-radius: 6px;">
+              <button class="qualityQuickBtn quality-pill" data-q="40" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">low</button>
+              <button class="qualityQuickBtn quality-pill" data-q="70" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">med</button>
+              <button class="qualityQuickBtn quality-pill" data-q="100" style="background: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: background 0.2s;">hi</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Plugin Version -->
+        <div style="padding: 8px 12px; text-align: center; color: #888;">
+          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.01</span></span>
+        </div>
+        
+        <!-- Disconnect Button (shown when connected) -->
+        <div id="disconnectBtnSettings" style="display:none; padding: 12px; background: #fff; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+          <button id="disconnectWebBtnSettings" style="font-size: 0.8em; background: #d32f2f; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%;">Disconnect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Web -->
+    <div id="tabWeb" class="tab-content">
+      <!-- Web Connection Drawer -->
+      <div id="webDrawerTab" style="display: block; background: transparent; border: none; border-radius: 0; box-shadow: none; margin: 0; overflow: visible;">
+        <div style="padding: 0;">
+          
+          <!-- Marketing Box -->
+          <div id="marketingBoxTab" style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); color: white; position: relative; overflow: hidden;">
+            <!-- Decorative background elements -->
+            <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255, 255, 255, 0.1); border-radius: 50%;"></div>
+            <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255, 255, 255, 0.08); border-radius: 50%;"></div>
+            
+            <!-- Content -->
+            <div style="position: relative; z-index: 1;">
+              <div style="font-size: 1.1em; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.3em;">🚀</span>
+                <span>Unlock the Full Power of FigDex</span>
+              </div>
+              <div style="font-size: 0.85em; line-height: 1.6; margin-bottom: 12px; opacity: 0.95;">
+                Connect to FigDex Web and transform your workflow with cloud storage, team collaboration, and advanced search capabilities.
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8em;">
+                  <span style="font-size: 1.1em;">☁️</span>
+                  <span>Cloud Storage - Access your indices anywhere</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8em;">
+                  <span style="font-size: 1.1em;">👥</span>
+                  <span>Team Sharing - Collaborate seamlessly</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8em;">
+                  <span style="font-size: 1.1em;">🔍</span>
+                  <span>Advanced Search - Find frames instantly</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8em;">
+                  <span style="font-size: 1.1em;">🏷️</span>
+                  <span>Smart Tagging - Organize with tags</span>
+                </div>
+              </div>
+              <div style="font-size: 0.75em; opacity: 0.9; font-style: italic; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                Join thousands of designers already using FigDex Web
+              </div>
+            </div>
+          </div>
+          
+          <!-- Web Connection Section (when not connected) -->
+          <div id="webConnectionSectionTab" style="margin-bottom: 18px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+            <div style="font-size: 0.8em; font-weight: 600; margin-bottom: 6px; color: #1976d2;">Web Connection</div>
+            <div id="webLoginStatusTab" style="font-size: 0.8em; color: #666; margin-bottom: 12px;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: #1976d2; font-size: 0.85em;">Why connect to FigDex Web?</div>
+              <div style="font-size: 0.78em; line-height: 1.5;">
+                • <strong>Cloud Storage:</strong> Save your indices online<br>
+                • <strong>Team Sharing:</strong> Collaborate with your team<br>
+                • <strong>Advanced Search:</strong> Find frames by tags & content
+              </div>
+            </div>
+            
+            <!-- Step 1: Login/Register -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 6px; color: #333;">Step 1: Login or Register</div>
+              <button id="loginWebBtnTab" style="font-size: 0.7em; background: #1976d2; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: auto; display: inline-block;">Login / Register to FigDex Web</button>
+            </div>
+
+            <!-- Step 2: API Key Section -->
+            <div id="apiKeySectionTab" style="margin-bottom: 8px;">
+              <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 6px; color: #333;">Step 2: Enter your API Key</div>
+              <div style="font-size: 0.6em; color: #666; margin-bottom: 6px;">After logging in, you'll receive an API key to enter below:</div>
+              <input type="password" id="apiKeyInputTab" placeholder="Enter your API key" style="width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.7em; box-sizing: border-box;">
+              <button id="saveApiKeyBtnTab" style="margin-top: 6px; font-size: 0.7em; background: #4caf50; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer;">Save API Key</button>
+            </div>
+          </div>
+          
+          <!-- Connected-as label (shown only when connected) -->
+          <div id="connectedAsTab" style="display:none; margin-bottom: 8px; font-size: 0.7em; color: #2e7d32;">
+            Connected as: <span id="connectedAsEmailTab" style="font-weight:600;"></span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Frame Tags Section -->
+      <div id="frameTagsSectionTab" style="margin-top: 16px; margin-bottom: 12px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div style="font-size: 0.8em; font-weight: 600; margin-bottom: 6px; color: #1976d2;">Frame Tags</div>
+        <div style="font-size: 0.7em; color: #666; margin-bottom: 6px;">Add tags to selected frames for better organization</div>
+        
+        <!-- Predefined Tags -->
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 4px; color: #333;">Quick Tags:</div>
+          <div id="predefinedTagsTab" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+            <button class="tag-btn" data-tag="No-Index" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">No-Index</button>
+            <button class="tag-btn" data-tag="Mobile" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Mobile</button>
+            <button class="tag-btn" data-tag="Desktop" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Desktop</button>
+            <button class="tag-btn" data-tag="iOS" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">iOS</button>
+            <button class="tag-btn" data-tag="Android" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Android</button>
+            <button class="tag-btn" data-tag="Web" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px 8px; cursor: pointer;">Web</button>
+          </div>
+        </div>
+        
+        <!-- Selected Frames Info -->
+        <div id="selectedFramesInfoTab" style="font-size: 0.7em; color: #666; margin-bottom: 8px;">No frames selected</div>
+        
+        <!-- Current Tags -->
+        <div id="currentTagsTab" style="margin-bottom: 8px;">
+          <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 4px; color: #333;">Current Tags:</div>
+          <div id="currentTagsListTab" style="font-size: 0.7em; color: #666;">No tags added yet</div>
+        </div>
+        
+        <!-- Add Custom Tag Section -->
+        <div id="addCustomTagSectionTab" style="margin-top: 8px; padding: 0; background: transparent; border-radius: 6px; border: none; display: none;">
+          <div style="font-size: 0.7em; font-weight: 600; margin-bottom: 6px; color: #1976d2;">Add Custom Tag</div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <input type="text" id="customTagInputTab" placeholder="Enter tag name..." style="flex: 1; padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 0.7em; box-sizing: border-box; background: white;">
+            <button id="addCustomTagBtnTab" style="font-size: 0.7em; background: #fff; color: #1976d2; border: 1px solid #e0e0e0; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: 500;">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      
+      <!-- Overlay and Drawer for Progress -->
+      <div id="progressOverlay" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(30,30,40,0.45); z-index:1000; transition: opacity 0.3s ease;"></div>
+      <div id="progressDrawer" style="display:none; position:fixed; left:0; bottom:0; width:100%; max-height:80vh; background:#fff; box-shadow:0 -4px 24px rgba(0,0,0,0.2); z-index:1001; border-radius:16px 16px 0 0; overflow-y:auto; transform:translateY(100%); transition:transform 0.3s ease-out;" onclick="event.stopPropagation();">
+        <div style="position:relative; padding:20px; max-width:386px; margin:0 auto;">
+          <!-- Close Button -->
+          <button id="closeProgressDrawerBtn" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:1.5em; color:#666; cursor:pointer; padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:background 0.2s;" onmouseover="this.style.background='#f0f0f0';" onmouseout="this.style.background='transparent';" title="Close">×</button>
+          
+          <!-- Drawer Handle -->
+          <div style="width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 16px auto;"></div>
+          
+          <!-- Progress Content -->
+          <div id="progressDrawerContent" style="margin-top: 8px;">
+            <div id="loading" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px; font-size:0.9em; color:#333; margin-top:24px;">
+              <span class="spinner"></span>
+              <span id="progressStatusText">Running FigDex...</span>
+            </div>
+            <!-- Overall Progress Container -->
+            <div id="overallProgressContainer" style="display:none;">
+              <div id="overallProgressBarBg" style="background:#eee; border-radius:8px; height:24px; width:100%; position:relative; overflow:hidden; margin-bottom:8px;">
+                <div id="overallProgressBar" style="background:#1976d2; height:100%; width:0%; border-radius:8px; transition:width 0.3s ease;"></div>
+                <span id="overallProgressText" style="position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); font-size:0.75em; font-weight:600; color:#1976d2; white-space:nowrap;">0%</span>
+              </div>
+              <div id="overallProgressDetails" style="font-size:0.75em; color:#666; text-align:center; margin-bottom:8px;"></div>
+            </div>
+            <!-- Progress Bar -->
+            <div id="runningProgressBarContainer" style="width:100%; margin:0 auto; display:none;">
+              <div id="runningProgressBarBg" style="background:#eee; border-radius:8px; height:8px; width:100%; position:relative; overflow:hidden; margin-bottom:8px;">
+                <div id="runningProgressBar" style="background:#1976d2; height:100%; width:0%; border-radius:8px; transition:width 0.3s ease;"></div>
+              </div>
+              <div id="progressDetails" style="font-size:0.75em; color:#666; margin-top:4px; min-height:16px; text-align:center;"></div>
+            </div>
+            
+            <div id="doneMsg" style="margin-top:18px; display:none; text-align:center; color:#4caf50; font-weight:500;">FigDex created successfully!</div>
+            <div id="openWebCta" style="display:none; margin-top:16px; text-align:center;">
+              <button id="openWebBtn" style="background:#1976d2; color:#fff; border:none; border-radius:8px; padding:10px 18px; cursor:pointer; font-size:0.9em; font-weight:600; width:100%;">Open FigDex Web</button>
+              <div style="font-size:0.7em; color:#666; margin-top:6px;">You can open your gallery while we keep preparing screens.</div>
+            </div>
+            <div id="errorMsg" style="margin-top:18px; display:none; text-align:center; color:#d32f2f; font-weight:500;"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Overlay and Drawer for Success Screen -->
+      <div id="successOverlay" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(30,30,40,0.45); z-index:1000; transition: opacity 0.3s ease;"></div>
+      <!-- Login Drawer -->
+      <div id="loginOverlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; transition:opacity 0.3s;"></div>
+      <div id="loginDrawer" style="display:none; position:fixed; left:0; bottom:0; width:100%; height:90vh; max-height:90vh; background:#fff; box-shadow:0 -4px 24px rgba(0,0,0,0.2); z-index:1001; border-radius:16px 16px 0 0; overflow:hidden; transform:translateY(100%); transition:transform 0.3s ease-out;" onclick="event.stopPropagation();">
+        <div style="position:relative; padding:0; height:100%; display:flex; flex-direction:column;">
+          <div style="padding:16px 20px 12px 20px; flex-shrink:0;">
+            <div style="width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 8px; cursor:grab;"></div>
+            <button id="closeLoginDrawerBtn" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:1.5em; color:#666; cursor:pointer; padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:background 0.2s; z-index:10;" onmouseover="this.style.background='#f0f0f0';" onmouseout="this.style.background='transparent';" title="Close">×</button>
+          </div>
+          <div id="loginDrawerContent" style="flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; min-height:0;">
+            <iframe id="loginIframe" src="" style="width:100%; height:100%; border:none; flex:1; min-height:0;" allow="popups popups-to-escape-sandbox" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation"></iframe>
+            <div id="loginIframeError" style="display:none; position:absolute; top:0; left:0; right:0; bottom:0; background:#fff; text-align:center; padding:40px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div style="font-size:1.1em; color:#666; margin-bottom:8px; font-weight:500;">Unable to load login page</div>
+              <div style="font-size:0.85em; color:#999; margin-bottom:20px;">The login page cannot be displayed in this window</div>
+              <button onclick="openWebLoginInNewWindow()" style="background:#1976d2; color:white; border:none; border-radius:6px; padding:10px 20px; cursor:pointer; font-size:0.9em; font-weight:500;">Open in New Window</button>
+            </div>
+            <div id="loginIframeLoading" style="position:absolute; top:0; left:0; right:0; bottom:0; background:#fff; display:flex; align-items:center; justify-content:center; flex-direction:column;">
+              <div style="width:40px; height:40px; border:4px solid #f3f3f3; border-top:4px solid #1976d2; border-radius:50%; animation:spin 1s linear infinite; margin-bottom:16px;"></div>
+              <div style="font-size:0.85em; color:#666;">Loading login page...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+
+      <div id="successDrawer" style="display:none; position:fixed; left:0; bottom:0; width:100%; max-height:80vh; background:#fff; box-shadow:0 -4px 24px rgba(0,0,0,0.2); z-index:1001; border-radius:16px 16px 0 0; overflow-y:auto; transform:translateY(100%); transition:transform 0.3s ease-out;" onclick="event.stopPropagation();">
+        <div style="position:relative; padding:20px; max-width:386px; margin:0 auto;">
+          <!-- Close Button -->
+          <button id="closeSuccessDrawerBtn" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:1.5em; color:#666; cursor:pointer; padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:background 0.2s;" onmouseover="this.style.background='#f0f0f0';" onmouseout="this.style.background='transparent';" title="Close">×</button>
+          
+          <!-- Drawer Handle -->
+          <div style="width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 16px auto;"></div>
+          
+          <!-- Success Screen Content -->
+          <div id="successDrawerContent" style="margin-top: 8px;">
+            <!-- First Box: Success Message -->
+            <div style="background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px; margin-top: 24px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; background: #4caf50; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <span style="color: white; font-size: 20px; font-weight: bold;">✓</span>
+                </div>
+                <div>
+                  <div style="font-weight: 600; font-size: 0.9em; color: #333; margin-bottom: 2px;">Index created successfully</div>
+                  <div style="font-size: 0.75em; color: #666;">Your file has been indexed locally.</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Web Connection Section -->
+            <div id="successMarketingBox" style="margin-bottom: 16px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+              <div style="font-size: 0.8em; font-weight: 600; margin-bottom: 6px; color: #1976d2;">Web Connection</div>
+              <div style="font-size: 0.8em; color: #666; margin-bottom: 12px;">
+                <div style="font-weight: 600; margin-bottom: 8px; color: #1976d2; font-size: 0.85em;">Why connect to FigDex Web?</div>
+                <div style="font-size: 0.78em; line-height: 1.5;">
+                  • <strong>Cloud Storage:</strong> Save your indices online<br>
+                  • <strong>Team Sharing:</strong> Collaborate with your team<br>
+                  • <strong>Advanced Search:</strong> Find frames by tags & content
+                </div>
+              </div>
+              
+              <!-- Step 1: Login/Register -->
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 6px; color: #333;">Step 1: Login or Register</div>
+                <button onclick="openWebLogin()" style="font-size: 0.7em; background: #1976d2; color: white; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: 500; width: 100%; margin-bottom: 8px;">Login / Register with Google</button>
+              </div>
+
+              <!-- Step 2: API Key Section -->
+              <div id="successApiKeySection" style="margin-bottom: 8px;">
+                <div style="font-size: 0.7em; font-weight: 500; margin-bottom: 6px; color: #333;">Step 2: Enter your API Key</div>
+                <div style="font-size: 0.6em; color: #666; margin-bottom: 6px;">After logging in, you'll receive an API key to enter below:</div>
+                <input type="password" id="successApiKeyInput" placeholder="Enter your API key" style="width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.7em; box-sizing: border-box;">
+                <button id="successSaveApiKeyBtn" style="margin-top: 6px; font-size: 0.7em; background: #4caf50; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer;">Save API Key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- New flow modules (hard reset) - inlined so they run in same window (Figma plugin UI) -->
+    <script>
+    (function(global) {
+      'use strict';
+      var PREFIX = '[FigDex]';
+      var _sessionId = '';
+      var _anonId = '';
+      var _pluginVersion = '0.0.0';
+      function randomId() {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        var s = '';
+        for (var i = 0; i < 24; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+        return s;
+      }
+      _sessionId = randomId();
+      function log(event, data) {
+        if (data !== undefined && data !== null) {
+          try { console.log(PREFIX, event, data); } catch (e) {}
+        } else {
+          try { console.log(PREFIX, event); } catch (e) {}
+        }
+      }
+      function setAnonId(id) { _anonId = typeof id === 'string' ? id : ''; }
+      function setPluginVersion(v) { _pluginVersion = typeof v === 'string' ? v : _pluginVersion; }
+      function hashFileKey(str) {
+        if (typeof str !== 'string' || !str) return null;
+        var h = 2166136261;
+        for (var i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = (h * 16777619) >>> 0;
+        }
+        return 'h' + (h >>> 0).toString(36);
+      }
+      function track(eventName, context) {
+        if (!_anonId || !_sessionId) return;
+        context = context || {};
+        var payload = {
+          eventName: eventName,
+          timestamp: Date.now(),
+          pluginVersion: _pluginVersion,
+          userType: context.userType || 'NEW',
+          hasFileKey: !!context.hasFileKey,
+          selectedPagesCount: Math.max(0, Math.min(500, parseInt(context.selectedPagesCount, 10) || 0)),
+          fileKeyHash: context.fileKeyHash || null,
+          sessionId: _sessionId,
+          anonId: _anonId,
+          userId: context.userId || null,
+          meta: context.meta || {}
+        };
+        try {
+          fetch('https://www.figdex.com/api/telemetry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true
+          }).catch(function() {});
+        } catch (e) {}
+      }
+      global.__figdexTelemetry = { log: log, track: track, setAnonId: setAnonId, setPluginVersion: setPluginVersion, hashFileKey: hashFileKey };
+    })(window);
+    </script>
+    <script>
+    (function(global) {
+      'use strict';
+      var _token = '';
+      var _user = null;
+      function getIdentity() {
+        var exists = !!(_token && typeof _token === 'string' && _token.length > 0);
+        var tokenMasked = exists ? (_token.length <= 10 ? _token.substring(0, 10) + '...' : _token.substring(0, 10) + '...') : '';
+        return { exists: exists, tokenMasked: tokenMasked, token: _token, user: _user };
+      }
+      function setIdentity(token, user) {
+        _token = typeof token === 'string' ? token : '';
+        _user = user !== undefined ? user : null;
+      }
+      function clearIdentity() {
+        _token = '';
+        _user = null;
+      }
+      function isConnected() {
+        return !!(_token && typeof _token === 'string' && _token.trim().length > 0);
+      }
+      global.__figdexIdentityStore = {
+        getIdentity: getIdentity,
+        setIdentity: setIdentity,
+        clearIdentity: clearIdentity,
+        isConnected: isConnected
+      };
+    })(window);
+    </script>
+    <script>
+    (function(global) {
+      'use strict';
+      var _telemetry = null;
+      function init(opts) {
+        _telemetry = opts && opts.telemetry ? opts.telemetry : global.__figdexTelemetry;
+      }
+      function runIndexing(selectedPages, identity, callbacks) {
+        callbacks = callbacks || {};
+        if (!identity || !identity.token) {
+          if (callbacks.onError) callbacks.onError('no_identity');
+          return;
+        }
+        if (_telemetry) _telemetry.log('indexing_start');
+        if (typeof callbacks.onStart === 'function') callbacks.onStart();
+        if (typeof callbacks.onLegacyStart === 'function') {
+          callbacks.onLegacyStart(selectedPages, identity);
+        } else {
+          if (callbacks.onError) callbacks.onError('no_legacy_start');
+        }
+      }
+      global.__figdexIndexEngine = {
+        init: init,
+        runIndexing: runIndexing
+      };
+    })(window);
+    </script>
+    <script>
+    (function(global) {
+      'use strict';
+      var STATES = {
+        BOOT: 'BOOT',
+        READY_TO_SETUP: 'READY_TO_SETUP',
+        NEEDS_CONNECT: 'NEEDS_CONNECT',
+        READY_TO_INDEX: 'READY_TO_INDEX',
+        INDEXING: 'INDEXING',
+        DONE: 'DONE',
+        ERROR: 'ERROR'
+      };
+      var _state = STATES.BOOT;
+      var _pendingAction = null;
+      var _identityStore = null;
+      var _telemetry = null;
+      var _onTrack = null;
+      var _onOpenWeb = null;
+      var _onRunIndexing = null;
+      var _onStateChange = null;
+      var _trace = true;
+      function getState() { return _state; }
+      function getPendingAction() { return _pendingAction; }
+      function clearPendingAction() { _pendingAction = null; }
+      function _traceTransition(prev, event, next) {
+        if (_trace && _telemetry) {
+          _telemetry.log('state_change', { prevState: prev, event: event, nextState: next });
+          try { console.log('[FigDex] controller:', prev, '->', event, '->', next); } catch (e) {}
+        }
+      }
+      function dispatch(event, payload) {
+        try { console.log('[FigDex] dispatch_enter', event, payload); } catch (e) {}
+        try {
+        var prev = _state;
+        payload = payload || {};
+        switch (_state) {
+          case STATES.BOOT:
+            if (event === 'identity_loaded') {
+              _state = _identityStore && _identityStore.isConnected() ? STATES.READY_TO_INDEX : STATES.READY_TO_SETUP;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'UI_CREATE_INDEX_CLICKED') {
+              var sel = payload.selectedPages || [];
+              _state = STATES.INDEXING;
+              if (_telemetry) _telemetry.log('indexing_start');
+              if (_onTrack) _onTrack('indexing_start');
+              _traceTransition(prev, 'EVT_CREATE_INDEX_REQUESTED', _state);
+              if (_onRunIndexing) _onRunIndexing(sel);
+            }
+            break;
+          case STATES.READY_TO_SETUP:
+            if (event === 'identity_loaded' && _identityStore && _identityStore.isConnected()) {
+              _state = STATES.READY_TO_INDEX;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'file_link_saved') {
+              _state = STATES.READY_TO_INDEX;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'UI_CREATE_INDEX_CLICKED') {
+              var selectedPages0 = payload.selectedPages || [];
+              _state = STATES.INDEXING;
+              if (_telemetry) _telemetry.log('indexing_start');
+              if (_onTrack) _onTrack('indexing_start');
+              _traceTransition(prev, 'EVT_CREATE_INDEX_REQUESTED', _state);
+              if (_onRunIndexing) _onRunIndexing(selectedPages0);
+            }
+            break;
+          case STATES.READY_TO_INDEX:
+            if (event === 'file_link_saved') {
+              _state = STATES.READY_TO_INDEX;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'UI_CREATE_INDEX_CLICKED') {
+              var selectedPages = payload.selectedPages || [];
+              _state = STATES.INDEXING;
+              if (_telemetry) _telemetry.log('indexing_start');
+              if (_onTrack) _onTrack('indexing_start');
+              _traceTransition(prev, 'EVT_CREATE_INDEX_REQUESTED', _state);
+              if (_onRunIndexing) _onRunIndexing(selectedPages);
+            } else if (event === 'identity_loaded' && _identityStore && _identityStore.isConnected()) {
+              _state = STATES.READY_TO_INDEX;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'intent_open_web') {
+              if (_telemetry) _telemetry.log('intent', { action: 'open_web' });
+              if (_onOpenWeb) _onOpenWeb();
+            }
+            break;
+          case STATES.NEEDS_CONNECT:
+            if (event === 'EVT_CONNECT_SUCCESS') {
+              var pa = _pendingAction;
+              try { console.log('[FigDex] CONNECT_SUCCESS', { state: _state, hasPending: !!pa }); } catch (e) {}
+              if (_telemetry) _telemetry.log('connect_success');
+              if (_onTrack) _onTrack('connect_success');
+              _pendingAction = null;
+              _state = STATES.READY_TO_INDEX;
+              _traceTransition(prev, event, _state);
+              if (pa && pa.type === 'START_INDEXING' && pa.selectedPages && _onRunIndexing) {
+                try { console.log('[FigDex] resume pendingAction', { pages: (pa.selectedPages && pa.selectedPages.length) || 0 }); } catch (e) {}
+                _state = STATES.INDEXING;
+                if (_telemetry) _telemetry.log('indexing_start');
+                if (_onTrack) _onTrack('indexing_start');
+                _traceTransition(STATES.READY_TO_INDEX, 'resume_pending', _state);
+                _onRunIndexing(pa.selectedPages);
+              }
+            }
+            break;
+          case STATES.INDEXING:
+            if (event === 'web_index_created') {
+              if (_telemetry) _telemetry.log('web_index_created');
+              _state = STATES.DONE;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'indexing_done') {
+              if (_telemetry) _telemetry.log('indexing_done');
+              if (_onTrack) _onTrack('indexing_done');
+              _state = STATES.DONE;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'indexing_failed') {
+              if (_telemetry) _telemetry.log('error', { type: 'indexing_failed', message: payload.message });
+              _state = STATES.ERROR;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'auth_expired') {
+              if (_identityStore) _identityStore.clearIdentity();
+              _state = STATES.READY_TO_SETUP;
+              _traceTransition(prev, event, _state);
+            }
+            break;
+          case STATES.DONE:
+          case STATES.ERROR:
+            if (event === 'reset') {
+              _state = _identityStore && _identityStore.isConnected() ? STATES.READY_TO_INDEX : STATES.READY_TO_SETUP;
+              _traceTransition(prev, event, _state);
+            } else if (event === 'intent_open_web') {
+              if (_telemetry) _telemetry.log('intent', { action: 'open_web' });
+              if (_onOpenWeb) _onOpenWeb();
+            }
+            break;
+          default:
+            break;
+        }
+        if (_onStateChange) try { _onStateChange(_state); } catch (e) {}
+        return _state;
+        } catch (e) {
+          try { console.error('[FigDex] dispatch_error', event, e); } catch (e2) {}
+          _state = STATES.ERROR;
+          if (_onStateChange) try { _onStateChange(_state); } catch (e2) {}
+          return _state;
+        }
+      }
+      function init(opts) {
+        _identityStore = opts.identityStore || global.__figdexIdentityStore;
+        _telemetry = opts.telemetry || global.__figdexTelemetry;
+        _onTrack = opts.onTrack || null;
+        _onOpenWeb = opts.onOpenWeb || null;
+        _onRunIndexing = opts.onRunIndexing || null;
+        _onStateChange = opts.onStateChange || null;
+        _trace = opts.trace !== false;
+      }
+      global.__figdexFlowController = {
+        STATES: STATES,
+        getState: getState,
+        getPendingAction: getPendingAction,
+        clearPendingAction: clearPendingAction,
+        dispatch: dispatch,
+        init: init
+      };
+    })(window);
+    </script>
+    <script>
+      console.log('[FigDex] UI_BOOT_SIGNATURE', { ts: Date.now() });
+      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '' };
+      try { window.__figdexUIState = state; } catch (e) {}
+      var controller = null;
+      var identityStore = null;
+      var telemetry = null;
+
+      function buildTelemetryContext() {
+        var id = identityStore ? identityStore.getIdentity() : null;
+        var uid = (id && id.user && (id.user.id || id.user.email)) ? String(id.user.id || id.user.email) : null;
+        return {
+          userType: (id && id.exists) ? 'RETURNING' : 'NEW',
+          hasFileKey: !!(state && state.fileKey),
+          selectedPagesCount: (state && state.selectedPages) ? state.selectedPages.length : 0,
+          fileKeyHash: (state && state.fileKey && telemetry && telemetry.hashFileKey) ? telemetry.hashFileKey(state.fileKey) : null,
+          userId: uid || null,
+          meta: {}
+        };
+      }
+      function logButtonClick(buttonId, label) {
+        var msg = '[FigDex] Button: ' + (label || buttonId || 'button');
+        console.log(msg);
+        var el = document.getElementById('buttonClickLog');
+        if (el) {
+          el.textContent = 'Click: ' + (label || buttonId || '');
+          el.style.display = 'inline';
+          el.style.color = '#1976d2';
+          clearTimeout(el._hideTimer);
+          el._hideTimer = setTimeout(function() { el.style.display = 'none'; }, 2000);
+        }
+      }
+      function onClearDataClick() {
+        logButtonClick('debugClearStorageBtn', 'Clear data');
+        var statusEl = document.getElementById('fileKeyInlineStatus');
+        if (statusEl) { statusEl.textContent = 'Cleared'; statusEl.style.color = '#43a047'; }
+        forceClearUI();
+        sendIntent('clear-storage');
+        try { window.open('https://www.figdex.com/logout?redirect=gallery', 'figdex_web'); } catch (e) {}
+        setTimeout(function() {
+          var s = document.getElementById('fileKeyInlineStatus');
+          if (s && s.textContent === 'Cleared') s.textContent = '';
+        }, 2500);
+      }
+      window.__figdexClearData = onClearDataClick;
+
+      function onSaveFileKeyClick() {
+        var input = document.getElementById('fileKeyInlineInput');
+        if (!input) return;
+        var url = (input.value || '').trim();
+        var key = url.match(/(?:file|design|board|slides|deck)\/([a-zA-Z0-9_-]{10,128})/);
+        var fileKey = key ? key[1] : null;
+        if (!fileKey) {
+          var status = document.getElementById('fileKeyInlineStatus');
+          if (status) { status.textContent = 'Invalid Figma link! Paste a link like figma.com/design/... or figma.com/file/...'; status.style.color = '#d32f2f'; }
+          return;
+        }
+        console.log('[FigDex] file key saved:', fileKey);
+        sendIntent('set-file-key', { fileKey: fileKey });
+        state.fileKey = fileKey;
+        if (telemetry && telemetry.track) telemetry.track('filekey_saved', buildTelemetryContext());
+        if (controller) controller.dispatch('file_link_saved');
+        var statusEl = document.getElementById('fileKeyInlineStatus');
+        if (statusEl) { statusEl.textContent = 'Loading pages...'; statusEl.style.color = '#1976d2'; }
+        showPagesSkeleton();
+        sendIntent('refresh-pages');
+        sendIntent('get-file-thumbnail', { fileKey: fileKey });
+        render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+      }
+
+      function forceClearUI() {
+        state.fileKey = '';
+        state.pages = [];
+        state.selectedPages = [];
+        state.step1Expanded = false;
+        var inputEl = document.getElementById('fileKeyInlineInput');
+        if (inputEl) inputEl.value = '';
+        var statusEl = document.getElementById('fileKeyInlineStatus');
+        if (statusEl) { statusEl.textContent = ''; statusEl.style.color = ''; }
+        var setStatusEl = document.getElementById('fileKeySetStatus');
+        if (setStatusEl) setStatusEl.textContent = '';
+        var listDiv = document.getElementById('pagesList');
+        var skeletonDiv = document.getElementById('pagesListSkeleton');
+        if (listDiv) { listDiv.innerHTML = ''; listDiv.style.display = 'none'; }
+        if (skeletonDiv) {
+          skeletonDiv.style.display = 'block';
+          skeletonDiv.innerHTML = '';
+          for (var i = 0; i < 6; i++) {
+            var item = document.createElement('div');
+            item.className = 'skeleton-item';
+            var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
+            item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
+            skeletonDiv.appendChild(item);
+          }
+        }
+        var thumbContainer = document.getElementById('fileThumbnailContainer');
+        var thumbImg = document.getElementById('fileThumbnail');
+        if (thumbContainer) thumbContainer.style.display = 'none';
+        if (thumbImg) thumbImg.src = '';
+        var pagesLockedHint = document.getElementById('pagesLockedHint');
+        if (pagesLockedHint) pagesLockedHint.style.display = 'block';
+        var advanceBtn = document.getElementById('advanceBtn');
+        if (advanceBtn) advanceBtn.disabled = true;
+      }
+
+      function showPagesSkeletonNow() {
+        var listDiv = document.getElementById('pagesList');
+        var skeletonDiv = document.getElementById('pagesListSkeleton');
+        if (!listDiv || !skeletonDiv) return;
+        listDiv.style.display = 'none';
+        skeletonDiv.style.display = 'block';
+        skeletonDiv.innerHTML = '';
+        for (var i = 0; i < 6; i++) {
+          var item = document.createElement('div');
+          item.className = 'skeleton-item';
+          var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
+          item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
+          skeletonDiv.appendChild(item);
+        }
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showPagesSkeletonNow);
+      else setTimeout(showPagesSkeletonNow, 0);
+
+      function render(stateOrControllerState, model) {
+        if (!model) return;
+        var uiState = (typeof stateOrControllerState === 'string') ? (window.__figdexUIState || { step1Expanded: false }) : stateOrControllerState;
+        var ctrl = window.__figdexFlowController || controller;
+        var ctrlState = (typeof stateOrControllerState === 'string') ? stateOrControllerState : (ctrl ? ctrl.getState() : '');
+        var advanceBtn = document.getElementById('advanceBtn');
+        var headerBanner = document.getElementById('headerMarketingBanner');
+        var listDiv = document.getElementById('pagesList');
+        var pagesLockedHint = document.getElementById('pagesLockedHint');
+        var step1Summary = document.getElementById('fileKeyStep1Summary');
+        var step1Full = document.getElementById('fileKeyStep1Full');
+        var step1ChangeLink = document.getElementById('fileKeyStep1ChangeLink');
+        var step1PagesCount = document.getElementById('fileKeyStep1PagesCount');
+        var pagesCard = document.getElementById('pagesCard');
+        var step1Collapsed = model.fileKey && model.pages && model.pages.length > 0 && !uiState.step1Expanded;
+        if (step1Summary) step1Summary.style.display = step1Collapsed ? 'block' : 'none';
+        if (step1Full) step1Full.style.display = step1Collapsed ? 'none' : 'block';
+        if (step1ChangeLink) step1ChangeLink.style.display = step1Collapsed ? 'block' : 'none';
+        if (step1PagesCount && model.pages) step1PagesCount.textContent = model.pages.length;
+        if (pagesCard) {
+          if (step1Collapsed) { pagesCard.classList.remove('step-disabled'); pagesCard.classList.add('step-complete'); }
+          else { pagesCard.classList.add('step-disabled'); pagesCard.classList.remove('step-complete'); }
+        }
+        if (!model.fileKey) {
+          if (listDiv) { listDiv.innerHTML = ''; listDiv.style.display = 'none'; }
+          showPagesSkeleton();
+          if (pagesLockedHint) pagesLockedHint.style.display = 'block';
+          var thumbContainer = document.getElementById('fileThumbnailContainer');
+          var thumbImg = document.getElementById('fileThumbnail');
+          if (thumbContainer) thumbContainer.style.display = 'none';
+          if (thumbImg) thumbImg.src = '';
+        } else {
+          hidePagesSkeleton();
+          if (pagesLockedHint) pagesLockedHint.style.display = 'none';
+          if (model.pages && model.pages.length > 0) {
+            if (listDiv) listDiv.style.display = 'block';
+            renderPagesListContent(model.pages);
+          } else {
+            if (listDiv) { listDiv.innerHTML = ''; listDiv.style.display = 'block'; }
+            updateToggleSelectCheckbox(model.pages || []);
+          }
+        }
+        var actionCardButtonsWrap = document.getElementById('actionCardButtonsWrap');
+        if (actionCardButtonsWrap) actionCardButtonsWrap.style.display = ctrlState === 'ERROR' ? 'none' : 'flex';
+        if (advanceBtn) {
+          var isErrorState = ctrlState === 'ERROR';
+          advanceBtn.style.display = isErrorState ? 'none' : '';
+          if (!isErrorState) {
+            var hasFileAndPages = model.fileKey && model.pages && model.pages.length > 0;
+            var hasSelection = (model.selectedPages || []).length > 0;
+            var disableForNoSelection = ctrlState === 'READY_TO_INDEX' && !hasSelection;
+            advanceBtn.disabled = !hasFileAndPages || disableForNoSelection || (ctrlState === 'INDEXING');
+            var isUpdate = model.fileKey && model.identity && model.identity.exists;
+            advanceBtn.textContent = isUpdate ? 'Update index' : 'Index selected pages';
+          }
+        }
+        if (headerBanner) headerBanner.style.display = model.identity && model.identity.exists ? 'none' : 'flex';
+        var headerConnectStatus = document.getElementById('headerConnectStatus');
+        var headerConnectBtn = document.getElementById('headerConnectBtn');
+        if (headerConnectStatus) {
+          var connected = model.identity && model.identity.exists;
+          headerConnectStatus.textContent = connected ? 'Connected' : 'Not connected';
+          headerConnectStatus.classList.toggle('connected', !!connected);
+          headerConnectStatus.title = connected ? 'Open FigDex Web' : 'Not connected';
+        }
+        if (headerConnectBtn) {
+          var connectedBtn = model.identity && model.identity.exists;
+          headerConnectBtn.style.display = connectedBtn ? 'none' : 'inline-block';
+          if (!connectedBtn) headerConnectBtn.disabled = false;
+        }
+        var headerSaveSyncLink = document.getElementById('headerSaveSyncLink');
+        if (headerSaveSyncLink) {
+          var connectedLink = model.identity && model.identity.exists;
+          headerSaveSyncLink.style.display = connectedLink ? 'none' : 'inline';
+        }
+        var selectedCountEl = document.getElementById('selectedPagesCount');
+        if (selectedCountEl) selectedCountEl.textContent = (model.selectedPages || []).length + ' pages selected';
+        var indexOutcomeHintEl = document.getElementById('indexOutcomeHint');
+        if (indexOutcomeHintEl) {
+          var showHint = ctrlState !== 'ERROR';
+          indexOutcomeHintEl.style.display = showHint ? 'block' : 'none';
+          if (showHint) {
+            var hasFileAndUser = model.fileKey && model.identity && model.identity.exists;
+            indexOutcomeHintEl.textContent = hasFileAndUser ? 'This file already has an index. Re-indexing will update the existing gallery.' : 'This will create a visual gallery of all selected screens in FigDex Web.';
+          }
+        }
+        var pageListHelperEl = document.getElementById('pageListHelperText');
+        if (pageListHelperEl) {
+          var noPagesSelected = (model.selectedPages || []).length === 0;
+          var showNoSelectionHint = ctrlState === 'READY_TO_INDEX' && model.fileKey && model.pages && model.pages.length > 0 && noPagesSelected;
+          var showIncludeHint = ctrlState === 'READY_TO_INDEX' && model.fileKey && model.identity && model.identity.exists && !noPagesSelected;
+          pageListHelperEl.style.display = (showNoSelectionHint || showIncludeHint) ? 'block' : 'none';
+          pageListHelperEl.style.color = '#666';
+          if (showNoSelectionHint) pageListHelperEl.textContent = 'Select at least one page to update the index.';
+          else if (showIncludeHint) pageListHelperEl.textContent = 'Select the pages you want to include in the updated index.';
+        }
+        var needsConnect = ctrlState === 'NEEDS_CONNECT';
+        var isIndexing = ctrlState === 'INDEXING';
+        var isDone = ctrlState === 'DONE';
+        var needsBlock = document.getElementById('needsConnectBlock');
+        var actionCard = document.getElementById('actionCard');
+        var indexingBlock = document.getElementById('indexingBlock');
+        var doneBlock = document.getElementById('doneBlock');
+        var doneMsgEl = document.getElementById('doneMsg');
+        var connectTimeoutBlock = document.getElementById('connectTimeoutBlock');
+        if (needsBlock) {
+          needsBlock.style.display = (needsConnect && !state.connectTimedOut) ? 'block' : 'none';
+          var needsMsg = document.getElementById('needsConnectMessage');
+          if (needsMsg) needsMsg.textContent = state.authExpiredMessage ? (state.authExpiredMessage + ' Please reconnect below.') : 'Connect your FigDex account to create an index.';
+        }
+        if (connectTimeoutBlock) connectTimeoutBlock.style.display = (needsConnect && state.connectTimedOut) ? 'block' : 'none';
+        if (actionCard) actionCard.style.display = (needsConnect || isIndexing || isDone) ? 'none' : 'block';
+        if (indexingBlock) {
+          indexingBlock.style.display = isIndexing ? 'block' : 'none';
+          var indexingTextEl = document.getElementById('indexingBlockText');
+          var indexingSubEl = document.getElementById('indexingBlockSubtext');
+          if (indexingTextEl && isIndexing) indexingTextEl.textContent = 'Updating index…';
+          if (indexingSubEl) indexingSubEl.style.display = isIndexing ? 'block' : 'none';
+        }
+        if (doneBlock) doneBlock.style.display = isDone ? 'block' : 'none';
+        var doneTitleEl = document.getElementById('doneBlockTitle');
+        var doneSubEl = document.getElementById('doneBlockSubtitle');
+        if (doneTitleEl) doneTitleEl.textContent = 'Index updated successfully';
+        if (doneSubEl) doneSubEl.textContent = 'Your gallery has been updated.';
+        if (doneMsgEl) doneMsgEl.style.display = 'none';
+        var isError = ctrlState === 'ERROR';
+        var indexErrorBlock = document.getElementById('indexErrorBlock');
+        var indexErrorText = document.getElementById('indexErrorText');
+        var indexErrorActionBtn = document.getElementById('indexErrorActionBtn');
+        if (indexErrorBlock) indexErrorBlock.style.display = isError ? 'block' : 'none';
+        if (isError) {
+          var errMsg = state.lastIndexError || 'Something went wrong.';
+          var isAuthError = state.authExpiredMessage === 'Session expired' || (errMsg && (errMsg.indexOf('Session expired') >= 0 || errMsg.indexOf('Connect your FigDex') >= 0));
+          var isGuestLimit = state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT';
+          if (indexErrorText) indexErrorText.textContent = errMsg;
+          if (indexErrorActionBtn) {
+            indexErrorActionBtn.textContent = isAuthError ? 'Continue on Web' : (isGuestLimit ? 'Create free account' : 'Try again');
+            indexErrorActionBtn._figdexErrorIsAuth = isAuthError;
+            indexErrorActionBtn._figdexUpgradeUrl = state.lastIndexUpgradeUrl || null;
+          }
+        }
+        var errorMsgEl = document.getElementById('errorMsg');
+        if (errorMsgEl) errorMsgEl.style.display = 'none';
+        if (!isError && state.lastIndexError) state.lastIndexError = '';
+      }
+      window.render = render;
+
+      function sendIntent(type, payload) {
+        payload = payload || {};
+        window.parent.postMessage({ pluginMessage: Object.assign({ type: type }, payload) }, '*');
+      }
+      function notifyStateChange(newState) {
+        var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+        window.parent.postMessage({ pluginMessage: { type: 'UI_STATE_CHANGED', state: newState, model: model } }, '*');
+      }
+
+      function __figdexOnCreateIndexClick() {
+        try { console.log('[FigDex] Index click handler called'); } catch (e) {}
+        var btn = document.getElementById('advanceBtn');
+        if (btn && btn.disabled) {
+          try { console.log('[FigDex] Index click: early return (button disabled)'); } catch (e) {}
+          return;
+        }
+        var ctrl = window.__figdexFlowController || controller;
+        if (ctrl && ctrl.getState && ctrl.getState() === 'INDEXING') {
+          try { console.log('[FigDex] Index click: early return (INDEXING)'); } catch (e) {}
+          return;
+        }
+        if (!ctrl) {
+          try { console.log('[FigDex] Index click: early return (no controller)'); } catch (e) {}
+          return;
+        }
+        if (!controller && ctrl === window.__figdexFlowController) {
+          var idStore = window.__figdexIdentityStore;
+          var tel = window.__figdexTelemetry;
+          if (idStore && tel) {
+            controller = ctrl;
+            ctrl.init({
+              identityStore: idStore,
+              telemetry: tel,
+              trace: true,
+              onOpenWeb: function() { window.open('https://www.figdex.com/login?from=figma-plugin', 'figdex_web', 'width=1200,height=800'); },
+              onRunIndexing: function(selectedPages) {
+                sendIntent('start-advanced', { selectedPages: selectedPages || state.selectedPages });
+              },
+              onStateChange: notifyStateChange
+            });
+            ctrl.dispatch('identity_loaded');
+          }
+        }
+        if (telemetry && telemetry.track) telemetry.track('index_click', buildTelemetryContext());
+        try { console.log('[FigDex] Index click: dispatching UI_CREATE_INDEX_CLICKED', state.selectedPages || []); } catch (e) {}
+        ctrl.dispatch('UI_CREATE_INDEX_CLICKED', { selectedPages: state.selectedPages || [] });
+        var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+        render(state, model);
+      }
+      window.__figdexOnCreateIndexClick = __figdexOnCreateIndexClick;
+
+      function showPagesSkeleton() {
+        var listDiv = document.getElementById('pagesList');
+        var skeletonDiv = document.getElementById('pagesListSkeleton');
+        if (!listDiv || !skeletonDiv) return;
+        listDiv.innerHTML = '';
+        listDiv.style.display = 'none';
+        skeletonDiv.style.display = 'block';
+        skeletonDiv.innerHTML = '';
+        for (var i = 0; i < 6; i++) {
+          var item = document.createElement('div');
+          item.className = 'skeleton-item';
+          var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
+          item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
+          skeletonDiv.appendChild(item);
+        }
+      }
+
+      function hidePagesSkeleton() {
+        var listDiv = document.getElementById('pagesList');
+        var skeletonDiv = document.getElementById('pagesListSkeleton');
+        if (listDiv) listDiv.style.display = 'block';
+        if (skeletonDiv) skeletonDiv.style.display = 'none';
+      }
+
+      function getStatusIcon(page) {
+        if (!page) return '';
+        if (page.isCoverPage) return '';
+        var title = '';
+        if (page.status === 'up_to_date') title = 'Page up to date';
+        else if (page.status === 'needs_update') title = 'Page needs update';
+        else if (page.status === 'not_indexed') title = 'Not in index';
+        else if (page.status === 'folder') title = 'Folder';
+        else if (page.status === 'index_page') title = 'Index page';
+        else if (page.isIndexPage) title = 'Index page';
+        else if (page.hasFrames === false) title = 'No frames';
+        else title = 'Page';
+        var icon = (page.icon != null && page.icon !== '') ? page.icon : (page.hasFrames !== false ? '\u2795' : '\uD83D\uDCC1');
+        return '<span class="page-row-icon" title="' + (title.replace(/"/g, '&quot;')) + '">' + icon + '</span>';
+      }
+
+      function updateToggleSelectCheckbox(pages) {
+        var mainCheckbox = document.getElementById('toggleSelectCheckbox');
+        if (!mainCheckbox) return;
+        var list = pages || state.pages || [];
+        var total = list.filter(function(p) { return p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage; }).length;
+        var selected = (state.selectedPages || []).length;
+        if (selected === 0) {
+          mainCheckbox.checked = false;
+          mainCheckbox.indeterminate = false;
+        } else if (selected === total && total > 0) {
+          mainCheckbox.checked = true;
+          mainCheckbox.indeterminate = false;
+        } else {
+          mainCheckbox.checked = false;
+          mainCheckbox.indeterminate = true;
+        }
+      }
+
+      function renderPagesListContent(pages) {
+        var listDiv = document.getElementById('pagesList');
+        if (!listDiv) return;
+        listDiv.innerHTML = '';
+        (pages || []).forEach(function(page, i) {
+          var id = 'page_' + i;
+          var hasFrames = page.hasFrames !== false;
+          var isIndexPage = page.isIndexPage === true;
+          var isCoverPage = page.isCoverPage === true;
+          var selectable = hasFrames && !isIndexPage && !isCoverPage;
+          var checked = state.selectedPages.indexOf(page.id) !== -1 ? 'checked' : '';
+          var label = document.createElement('label');
+          var iconHtml = getStatusIcon(page);
+          label.innerHTML = '<div class="page-row-left">' +
+            '<input type="checkbox" id="' + id + '" data-page-id="' + page.id + '" ' + (selectable ? checked : 'disabled') + ' style="margin-right: 8px;">' +
+            '<span style="font-size: 0.8em;">' + (page.displayName || page.name || '') + '</span>' +
+            '</div>' + iconHtml;
+          var input = label.querySelector('input');
+          if (input) {
+            input.addEventListener('change', function() {
+              var pid = this.getAttribute('data-page-id');
+              if (this.checked) { if (state.selectedPages.indexOf(pid) === -1) state.selectedPages.push(pid); }
+              else state.selectedPages = state.selectedPages.filter(function(p) { return p !== pid; });
+              sendIntent('save-selected-pages', { pages: state.selectedPages });
+              var countEl = document.getElementById('selectedPagesCount');
+              if (countEl) countEl.textContent = state.selectedPages.length + ' pages selected';
+              updateToggleSelectCheckbox(state.pages);
+              var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+              if (typeof render === 'function') render(state, model);
+            });
+          }
+          listDiv.appendChild(label);
+        });
+        updateToggleSelectCheckbox(pages);
+      }
+
+      function init() {
+        if (window.__figdex_ui_inited) return;
+        window.__figdex_ui_inited = true;
+        try { console.log('[FigDex] UI_INIT_ONCE'); } catch (e) {}
+        showPagesSkeleton();
+        var debugClearBtn = document.getElementById('debugClearStorageBtn');
+        if (debugClearBtn) { }
+        document.body.addEventListener('click', function(e) {
+          var btn = e.target && (e.target.closest ? e.target.closest('button') : (e.target.tagName === 'BUTTON' ? e.target : null));
+          if (!btn) return;
+          var id = btn.id || '';
+          if (id === 'debugClearStorageBtn') return;
+          var tag = btn.getAttribute('data-tag');
+          var q = btn.getAttribute('data-q');
+          var label = (btn.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 25);
+          if (tag) label = 'Tag: ' + tag;
+          else if (q != null && q !== '') label = 'Quality: ' + q;
+          else if (!label) label = id || 'button';
+          logButtonClick(id, label);
+        }, true);
+        var saveBtn = document.getElementById('fileKeyInlineSaveBtn');
+        var saveInput = document.getElementById('fileKeyInlineInput');
+        if (saveBtn && saveInput) {
+          saveBtn.addEventListener('click', function() { state.step1Expanded = false; onSaveFileKeyClick(); });
+        }
+        var changeLinkBtn = document.getElementById('fileKeyChangeLinkBtn');
+        if (changeLinkBtn) {
+          changeLinkBtn.addEventListener('click', function() {
+            state.step1Expanded = true;
+            render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+          });
+        }
+        var advanceBtn = document.getElementById('advanceBtn');
+        if (advanceBtn) advanceBtn.addEventListener('click', __figdexOnCreateIndexClick);
+        var toggleSelectCheckbox = document.getElementById('toggleSelectCheckbox');
+        if (toggleSelectCheckbox) {
+          toggleSelectCheckbox.addEventListener('change', function() {
+            var checked = this.checked;
+            if (checked) {
+              state.selectedPages = (state.pages || []).filter(function(p) { return p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage; }).map(function(p) { return p.id; });
+            } else {
+              state.selectedPages = [];
+            }
+            sendIntent('save-selected-pages', { pages: state.selectedPages });
+            var countEl = document.getElementById('selectedPagesCount');
+            if (countEl) countEl.textContent = state.selectedPages.length + ' pages selected';
+            updateToggleSelectCheckbox(state.pages);
+            var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+            if (typeof render === 'function') render(state, model);
+          });
+        }
+        var refreshPagesBtn = document.getElementById('refreshPagesBtn');
+        if (refreshPagesBtn) {
+          refreshPagesBtn.addEventListener('click', function() {
+            sendIntent('refresh-pages');
+          });
+        }
+        function openSettingsDrawer() {
+          var overlay = document.getElementById('settingsOverlay');
+          var drawer = document.getElementById('settingsDrawer');
+          if (overlay && drawer) {
+            overlay.style.display = 'block';
+            drawer.style.display = 'block';
+            drawer.style.transform = 'translateY(100%)';
+            requestAnimationFrame(function() {
+              drawer.style.transition = 'transform 0.3s ease-out';
+              drawer.style.transform = 'translateY(0)';
+            });
+          }
+        }
+        function closeSettingsDrawer() {
+          var overlay = document.getElementById('settingsOverlay');
+          var drawer = document.getElementById('settingsDrawer');
+          if (overlay && drawer) {
+            drawer.style.transform = 'translateY(100%)';
+            setTimeout(function() {
+              overlay.style.display = 'none';
+              drawer.style.display = 'none';
+            }, 300);
+          }
+        }
+        var settingsIconBtn = document.getElementById('settingsIconBtn');
+        if (settingsIconBtn) {
+          settingsIconBtn.addEventListener('click', function() { openSettingsDrawer(); });
+        }
+        var closeSettingsDrawerBtn = document.getElementById('closeSettingsDrawerBtn');
+        if (closeSettingsDrawerBtn) {
+          closeSettingsDrawerBtn.addEventListener('click', function() { closeSettingsDrawer(); });
+        }
+        var settingsOverlay = document.getElementById('settingsOverlay');
+        if (settingsOverlay) {
+          settingsOverlay.addEventListener('click', function() { closeSettingsDrawer(); });
+        }
+        window.__figdexCloseSettingsDrawer = closeSettingsDrawer;
+        var openFigdexWebBtn = document.getElementById('openFigdexWebBtn');
+        if (openFigdexWebBtn) {
+          openFigdexWebBtn.addEventListener('click', function() { sendIntent('UI_OPEN_FIGDEX_WEB'); });
+        }
+        function buildGalleryUrl() {
+          var base = 'https://www.figdex.com/gallery';
+          var params = [];
+          if (state.fileKey) params.push('fileKey=' + encodeURIComponent(state.fileKey));
+          var id = identityStore ? identityStore.getIdentity() : null;
+          if (id && id.token) params.push('apiKey=' + encodeURIComponent(id.token));
+          return params.length ? base + '?' + params.join('&') : base;
+        }
+        var openGalleryFromPagesBtn = document.getElementById('openGalleryFromPagesBtn');
+        if (openGalleryFromPagesBtn) {
+          openGalleryFromPagesBtn.addEventListener('click', function() {
+            window.open(buildGalleryUrl(), 'figdex_web', 'width=1200,height=800');
+          });
+        }
+        var headerConnectBtn = document.getElementById('headerConnectBtn');
+        if (headerConnectBtn) {
+          headerConnectBtn.addEventListener('click', function() {
+            if (headerConnectBtn.disabled) return;
+            headerConnectBtn.disabled = true;
+            sendIntent('UI_OPEN_FIGDEX_WEB');
+          });
+        }
+        var headerConnectStatus = document.getElementById('headerConnectStatus');
+        if (headerConnectStatus) {
+          headerConnectStatus.addEventListener('click', function() {
+            var id = identityStore ? identityStore.getIdentity() : null;
+            if (id && id.exists) {
+              window.open(buildGalleryUrl(), 'figdex_web', 'width=1200,height=800');
+            }
+          });
+        }
+        var headerSaveSyncLink = document.getElementById('headerSaveSyncLink');
+        if (headerSaveSyncLink) {
+          headerSaveSyncLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            sendIntent('UI_OPEN_FIGDEX_WEB_UPGRADE');
+          });
+        }
+        var connectTimeoutRetryBtn = document.getElementById('connectTimeoutRetryBtn');
+        if (connectTimeoutRetryBtn) {
+          connectTimeoutRetryBtn.addEventListener('click', function() {
+            state.connectTimedOut = false;
+            sendIntent('UI_OPEN_FIGDEX_WEB');
+            var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+            render(state, model);
+          });
+        }
+        var connectTimeoutCancelBtn = document.getElementById('connectTimeoutCancelBtn');
+        if (connectTimeoutCancelBtn) {
+          connectTimeoutCancelBtn.addEventListener('click', function() {
+            state.connectTimedOut = false;
+            if (controller && controller.dispatch) {
+              controller.dispatch('reset');
+              if (typeof notifyStateChange === 'function') notifyStateChange(controller.getState());
+              var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+              render(state, model);
+            }
+          });
+        }
+        var doneOpenWebBtn = document.getElementById('doneOpenWebBtn');
+        if (doneOpenWebBtn) {
+          doneOpenWebBtn.addEventListener('click', function() {
+            if (telemetry && telemetry.track) telemetry.track('open_gallery', buildTelemetryContext());
+            if (state.resultUrl) {
+              sendIntent('UI_OPEN_RESULT_WEB', { resultUrl: state.resultUrl });
+            } else if (controller && controller.getState && controller.getState() === 'DONE') {
+              sendIntent('UI_OPEN_RESULT_WEB', { resultUrl: typeof buildGalleryUrl === 'function' ? buildGalleryUrl() : (state.fileKey ? ('https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(state.fileKey)) : 'https://www.figdex.com/gallery') });
+            } else {
+              if (typeof openWebLogin === 'function') openWebLogin();
+            }
+          });
+        }
+        var doneUpdateAgainBtn = document.getElementById('doneUpdateAgainBtn');
+        if (doneUpdateAgainBtn) {
+          doneUpdateAgainBtn.addEventListener('click', function() {
+            if (controller && controller.dispatch) {
+              controller.dispatch('reset');
+              if (typeof notifyStateChange === 'function') notifyStateChange(controller.getState());
+              var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+              render(state, model);
+            }
+          });
+        }
+        var indexErrorActionBtn = document.getElementById('indexErrorActionBtn');
+        if (indexErrorActionBtn) {
+          indexErrorActionBtn.addEventListener('click', function() {
+            if (this._figdexErrorIsAuth) {
+              sendIntent('UI_OPEN_FIGDEX_WEB');
+            } else if (this._figdexUpgradeUrl) {
+              sendIntent('UI_OPEN_FIGDEX_WEB_UPGRADE');
+            } else {
+              var ctrl = controller || window.__figdexFlowController;
+              if (ctrl && ctrl.dispatch) {
+                ctrl.dispatch('reset');
+                if (typeof notifyStateChange === 'function') notifyStateChange(ctrl.getState());
+                var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+                render(state, model);
+              }
+            }
+          });
+        }
+        var ctrl = window.__figdexFlowController;
+        var idStore = window.__figdexIdentityStore;
+        var tel = window.__figdexTelemetry;
+        if (!tel || !idStore || !ctrl) return;
+        telemetry = tel;
+        identityStore = idStore;
+        controller = ctrl;
+        telemetry.log('init');
+        controller.init({
+          identityStore: identityStore,
+          telemetry: telemetry,
+          trace: true,
+          onTrack: function(ev) { if (telemetry && telemetry.track) telemetry.track(ev, buildTelemetryContext()); },
+          onOpenWeb: function() { window.open('https://www.figdex.com/login?from=figma-plugin', 'figdex_web', 'width=1200,height=800'); },
+          onRunIndexing: function(selectedPages) {
+            sendIntent('start-advanced', { selectedPages: selectedPages || state.selectedPages });
+          },
+          onStateChange: notifyStateChange
+        });
+        if (state.identityPending) {
+          if (state.identityPending.token && state.identityPending.user) identityStore.setIdentity(state.identityPending.token, state.identityPending.user);
+          else identityStore.clearIdentity();
+          state.identityPending = null;
+        }
+        controller.dispatch('identity_loaded');
+        var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore.getIdentity() };
+        render(state, model);
+        var banner = document.getElementById('headerMarketingBanner');
+        if (banner) {
+          banner.addEventListener('click', function() {
+            controller.dispatch('intent_open_web');
+          });
+        }
+        sendIntent('refresh-pages');
+      }
+
+      window.addEventListener('message', function(event) {
+        if (!event.data) return;
+        var msg = event.data.pluginMessage != null ? event.data.pluginMessage : event.data;
+        if (!msg || typeof msg !== 'object' || !msg.type) return;
+        if (msg.type === 'set-document-id') {
+          var newDocId = msg.documentId || null;
+          if (state.documentId && newDocId && state.documentId !== newDocId) {
+            // Document switched — clear file-specific state and refresh so new file's pages load
+            state.fileKey = '';
+            state.pages = [];
+            state.selectedPages = [];
+            forceClearUI();
+            sendIntent('get-file-key');
+            sendIntent('refresh-pages');
+          }
+          state.documentId = newDocId;
+        }
+        if (msg.type === 'UI_RENDER' && msg.payload) {
+          try { console.log('[FigDex] UI_RENDER', msg.payload.state); } catch (e) {}
+          render(msg.payload.state, msg.payload.model);
+          return;
+        }
+        if (msg.type === 'set-file-key') {
+          state.fileKey = msg.fileKey || '';
+          if (!state.fileKey) {
+            forceClearUI();
+          } else {
+            sendIntent('refresh-pages');
+            sendIntent('get-file-thumbnail', { fileKey: state.fileKey });
+          }
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+        }
+        if (msg.type === 'plugin-version') {
+          state.pluginVersion = msg.version || '';
+          var telGlobal = window.__figdexTelemetry;
+          if (telGlobal && telGlobal.setPluginVersion) telGlobal.setPluginVersion(msg.version || '');
+        }
+        if (msg.type === 'TELEMETRY_ANON_ID' && msg.anonId) {
+          var telG = window.__figdexTelemetry;
+          if (telG && telG.setAnonId) telG.setAnonId(msg.anonId);
+          if (telG && telG.track && !state._telemetryBootSent) {
+            state._telemetryBootSent = true;
+            telG.track('plugin_boot', buildTelemetryContext());
+          }
+        }
+        if (msg.type === 'set-selected-pages') {
+          state.selectedPages = Array.isArray(msg.pages) ? msg.pages.slice(0, 500) : [];
+          var countEl0 = document.getElementById('selectedPagesCount');
+          if (countEl0) countEl0.textContent = state.selectedPages.length + ' pages selected';
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+          return;
+        }
+        if (msg.type === 'pages-indexed' && Array.isArray(msg.pageIds)) {
+          var ids = msg.pageIds;
+          if (Array.isArray(state.pages)) {
+            state.pages = state.pages.map(function(p) {
+              if (ids.indexOf(p.id) !== -1 && p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage) {
+                p.status = 'up_to_date';
+                p.icon = '✅';
+              }
+              return p;
+            });
+          }
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+          return;
+        }
+        if (msg.type === 'WEB_ACCOUNT_DATA_LOADED') {
+          var token = msg.token || (msg.payload && msg.payload.token);
+          var user = msg.user || (msg.payload && msg.payload.userId);
+          if (typeof user === 'string') user = { id: user };
+          var idStore = identityStore || window.__figdexIdentityStore;
+          var ctrl = controller || window.__figdexFlowController;
+          if (!token || !user) {
+            if (idStore) idStore.clearIdentity();
+            state.identityPending = null;
+            state.authExpiredMessage = '';
+            if (ctrl) ctrl.dispatch('identity_loaded');
+            render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: null });
+            return;
+          }
+          state.identityPending = { token: token, user: user };
+          if (idStore) idStore.setIdentity(token, user);
+          state.connectTimedOut = false;
+          state.authExpiredMessage = '';
+          if (ctrl) {
+            if (token && user && ctrl.getState() === 'NEEDS_CONNECT') ctrl.dispatch('EVT_CONNECT_SUCCESS');
+            else ctrl.dispatch('identity_loaded');
+          }
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: idStore ? idStore.getIdentity() : null });
+          var hcbLoaded = document.getElementById('headerConnectBtn');
+          if (hcbLoaded) hcbLoaded.disabled = false;
+        }
+        if (msg.type === 'CONNECT_TIMEOUT') {
+          state.connectTimedOut = true;
+          if (telemetry) telemetry.log('connect_timeout');
+          if (telemetry && telemetry.track) telemetry.track('connect_timeout', buildTelemetryContext());
+          if (controller) controller.dispatch('connect_timeout');
+          var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+          render(state, model);
+          var hcb = document.getElementById('headerConnectBtn');
+          if (hcb) hcb.disabled = false;
+        }
+        if (msg.type === 'AUTH_EXPIRED') {
+          if (identityStore) identityStore.clearIdentity();
+          state.authExpiredMessage = 'Session expired';
+          if (controller) controller.dispatch('auth_expired', { selectedPages: msg.selectedPages || [] });
+          if (telemetry) telemetry.log('auth_expired');
+          if (telemetry && telemetry.track) telemetry.track('auth_expired', buildTelemetryContext());
+          var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: null };
+          render(state, model);
+        }
+        if (msg.type === 'pages') {
+          state.pages = msg.pages || [];
+          if (Array.isArray(msg.selectedPageIds)) {
+            state.selectedPages = msg.selectedPageIds.slice(0, 500);
+          }
+          if (state.selectedPages.length === 0) {
+            state.selectedPages = state.pages.filter(function(p) { return p.hasFrames && !p.isIndexPage && !p.isCoverPage; }).map(function(p) { return p.id; });
+          }
+          var countEl = document.getElementById('selectedPagesCount');
+          if (countEl) countEl.textContent = state.selectedPages.length + ' pages selected';
+          console.log('[FigDex] pages loaded:', state.pages.length, 'selected:', state.selectedPages.length);
+          var statusEl = document.getElementById('fileKeyInlineStatus');
+          if (statusEl) { statusEl.textContent = state.pages.length > 0 ? 'Loaded ' + state.pages.length + ' pages' : 'Saved!'; statusEl.style.color = '#43a047'; }
+          if (state.fileKey) sendIntent('get-file-thumbnail', { fileKey: state.fileKey });
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+        }
+        if (msg.type === 'file-thumbnail') {
+          var thumbContainer = document.getElementById('fileThumbnailContainer');
+          var thumbImg = document.getElementById('fileThumbnail');
+          if (thumbContainer && thumbImg) {
+            if (msg.thumbnailDataUrl) thumbImg.src = msg.thumbnailDataUrl;
+            thumbContainer.style.display = 'block';
+          }
+        }
+        if (msg.type === 'file-thumbnail-error') {
+          var thumbContainer = document.getElementById('fileThumbnailContainer');
+          if (thumbContainer) thumbContainer.style.display = 'none';
+        }
+        if (msg.type === 'OPEN_FIGDEX_WEB') {
+          window.open(msg.url || 'https://www.figdex.com/plugin-connect?from=figma-plugin', 'figdex_web', 'width=1200,height=800');
+        }
+        if (msg.type === 'upload-started') {
+          var indexingText = document.getElementById('indexingBlockText');
+          if (indexingText) indexingText.textContent = 'Updating index…';
+        }
+        if (msg.type === 'upload-progress') {
+          var indexingText = document.getElementById('indexingBlockText');
+          if (indexingText && msg.step) indexingText.textContent = msg.step;
+        }
+        if (msg.type === 'WEB_INDEX_CREATED') {
+          state.resultUrl = msg.resultUrl || '';
+          if (controller) controller.dispatch('web_index_created', { resultUrl: state.resultUrl });
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+        }
+        if (msg.type === 'done') {
+          if (controller) controller.dispatch('indexing_done');
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+        }
+        if (msg.type === 'OPEN_RESULT_URL') {
+          if (msg.url) window.open(msg.url, 'figdex_web', 'width=1200,height=800');
+        }
+        if (msg.type === 'error') {
+          state.lastIndexError = msg.message || 'Indexing failed.';
+          state.lastIndexErrorCode = msg.code || null;
+          state.lastIndexUpgradeUrl = msg.upgradeUrl || null;
+          controller && controller.dispatch('indexing_failed', { message: msg.message });
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+        }
+      });
+
+      function openWebLogin() { if (controller) controller.dispatch('intent_open_web'); else window.open('https://www.figdex.com/login?from=figma-plugin', 'figdex_web', 'width=1200,height=800'); }
+      function openWebLoginInNewWindow() { openWebLogin(); }
+      window.openWebLogin = openWebLogin;
+      window.openWebLoginInNewWindow = openWebLoginInNewWindow;
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+
+    </script>
+  </body>
+</html>
+
+

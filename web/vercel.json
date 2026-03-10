@@ -1,0 +1,52 @@
+{
+  "functions": {
+    "pages/api/*.ts": {
+      "maxDuration": 30
+    },
+    "pages/api/upload-index-v2.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/create-index-from-figma.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/get-page-frame-counts.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/upload-index.ts": {
+      "maxDuration": 300,
+      "memory": 2048
+    },
+    "pages/api/process-index-job.ts": {
+      "maxDuration": 300,
+      "memory": 2048
+    },
+    "pages/api/cron/process-pending-jobs.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/process-pending-jobs",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Requested-With"
+        }
+      ]
+    }
+  ]
+}

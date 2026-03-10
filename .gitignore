@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+/package-lock.json
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Web specific
+web/.next/
+web/node_modules/
+web/.vercel/
+
+# Plugin specific (if needed)
+plugin/*.backup
+plugin/*.old
+
+# Backups and archives (keep repo lean)
+web_old_backup*/
+backups/
+plugin_web_first_beta/
+plugin.zip
+.cursor/
+
+# Large release archives (exceed GitHub limits)
+web/releases/
+web/docs/releases/*.zip
+web/docs/releases/*.tar.gz
+*.tar.gz
+
+# Large data files
+web/data/
+
+

@@ -1,0 +1,31 @@
+# Large archive files
+*.tar.gz
+*.zip
+indexo-web-v*.tar.gz
+
+# Large data files
+data/
+*-backup.tsx
+*-simple.tsx
+*-test.tsx
+*-working.tsx
+
+# Documentation
+*.md
+ADVANCED_FILTERS_DOCUMENTATION.md
+VERCEL_SETUP.md
+WORKING_VERSION_SUMMARY_*.md
+CHANGELOG.md
+README.md
+
+# SQL files (only needed for database setup)
+*.sql
+
+# Git and version control
+.git/
+.gitignore
+
+# Old backups
+Stable/
+stable-versions/
+my-figma-gallery-restored/

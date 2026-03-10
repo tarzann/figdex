@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "upload-index.ts": {
+      "maxDuration": 30
+    }
+  }
+}

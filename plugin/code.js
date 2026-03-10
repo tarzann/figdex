@@ -1,0 +1,965 @@
+/**
+ * FigDex plugin — code.js (hard reset).
+ * Single postMessage pipeline: UI -> code -> UI.
+ * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
+ */
+const PLUGIN_VERSION = '1.32.01';
+figma.showUI(__html__, { width: 386, height: 800 });
+console.log('FigDex v' + PLUGIN_VERSION);
+
+try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {}
+setTimeout(() => { try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {} }, 500);
+
+const rootId = figma.root.id || '0:0';
+figma.ui.postMessage({ type: 'set-document-id', documentId: rootId });
+figma.on('currentpagechange', () => {
+  figma.ui.postMessage({ type: 'set-document-id', documentId: figma.root.id || '0:0' });
+});
+
+figma.on('selectionchange', () => {
+  const selection = figma.currentPage.selection;
+  const hasSelection = selection.length > 0;
+  const hasFrameSelection = selection.some(n => n.type === 'FRAME');
+  const selectedFrames = selection.filter(n => n.type === 'FRAME').map(n => n.id);
+  figma.ui.postMessage({ type: 'selection-status', hasSelection, hasFrameSelection, selectedFrames });
+});
+
+// --- Dev: simulate connected identity (no UI flag) ---
+const mockConnectedIdentity = false;
+
+// --- Storage ---
+const STORAGE_KEYS = {
+  FILE_KEY: 'fileKey',
+  FILE_NAME: 'fileName',
+  SELECTED_PAGES: 'selectedPages',
+  INDEXED_PAGES: 'indexedPages',
+  WEB_TOKEN: 'webToken',
+  WEB_USER: 'webUser',
+  CONNECT_NONCE_DATA: 'connectNonceData',
+  ANON_ID: 'anonId'
+};
+
+function cryptoRandomString() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  for (let i = 0; i < 32; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+function storageKey(key) {
+  // Global keys: login persists across documents. File key is per-document so each Figma file has its own.
+  var globalKeys = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID];
+  return globalKeys.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + (figma.root.id || '0:0') + '_' + key;
+}
+async function getStored(key, def) {
+  try {
+    const v = await figma.clientStorage.getAsync(storageKey(key));
+    return v !== undefined ? v : def;
+  } catch (e) { return def; }
+}
+async function setStored(key, value) {
+  try { await figma.clientStorage.setAsync(storageKey(key), value); } catch (e) { console.error(e); }
+}
+
+const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for large uploads
+function fetchWithTimeout(url, opts) {
+  var controller = null;
+  try { controller = new AbortController(); } catch (e) { controller = null; }
+  var timeoutId = null;
+  var timeoutPromise = new Promise(function (_, reject) {
+    timeoutId = setTimeout(function () {
+      if (controller) controller.abort();
+      reject(new Error('Request timed out. The server may be slow or unreachable. Try again.'));
+    }, FETCH_TIMEOUT_MS);
+  });
+  var opts2 = opts || {};
+  if (controller) opts2.signal = controller.signal;
+  return Promise.race([
+    fetch(url, opts2).then(function (res) {
+      clearTimeout(timeoutId);
+      return res;
+    }),
+    timeoutPromise
+  ]);
+}
+
+let globalFileKey = '';
+
+// --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
+// Top-level frames: (1) direct FRAME children of Page; (2) direct FRAME children of each Section (one level only). Excludes [NO_INDEX].
+function getTopLevelFrameIds(page) {
+  var ids = [];
+  var children = page.children || [];
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+    if (node.type === 'FRAME') {
+      if ((node.name || '').indexOf('[NO_INDEX]') >= 0) continue;
+      ids.push(node.id);
+    }
+    if (node.type === 'SECTION' && node.children) {
+      for (var j = 0; j < node.children.length; j++) {
+        var child = node.children[j];
+        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0) ids.push(child.id);
+      }
+    }
+  }
+  return ids;
+}
+// Same set as getTopLevelFrameIds but returns frame nodes (for cover selection).
+function getTopLevelFrameNodes(page) {
+  var nodes = [];
+  var children = page.children || [];
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+    if (node.type === 'FRAME') {
+      if ((node.name || '').indexOf('[NO_INDEX]') >= 0) continue;
+      nodes.push(node);
+    }
+    if (node.type === 'SECTION' && node.children) {
+      for (var j = 0; j < node.children.length; j++) {
+        var child = node.children[j];
+        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0) nodes.push(child);
+      }
+    }
+  }
+  return nodes;
+}
+// Returns the name of the Section that contains this frame (or null if not inside a Section).
+function getSectionNameForFrame(frame) {
+  try {
+    var cur = frame.parent;
+    var guard = 0;
+    while (cur && guard++ < 50) {
+      if (cur.type === 'SECTION' && cur.name) return cur.name;
+      cur = cur.parent;
+    }
+  } catch (e) {}
+  return null;
+}
+function isNodeVisible(node) {
+  try {
+    var cur = node;
+    while (cur) {
+      if (cur.visible === false) return false;
+      cur = cur.parent;
+    }
+    return true;
+  } catch (e) { return true; }
+}
+function collectVisibleTextsFromFrame(frame) {
+  try {
+    var textNodes = frame.findAll(function (n) { return n.type === 'TEXT'; });
+    var texts = [];
+    for (var i = 0; i < textNodes.length; i++) {
+      var t = textNodes[i];
+      if (isNodeVisible(t) && t.characters) texts.push(t.characters);
+    }
+    return texts;
+  } catch (e) { return []; }
+}
+function collectAncestorNames(frame) {
+  var names = [];
+  try {
+    var cur = frame.parent;
+    var guard = 0;
+    while (cur && guard++ < 50) {
+      if (cur.name && typeof cur.name === 'string') names.push(cur.name);
+      cur = cur.parent;
+    }
+  } catch (e) {}
+  return names;
+}
+function buildSearchTokens(rawTexts) {
+  try {
+    var joined = Array.isArray(rawTexts) ? rawTexts.join(' ') : String(rawTexts || '');
+    var normalized = joined.toLowerCase().replace(/\n+/g, ' ').replace(/[^A-Za-z0-9_\-\s\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!normalized) return [];
+    var tokens = normalized.split(' ');
+    var filtered = tokens.filter(function (t) { return t && t.length >= 2; });
+    return Array.from(new Set(filtered)).slice(0, 500);
+  } catch (e) { return []; }
+}
+
+// Content hint for change detection: shallow structure (child type + child count per child)
+function getContentHint(node) {
+  try {
+    if (!node || !('children' in node)) return '0';
+    var c = node.children;
+    if (!c || c.length === 0) return '0';
+    return c.map(function (ch) {
+      var count = ('children' in ch && ch.children) ? ch.children.length : 0;
+      return ch.type + ':' + count;
+    }).join(',');
+  } catch (e) { return '0'; }
+}
+
+// Text content signature: collect text from all TEXT descendants (for change detection)
+async function getTextHintAsync(node, depth, acc) {
+  if (!node || depth > 5 || (acc && acc.length > 600)) return acc;
+  acc = acc || [];
+  if (node.type === 'TEXT') {
+    try {
+      var fontName = node.fontName;
+      if (fontName && fontName !== figma.mixed) {
+        await figma.loadFontAsync(fontName);
+      } else if (node.getRangeAllFontNames) {
+        try {
+          var len = node.characters ? node.characters.length : 0;
+          if (len > 0) {
+            var fonts = node.getRangeAllFontNames(0, len);
+            for (var fi = 0; fi < fonts.length; fi++) {
+              await figma.loadFontAsync(fonts[fi]);
+            }
+          }
+        } catch (e2) { /* mixed font: chars may throw before load */ }
+      }
+      var chars = node.characters;
+      if (typeof chars === 'string') acc.push(chars.slice(0, 150));
+    } catch (e) { /* skip on font/read error */ }
+  }
+  if ('children' in node && node.children) {
+    for (var i = 0; i < node.children.length; i++) {
+      await getTextHintAsync(node.children[i], depth + 1, acc);
+    }
+  }
+  return acc;
+}
+
+// Build a signature for a frame to detect changes (name, size, structure, text). Same order as getTopLevelFrameIds.
+async function getFrameSignaturesForPage(page) {
+  var frameIds = getTopLevelFrameIds(page);
+  var sigs = [];
+  for (var i = 0; i < frameIds.length; i++) {
+    try {
+      var frame = await figma.getNodeByIdAsync(frameIds[i]);
+      if (!frame || frame.type !== 'FRAME') continue;
+      if (typeof frame.loadAsync === 'function') await frame.loadAsync();
+      var textParts = await getTextHintAsync(frame, 0, []);
+      var textHint = textParts.join('|').slice(0, 500);
+      sigs.push({
+        id: frame.id,
+        name: (frame.name || '').trim(),
+        width: Math.round(frame.width),
+        height: Math.round(frame.height),
+        contentHint: getContentHint(frame),
+        textHint: textHint
+      });
+    } catch (e) { /* skip */ }
+  }
+  return sigs;
+}
+function frameSignaturesEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    var x = a[i];
+    var y = b[i];
+    if (!x || !y || x.id !== y.id || (x.name || '') !== (y.name || '') || x.width !== y.width || x.height !== y.height) return false;
+    if (x.contentHint && y.contentHint && x.contentHint !== y.contentHint) return false;
+    if (x.textHint && y.textHint && x.textHint !== y.textHint) return false;
+  }
+  return true;
+}
+
+// Same cover as plugin UI (Cover page/frame or current page, largest frame). Used for get-file-thumbnail and create-index cover.
+async function getCoverImageDataUrl() {
+  await figma.loadAllPagesAsync();
+  var pages = figma.root.children.filter(function (p) { return p.type === 'PAGE' && p.name !== 'FigDex'; });
+  var coverPage = pages.find(function (p) { return (p.name || '').trim().toLowerCase() === 'cover'; }) || null;
+  var pagesToTry = [];
+  if (coverPage) pagesToTry.push(coverPage);
+  if (figma.currentPage) pagesToTry.push(figma.currentPage);
+  pages.forEach(function (p) { if (!pagesToTry.some(function (t) { return t.id === p.id; })) pagesToTry.push(p); });
+  if (pagesToTry.length === 0) return null;
+  var framesToTry = [];
+  for (var i = 0; i < pagesToTry.length; i++) {
+    var page = pagesToTry[i];
+    try { if (typeof page.loadAsync === 'function') await page.loadAsync(); } catch (e) {}
+    // Use same top-level frames as index (direct FRAME children of Page or Section). Auto-layout frames count the same as regular frames.
+    var pageFrames = getTopLevelFrameNodes(page);
+    if (pageFrames.length > 0) { framesToTry = pageFrames; break; }
+  }
+  if (framesToTry.length === 0) return null;
+  framesToTry = framesToTry.filter(function (f) { return (f.width || 0) >= 10 && (f.height || 0) >= 10 && f.visible !== false; });
+  var frameToExport = framesToTry.find(function (f) { return (f.name || '').trim().toLowerCase() === 'cover'; });
+  if (!frameToExport) {
+    framesToTry.sort(function (a, b) { return (b.width * b.height) - (a.width * a.height); });
+    frameToExport = framesToTry[0];
+  }
+  try { if (typeof frameToExport.loadAsync === 'function') await frameToExport.loadAsync(); } catch (e) {}
+  // Export at 0.75 scale to keep payload size reasonable (cover + frames in first chunk)
+  var bytes = await frameToExport.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.75 } });
+  var dataUrl = 'data:image/png;base64,' + figma.base64Encode(bytes);
+  if (dataUrl.length < 2000) {
+    try {
+      var pageNode = coverPage || figma.currentPage;
+      if (pageNode) {
+        var pageBytes = await pageNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.5 } });
+        var pageDataUrl = 'data:image/png;base64,' + figma.base64Encode(pageBytes);
+        if (pageDataUrl.length > dataUrl.length) dataUrl = pageDataUrl;
+      }
+    } catch (e) {}
+  }
+  return dataUrl;
+}
+
+// --- Bootstrap: load storage and send to UI ---
+function sendStoredIdentityToUI(webToken, webUser) {
+  if (mockConnectedIdentity) {
+    figma.ui.postMessage({
+      type: 'WEB_ACCOUNT_DATA_LOADED',
+      token: 'mock_token_' + Date.now(),
+      user: { email: 'mock@figdex.local', name: 'Mock User' }
+    });
+  } else if (webToken && typeof webToken === 'string' && webToken.length >= 10) {
+    // Token alone is enough for indexing; UI needs minimal user for "Connected" display
+    var user = webUser && typeof webUser === 'object' ? webUser : { id: 'connected', email: 'Account connected' };
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: webToken, user: user });
+  } else {
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+  }
+}
+(async function bootstrap() {
+  var savedKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
+  // Fallback: figma.fileKey gives current file's key (when available, e.g. published plugins)
+  if (!savedKey && typeof figma.fileKey === 'string' && figma.fileKey.trim()) {
+    savedKey = figma.fileKey.trim();
+    globalFileKey = savedKey;
+    await setStored(STORAGE_KEYS.FILE_KEY, savedKey);
+  }
+  if (savedKey) {
+    globalFileKey = savedKey;
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey });
+  }
+  var webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+  var webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
+  // One-time migration: token used to be stored per-document; move to global key if found
+  if ((!webToken || !webUser) && (figma.root.id || '0:0')) {
+    try {
+      var docKey = 'figdex_' + (figma.root.id || '0:0') + '_';
+      var oldToken = await figma.clientStorage.getAsync(docKey + 'webToken');
+      var oldUser = await figma.clientStorage.getAsync(docKey + 'webUser');
+      if (oldToken && oldUser) {
+        await setStored(STORAGE_KEYS.WEB_TOKEN, oldToken);
+        await setStored(STORAGE_KEYS.WEB_USER, oldUser);
+        webToken = oldToken;
+        webUser = oldUser;
+      }
+    } catch (e) { /* ignore */ }
+  }
+  sendStoredIdentityToUI(webToken, webUser);
+  var anonId = await getOrCreateAnonId();
+  figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
+  if (webToken && typeof webToken === 'string' && anonId) {
+    try {
+      var br = await fetch('https://www.figdex.com/api/claim/by-anon-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + webToken },
+        body: JSON.stringify({ anonId: anonId })
+      });
+      var bd = br.ok ? await br.json() : {};
+      if (bd.claimed > 0) {
+        try { console.log('[FigDex] bootstrap claim_by_anon_id claimed=' + bd.claimed); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  // Restore last selected pages for this document so page selection survives reload
+  try {
+    var savedSelectedPages = await getStored(STORAGE_KEYS.SELECTED_PAGES, null);
+    if (Array.isArray(savedSelectedPages) && savedSelectedPages.length > 0) {
+      figma.ui.postMessage({ type: 'set-selected-pages', pages: savedSelectedPages });
+    }
+  } catch (e) { /* ignore */ }
+  // Resend after delay so UI gets identity if it missed the first message (race on load)
+  setTimeout(function () { sendStoredIdentityToUI(webToken, webUser); }, 400);
+  setTimeout(function () { sendStoredIdentityToUI(webToken, webUser); }, 1200);
+  setTimeout(function () {
+    getOrCreateAnonId().then(function (id) { figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: id }); });
+  }, 500);
+})();
+
+async function getOrCreateAnonId() {
+  var id = await getStored(STORAGE_KEYS.ANON_ID, null);
+  if (!id || typeof id !== 'string') {
+    id = cryptoRandomString() + cryptoRandomString();
+    await setStored(STORAGE_KEYS.ANON_ID, id);
+  }
+  return id;
+}
+
+// --- Single message handler ---
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'UI_STATE_CHANGED') {
+    figma.ui.postMessage({ type: 'UI_RENDER', payload: { state: msg.state, model: msg.model || {} } });
+    return;
+  }
+  if (msg.type === 'set-file-key') {
+    globalFileKey = msg.fileKey || '';
+    await setStored(STORAGE_KEYS.FILE_KEY, globalFileKey);
+    if (msg.fileName != null) await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName);
+    return;
+  }
+  if (msg.type === 'get-file-key') {
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: globalFileKey || '' });
+    return;
+  }
+  if (msg.type === 'get_anon_id') {
+    var anonId = await getOrCreateAnonId();
+    figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
+    return;
+  }
+  if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
+    await figma.loadAllPagesAsync();
+    const allPages = figma.root.children
+      .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        hasFrames: p.children && p.children.some(n => n.type === 'FRAME' || (n.type === 'SECTION' && n.children && n.children.some(c => c.type === 'FRAME'))),
+        isIndexPage: p.name === 'Frame-Index',
+        isCoverPage: (p.name || '').trim().toLowerCase() === 'cover'
+      }));
+    // Use stored indexed pages metadata (per document) to mark pages that were already indexed
+    let indexedMeta = [];
+    try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
+    const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
+    const pages = [];
+    for (var pi = 0; pi < allPages.length; pi++) {
+      var p = allPages[pi];
+      var status = 'not_indexed';
+      var icon = '➕';
+      if (!p.hasFrames) {
+        status = 'folder';
+        icon = '📁';
+      } else if (p.isIndexPage) {
+        status = 'index_page';
+        icon = '📄';
+      } else if (metaByPage[p.id]) {
+        var stored = metaByPage[p.id];
+        try {
+          var pageNode = await figma.getNodeByIdAsync(p.id);
+          if (pageNode && pageNode.type === 'PAGE') {
+            var currentSigs = await getFrameSignaturesForPage(pageNode);
+            var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
+            if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) {
+              status = 'up_to_date';
+              icon = '✅';
+            } else {
+              status = 'needs_update';
+              icon = '🔄';
+            }
+          } else {
+            status = 'up_to_date';
+            icon = '✅';
+          }
+        } catch (e) {
+          status = 'up_to_date';
+          icon = '✅';
+        }
+      }
+      pages.push({
+        id: p.id,
+        name: p.name,
+        hasFrames: p.hasFrames,
+        displayName: p.name,
+        isFolder: !p.hasFrames,
+        isIndexPage: p.isIndexPage,
+        isCoverPage: p.isCoverPage,
+        status: status,
+        icon: icon
+      });
+    }
+    var savedSelectedIds = [];
+    try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, []); } catch (e) { savedSelectedIds = []; }
+    if (!Array.isArray(savedSelectedIds)) savedSelectedIds = [];
+    figma.ui.postMessage({ type: 'pages', pages: pages, selectedPageIds: savedSelectedIds });
+    return;
+  }
+  if (msg.type === 'save-web-system-token') {
+    await setStored(STORAGE_KEYS.WEB_TOKEN, msg.token);
+    if (msg.token && !(await getStored(STORAGE_KEYS.WEB_USER, null))) {
+      await setStored(STORAGE_KEYS.WEB_USER, { id: 'connected', email: 'Account connected' });
+    }
+    sendStoredIdentityToUI(msg.token, await getStored(STORAGE_KEYS.WEB_USER, null));
+    return;
+  }
+  if (msg.type === 'save-web-system-user') {
+    await setStored(STORAGE_KEYS.WEB_USER, msg.user);
+    return;
+  }
+  if (msg.type === 'save-selected-pages') {
+    await setStored(STORAGE_KEYS.SELECTED_PAGES, msg.pages || []);
+    return;
+  }
+  if (msg.type === 'clear-storage') {
+    var keysToClear = Object.values(STORAGE_KEYS);
+    for (const k of keysToClear) {
+      try { await figma.clientStorage.deleteAsync(storageKey(k)); } catch (e) { console.warn('clear-storage:', k, e); }
+    }
+    // Also delete legacy per-document webToken/webUser (migration would otherwise restore them on restart)
+    var docId = figma.root.id || rootId || '0:0';
+    var prefix = 'figdex_' + docId + '_';
+    try {
+      await figma.clientStorage.deleteAsync(prefix + 'webToken');
+      await figma.clientStorage.deleteAsync(prefix + 'webUser');
+    } catch (e) { console.warn('clear-storage legacy:', e); }
+    globalFileKey = '';
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: '' });
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+    return;
+  }
+  if (msg.type === 'clear-indexed-pages') {
+    try { await figma.clientStorage.deleteAsync(storageKey(STORAGE_KEYS.INDEXED_PAGES)); } catch (e) { console.warn('clear-indexed-pages:', e); }
+    figma.notify('Local index cleared — pages will show as not indexed');
+    figma.ui.postMessage({ type: 'refresh-pages' });
+    return;
+  }
+  if (msg.type === 'UI_OPEN_FIGDEX_WEB_UPGRADE') {
+    const connectNonce = cryptoRandomString();
+    const docId = figma.root.id || rootId || '0:0';
+    const anonId = await getOrCreateAnonId();
+    await setStored(STORAGE_KEYS.CONNECT_NONCE_DATA, { nonce: connectNonce, createdAt: Date.now() });
+    let connectUrl = 'https://www.figdex.com/plugin-connect?nonce=' + encodeURIComponent(connectNonce) + '&docId=' + encodeURIComponent(docId) + '&mode=upgrade&anonId=' + encodeURIComponent(anonId);
+    figma.ui.postMessage({ type: 'OPEN_FIGDEX_WEB', url: connectUrl });
+    try { console.log('[FigDex] poll_start upgrade'); } catch (e) {}
+    const POLL_INTERVAL_MS = 2000;
+    const POLL_MAX_MS = 120000;
+    const pollStart = Date.now();
+    const doPoll = async () => {
+      if (Date.now() - pollStart >= POLL_MAX_MS) {
+        try { console.log('[FigDex] poll_timeout'); } catch (e) {}
+        figma.ui.postMessage({ type: 'CONNECT_TIMEOUT' });
+        return;
+      }
+      try {
+        const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
+        const data = res.ok ? await res.json() : {};
+        if (data.ready === true && data.token && data.userId) {
+          try { console.log('[FigDex] poll_success'); } catch (e) {}
+          await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
+          await setStored(STORAGE_KEYS.WEB_USER, typeof data.userId === 'object' ? data.userId : { id: data.userId });
+          try {
+            var claimRes = await fetch('https://www.figdex.com/api/claim/by-anon-id', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
+              body: JSON.stringify({ anonId: anonId })
+            });
+            var claimData = claimRes.ok ? await claimRes.json() : {};
+            if (claimData.claimed > 0) {
+              try { console.log('[FigDex] claim_by_anon_id claimed=' + claimData.claimed); } catch (_) {}
+            }
+          } catch (_) {}
+          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: typeof data.userId === 'object' ? data.userId : { id: data.userId } });
+          return;
+        }
+        try { console.log('[FigDex] poll_tick'); } catch (e) {}
+      } catch (e) { try { console.log('[FigDex] poll_tick'); } catch (e2) {} }
+      setTimeout(doPoll, POLL_INTERVAL_MS);
+    };
+    setTimeout(doPoll, POLL_INTERVAL_MS);
+    return;
+  }
+  if (msg.type === 'UI_OPEN_FIGDEX_WEB') {
+    const connectNonce = cryptoRandomString();
+    const docId = figma.root.id || rootId || '0:0';
+    await setStored(STORAGE_KEYS.CONNECT_NONCE_DATA, { nonce: connectNonce, createdAt: Date.now() });
+    let connectUrl = 'https://www.figdex.com/plugin-connect?nonce=' + encodeURIComponent(connectNonce) + '&docId=' + encodeURIComponent(docId);
+    const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+    if (token && typeof token === 'string') {
+      try {
+        const res = await fetch('https://www.figdex.com/api/plugin-connect/login-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+        });
+        const data = res.ok ? await res.json() : {};
+        if (data && data.loginToken) {
+          connectUrl += '&loginToken=' + encodeURIComponent(data.loginToken);
+        }
+      } catch (e) { /* ignore; open without loginToken */ }
+    }
+    figma.ui.postMessage({ type: 'OPEN_FIGDEX_WEB', url: connectUrl });
+    try { console.log('[FigDex] poll_start'); } catch (e) {}
+    const POLL_INTERVAL_MS = 2000;
+    const POLL_MAX_MS = 120000;
+    const pollStart = Date.now();
+    const doPoll = async () => {
+      if (Date.now() - pollStart >= POLL_MAX_MS) {
+        try { console.log('[FigDex] poll_timeout'); } catch (e) {}
+        figma.ui.postMessage({ type: 'CONNECT_TIMEOUT' });
+        return;
+      }
+      try {
+        const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
+        const data = res.ok ? await res.json() : {};
+        if (data.ready === true && data.token && data.userId) {
+          try { console.log('[FigDex] poll_success'); } catch (e) {}
+          await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
+          await setStored(STORAGE_KEYS.WEB_USER, typeof data.userId === 'object' ? data.userId : { id: data.userId });
+          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: typeof data.userId === 'object' ? data.userId : { id: data.userId } });
+          return;
+        }
+        try { console.log('[FigDex] poll_tick'); } catch (e) {}
+      } catch (e) { try { console.log('[FigDex] poll_tick'); } catch (e2) {} }
+      setTimeout(doPoll, POLL_INTERVAL_MS);
+    };
+    setTimeout(doPoll, POLL_INTERVAL_MS);
+    return;
+  }
+  if (msg.type === 'get-file-thumbnail') {
+    try {
+      var dataUrl = await getCoverImageDataUrl();
+      if (dataUrl) {
+        figma.ui.postMessage({ type: 'file-thumbnail', thumbnailDataUrl: dataUrl });
+      } else {
+        figma.ui.postMessage({ type: 'file-thumbnail-error', error: 'No pages or frames found' });
+      }
+    } catch (error) {
+      console.error('[code.js] get-file-thumbnail error:', error);
+      figma.ui.postMessage({ type: 'file-thumbnail-error', error: error.message });
+    }
+    return;
+  }
+  if (msg.type === 'start-advanced') {
+    try {
+      figma.notify('Preparing gallery...');
+      var selectedIds = msg.selectedPages || [];
+      await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
+      const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+      const fileKey = globalFileKey || (typeof figma.fileKey === 'string' && figma.fileKey.trim() ? figma.fileKey.trim() : '') || '';
+      const docId = figma.root.id || rootId || '0:0';
+      const fileName = await getStored(STORAGE_KEYS.FILE_NAME, null) || figma.root.name || 'Untitled';
+      if (!fileKey) {
+        figma.notify('Link this file first', { error: true });
+        figma.ui.postMessage({ type: 'error', message: 'Link this file first: paste the Figma file link in Step 1 and click Save.' });
+        return;
+      }
+      var isGuestMode = !token || token.length < 10;
+      if (!isGuestMode) {
+        try {
+          var validateRes = await fetch('https://www.figdex.com/api/validate-api-key', {
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (validateRes.status === 401 || validateRes.status === 403) {
+            await setStored(STORAGE_KEYS.WEB_TOKEN, null);
+            await setStored(STORAGE_KEYS.WEB_USER, null);
+            figma.notify('Session expired. Please reconnect.', { error: true });
+            figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
+            return;
+          }
+        } catch (e) { isGuestMode = true; }
+      }
+      await figma.loadAllPagesAsync();
+      const allPages = figma.root.children
+        .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
+        .map(p => ({ id: p.id, name: p.name || 'Untitled' }));
+      const idToName = Object.fromEntries(allPages.map(p => [p.id, p.name]));
+      if (selectedIds.length === 0) {
+        selectedIds = allPages.map(p => p.id);
+        figma.notify('No pages selected — using all pages');
+      }
+      const selectedPages = selectedIds.map(id => ({ id, name: idToName[id] || 'Page' }));
+
+      var guestAnonId = isGuestMode ? await getOrCreateAnonId() : null;
+      if (isGuestMode && !guestAnonId) {
+        figma.notify('Guest mode requires anonymous ID. Please try again.', { error: true });
+        figma.ui.postMessage({ type: 'error', message: 'Guest mode failed. Please try again or connect your account.' });
+        return;
+      }
+
+      // Pre-flight: check guest limits before preparing/exporting any frames
+      if (isGuestMode && guestAnonId) {
+        var estimatedFrameCount = 0;
+        for (var ei = 0; ei < selectedIds.length; ei++) {
+          var pageNode = await figma.getNodeByIdAsync(selectedIds[ei]);
+          if (pageNode && pageNode.type === 'PAGE') estimatedFrameCount += getTopLevelFrameIds(pageNode).length;
+        }
+        try {
+          var checkRes = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: 'figma-plugin',
+              galleryOnly: true,
+              action: 'check_limit',
+              anonId: guestAnonId,
+              fileKey: fileKey,
+              docId: docId,
+              fileName: fileName,
+              estimatedFrameCount: estimatedFrameCount
+            })
+          });
+          if (!checkRes.ok) {
+            var errText = '';
+            try { errText = await checkRes.text(); } catch (_) {}
+            var errJson = null;
+            try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+            var errMsg = (errJson && errJson.error) ? String(errJson.error) : 'Index failed';
+            figma.notify(errMsg, { error: true });
+            figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
+            return;
+          }
+        } catch (checkErr) {
+          figma.notify('Could not verify limits. Please try again.', { error: true });
+          figma.ui.postMessage({ type: 'error', message: 'Could not verify limits. Please try again.' });
+          return;
+        }
+      }
+
+      figma.ui.postMessage({ type: 'upload-started' });
+      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
+
+      // Load last indexed metadata to skip unchanged pages
+      var indexedMeta = [];
+      try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
+      if (!Array.isArray(indexedMeta)) indexedMeta = [];
+
+      // Determine which selected pages have changes (dirty) — skip unchanged
+      var dirtyPageIds = [];
+      for (var di = 0; di < selectedIds.length; di++) {
+        var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
+        if (!pageNode || pageNode.type !== 'PAGE') continue;
+        var currentSigs = await getFrameSignaturesForPage(pageNode);
+        var stored = indexedMeta.find(function (m) { return m.pageId === pageNode.id; });
+        var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
+        if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
+        dirtyPageIds.push(pageNode.id);
+      }
+      figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
+
+      // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
+      const SCALE = 0.75;
+      const FRAMES_PER_CHUNK = 10;
+      var allPageFrames = [];
+      var newSignaturesByPage = {};
+      try {
+        for (var pi = 0; pi < dirtyPageIds.length; pi++) {
+          var page = await figma.getNodeByIdAsync(dirtyPageIds[pi]);
+          if (!page || page.type !== 'PAGE') continue;
+          var frameIds = getTopLevelFrameIds(page);
+          for (var fi = 0; fi < frameIds.length; fi++) {
+            try {
+              var frame = await figma.getNodeByIdAsync(frameIds[fi]);
+              if (!frame || frame.type !== 'FRAME') continue;
+              if (typeof frame.loadAsync === 'function') await frame.loadAsync();
+              var w = Math.round(frame.width);
+              var h = Math.round(frame.height);
+              if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
+              newSignaturesByPage[page.id].push({ id: frame.id, name: (frame.name || '').trim(), width: w, height: h });
+              var sizeTag = w + 'x' + h;
+              var visibleTexts = collectVisibleTextsFromFrame(frame);
+              var ancestorNames = collectAncestorNames(frame);
+              var allTexts = [frame.name || ''].concat(ancestorNames, visibleTexts);
+              var textContent = allTexts.join(' ');
+              var searchTokens = buildSearchTokens(allTexts);
+              var sectionName = getSectionNameForFrame(frame);
+              var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
+              var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: SCALE } });
+              var b64 = figma.base64Encode(bytes);
+              var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
+              var frameItem = {
+                id: frame.id,
+                name: displayName,
+                x: Math.round(frame.x),
+                y: Math.round(frame.y),
+                width: w,
+                height: h,
+                index: allPageFrames.length,
+                tags: [sizeTag],
+                url: frameUrl,
+                textContent: textContent,
+                searchTokens: searchTokens,
+                image: 'data:image/jpeg;base64,' + b64
+              };
+              allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: frameItem });
+              var totalEst = frameIds.length;
+              figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + allPageFrames.length + ' frame(s)...', framesDone: allPageFrames.length });
+              if (allPageFrames.length % 5 === 0) await new Promise(function (r) { setTimeout(r, 0); });
+            } catch (err) { /* skip frame on export error */ }
+          }
+        }
+        if (allPageFrames.length === 0) {
+          if (dirtyPageIds.length === 0) {
+            figma.notify('No changes — nothing to re-index');
+            figma.ui.postMessage({ type: 'pages-indexed', pageIds: selectedIds });
+            figma.ui.postMessage({ type: 'done' });
+            return;
+          }
+          figma.notify('No top-level frames (direct Page frames or direct Section frames)', { error: true });
+          figma.ui.postMessage({ type: 'error', message: 'No top-level frames found' });
+          return;
+        }
+      } catch (payloadErr) {
+        console.warn('[code.js] indexPayload collect error:', payloadErr);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to collect frames' });
+        return;
+      }
+
+      var mergePages = dirtyPageIds.length < selectedIds.length;
+
+      // Same cover as plugin UI (only for first chunk). Fallback: first frame image if no Cover page/frame.
+      var coverImageDataUrl = null;
+      try {
+        coverImageDataUrl = await getCoverImageDataUrl();
+      } catch (e) {
+        console.warn('[code.js] cover image error:', e);
+      }
+      if (!coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
+        coverImageDataUrl = allPageFrames[0].frameItem.image;
+      }
+
+      var baseFileName = (fileName || '').trim() || 'Untitled';
+      // When merging by page, chunk by full pages so server can replace whole pages
+      var chunkSpecs = [];
+      if (mergePages) {
+        var pageToFrames = {};
+        for (var ci = 0; ci < allPageFrames.length; ci++) {
+          var pf = allPageFrames[ci];
+          if (!pageToFrames[pf.pageId]) pageToFrames[pf.pageId] = { pageId: pf.pageId, pageName: pf.pageName, items: [] };
+          pageToFrames[pf.pageId].items.push(pf.frameItem);
+        }
+        var acc = [];
+        var accFrames = 0;
+        for (var dpi = 0; dpi < dirtyPageIds.length; dpi++) {
+          var pid = dirtyPageIds[dpi];
+          var info = pageToFrames[pid];
+          if (!info || info.items.length === 0) continue;
+          var items = info.items;
+          for (var fi = 0; fi < items.length; fi += FRAMES_PER_CHUNK) {
+            var slice = items.slice(fi, fi + FRAMES_PER_CHUNK);
+            if (accFrames + slice.length > FRAMES_PER_CHUNK && acc.length > 0) {
+              chunkSpecs.push(acc.slice());
+              acc = [];
+              accFrames = 0;
+            }
+            acc.push({ id: pid, name: info.pageName, frames: slice });
+            accFrames += slice.length;
+          }
+        }
+        if (acc.length > 0) chunkSpecs.push(acc);
+      } else {
+        var start = 0;
+        while (start < allPageFrames.length) {
+          var end = Math.min(start + FRAMES_PER_CHUNK, allPageFrames.length);
+          var slice = allPageFrames.slice(start, end);
+          var pageMap = {};
+          for (var si = 0; si < slice.length; si++) {
+            var s = slice[si];
+            if (!pageMap[s.pageId]) pageMap[s.pageId] = { id: s.pageId, name: s.pageName, frames: [] };
+            pageMap[s.pageId].frames.push(s.frameItem);
+          }
+          var chunkPagesList = [];
+          for (var k in pageMap) chunkPagesList.push(pageMap[k]);
+          chunkSpecs.push(chunkPagesList);
+          start = end;
+        }
+      }
+
+      var totalChunks = chunkSpecs.length;
+      var totalUploaded = 0;
+      var lastViewToken = null;
+      figma.ui.postMessage({ type: 'upload-progress', step: 'Uploading to FigDex...', framesDone: totalUploaded });
+      for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        var chunkPages = mergePages ? chunkSpecs[chunkIndex] : chunkSpecs[chunkIndex];
+        var chunkPayload = { pages: chunkPages };
+        var replacePageIds = mergePages ? chunkPages.map(function (p) { return p.pageId || p.id; }) : undefined;
+        var chunkFileName = totalChunks > 1 ? baseFileName + ' (Part ' + (chunkIndex + 1) + '/' + totalChunks + ')' : baseFileName;
+        var body = {
+          fileKey: fileKey,
+          docId: docId,
+          fileName: chunkFileName,
+          chunkIndex: chunkIndex,
+          totalChunks: totalChunks,
+          selectedPages: selectedPages,
+          source: 'figma-plugin',
+          version: PLUGIN_VERSION,
+          galleryOnly: true,
+          imageQuality: 0.75,
+          indexPayload: chunkPayload,
+          coverImageDataUrl: chunkIndex === 0 ? coverImageDataUrl || undefined : undefined
+        };
+        if (mergePages && replacePageIds && replacePageIds.length > 0) {
+          body.mergePages = true;
+          body.replacePageIds = replacePageIds;
+        }
+        if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
+        var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
+        totalUploaded += chunkFrameCount;
+        figma.notify(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks + '...' : 'Uploading to FigDex...');
+        figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', framesDone: totalUploaded });
+        var headers = { 'Content-Type': 'application/json' };
+        if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
+        var res = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          totalChunks = -1;
+          break;
+        }
+        try {
+          var data = await res.json();
+          if (data && data.viewToken) lastViewToken = data.viewToken;
+        } catch (_) {}
+      }
+      if (totalChunks <= 0 || !res.ok) {
+        var errText = '';
+        try { errText = await res.text(); } catch (_) {}
+        var errJson = null;
+        try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+        var errMsg = (errJson && errJson.error) ? String(errJson.error) : 'Index failed';
+        if (errMsg !== 'Index failed' && errJson && errJson.details) errMsg += ' — ' + String(errJson.details);
+        if (errMsg === 'Index failed') errMsg = 'Index failed (' + (res.status || '') + ')';
+        var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
+        if ((res.status === 401 || res.status === 403) && !isGuestLimit) {
+          await setStored(STORAGE_KEYS.WEB_TOKEN, null);
+          await setStored(STORAGE_KEYS.WEB_USER, null);
+          figma.notify('Session expired. Please reconnect.', { error: true });
+          figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
+          return;
+        }
+        figma.notify(errMsg, { error: true });
+        figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
+        return;
+      }
+      // Persist metadata: keep skipped pages, update dirty pages with new frameSignatures (full sigs with contentHint, textHint)
+      try {
+        var nextMeta = indexedMeta.filter(function (m) {
+          return m.pageId && dirtyPageIds.indexOf(m.pageId) < 0;
+        });
+        for (var ni = 0; ni < dirtyPageIds.length; ni++) {
+          var dpid = dirtyPageIds[ni];
+          var pageNodeForMeta = await figma.getNodeByIdAsync(dpid);
+          var sigsToStore = (pageNodeForMeta && pageNodeForMeta.type === 'PAGE') ? await getFrameSignaturesForPage(pageNodeForMeta) : (newSignaturesByPage[dpid] || []);
+          nextMeta.push({
+            pageId: dpid,
+            pageName: idToName[dpid] || 'Page',
+            lastIndexedAt: Date.now(),
+            frameSignatures: sigsToStore
+          });
+        }
+        await setStored(STORAGE_KEYS.INDEXED_PAGES, nextMeta);
+      } catch (e) { /* non-fatal */ }
+      // Also notify UI so icons can update immediately without manual refresh
+      try {
+        figma.ui.postMessage({ type: 'pages-indexed', pageIds: selectedIds });
+      } catch (e) {}
+
+      var resultUrl = 'https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(fileKey) + '&_t=' + Date.now();
+      if (lastViewToken) resultUrl += '&viewToken=' + encodeURIComponent(lastViewToken);
+      if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
+      else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
+      figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
+    } catch (e) {
+      console.error('[code.js] start-advanced error:', e);
+      figma.notify('Error: ' + (e.message || 'Unknown error'), { error: true });
+      figma.ui.postMessage({ type: 'error', message: e.message || 'Unknown error' });
+    }
+    return;
+  }
+  if (msg.type === 'UI_OPEN_RESULT_WEB') {
+    const url = msg.resultUrl || '';
+    if (url) figma.ui.postMessage({ type: 'OPEN_RESULT_URL', url });
+    return;
+  }
+};

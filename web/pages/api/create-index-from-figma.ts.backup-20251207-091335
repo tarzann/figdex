@@ -1,0 +1,467 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
+import { resolvePlanId } from '../../lib/plans';
+import {
+  fetchFigmaFile,
+  collectFrameNodes,
+  processFrameData,
+  groupFramesIntoPages,
+  validateFigmaToken,
+  extractFileKeyFromUrl,
+  type FrameData,
+  type FigmaNode,
+} from '../../lib/figma-api';
+
+// Increase body size limit
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
+
+const ALLOWED_FRAME_PARENTS = new Set(['PAGE', 'CANVAS', 'SECTION']);
+
+function normalizePageName(name?: string): string {
+  const trimmed = (name || '').trim();
+  return trimmed.length > 0 ? trimmed : 'Untitled Page';
+}
+
+function isReservedPageName(name: string): boolean {
+  const lower = name.trim().toLowerCase();
+  return lower === 'cover' || lower === 'figdex';
+}
+
+function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
+  let count = 0;
+  const stack: Array<{ node: FigmaNode; parentType: string }> = [{ node, parentType }];
+  while (stack.length > 0) {
+    const entry = stack.pop();
+    if (!entry) continue;
+    const { node: current, parentType: parent } = entry;
+    const isEligibleFrame =
+      current.type === 'FRAME' &&
+      ALLOWED_FRAME_PARENTS.has(parent) &&
+      (current.name || '').trim().toLowerCase() !== 'section' &&
+      current.visible !== false; // Exclude hidden frames
+
+    if (isEligibleFrame) {
+      count += 1;
+    }
+
+    // Only recurse into children of container nodes (PAGE, CANVAS, SECTION, FRAME, DOCUMENT)
+    // Skip children of other node types (IMAGE, TEXT, RECTANGLE, etc.) to avoid processing images
+    if (current.children) {
+      const shouldRecurse = current.type === 'PAGE' || 
+                           current.type === 'CANVAS' || 
+                           current.type === 'SECTION' || 
+                           current.type === 'FRAME' ||
+                           current.type === 'DOCUMENT' ||
+                           parent === 'DOCUMENT';
+      
+      if (shouldRecurse) {
+        for (const child of current.children) {
+          let nextParent = current.type || parent;
+          if (child.type === 'SECTION') {
+            nextParent = 'SECTION';
+          }
+          stack.push({ node: child, parentType: nextParent });
+        }
+      }
+    }
+  }
+  return count;
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed',
+      allowedMethods: ['POST'],
+    });
+  }
+
+  // Use service role for user lookup
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
+
+  if (!serviceUrl || !serviceKey) {
+    return res.status(500).json({
+      success: false,
+      error: 'Server configuration error',
+    });
+  }
+
+  const supabaseAdmin = createClient(serviceUrl, serviceKey);
+
+  let userIdForLog: string | null = null;
+  try {
+    // Get API key from Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'API key required',
+      });
+    }
+
+    const apiKey = authHeader.replace('Bearer ', '');
+
+    // Validate API key format
+    if (!apiKey.startsWith('figdex_') || apiKey.length < 20) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid API key format',
+      });
+    }
+
+    // Find user by API key
+    const { data: userRows, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, full_name, api_key, plan, is_admin, created_at')
+      .eq('api_key', apiKey)
+      .order('created_at', { ascending: true, nullsFirst: false })
+      .limit(1);
+
+    const user = Array.isArray(userRows) ? userRows[0] : null;
+
+    if (userError || !user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid API key',
+      });
+    }
+
+    // Check if user has Pro or Unlimited plan
+    const planId = resolvePlanId(user.plan, user.is_admin);
+    if (planId === 'free') {
+      return res.status(403).json({
+        success: false,
+        error: 'This feature is only available for Pro and Unlimited plans',
+        upgradeUrl: 'https://www.figdex.com/pricing',
+      });
+    }
+
+    console.log('✅ User authorized:', {
+      id: user.id,
+      email: user.email,
+      plan: planId,
+    });
+    userIdForLog = user.id;
+
+    // Get request body
+    const {
+      fileKey: fileKeyInput,
+      figmaToken,
+      fileName: fileNameInput,
+      validateOnly,
+      selectedPages,
+      selectedPageIds,
+      imageQuality = 0.7, // Default to medium (70%)
+    } = req.body;
+    const validateOnlyMode = Boolean(validateOnly);
+
+    if (!fileKeyInput || !figmaToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: fileKey and figmaToken',
+      });
+    }
+
+    // Extract file key from URL if needed
+    let fileKey = fileKeyInput;
+    if (fileKeyInput.includes('figma.com')) {
+      const extracted = extractFileKeyFromUrl(fileKeyInput);
+      if (!extracted) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid Figma URL. Could not extract file key.',
+        });
+      }
+      fileKey = extracted;
+    }
+
+    // Validate file key format
+    if (!/^[a-zA-Z0-9]{10,30}$/.test(fileKey)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file key format',
+      });
+    }
+
+    // Validate Figma token
+    console.log('🔐 Validating Figma token...');
+    const isValidToken = await validateFigmaToken(figmaToken);
+    if (!isValidToken) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid Figma Personal Access Token. Please check your token in Figma Settings.',
+      });
+    }
+
+    console.log('✅ Token validated');
+
+    // Fetch file structure from Figma
+    console.log('📥 Fetching file structure from Figma...');
+    const figmaFile = await fetchFigmaFile(fileKey, figmaToken);
+    console.log('✅ File fetched:', figmaFile.name);
+
+    // Get file name
+    const fileName = fileNameInput || figmaFile.name || 'Untitled';
+    const rawPageNodes = (figmaFile.document.children || [])
+      .filter((child) => child.type === 'PAGE' || child.type === 'CANVAS');
+
+    const pageMeta = rawPageNodes.map((child) => {
+      const normalizedName = normalizePageName(child.name);
+      const framesForPage = collectFrameNodes(child, normalizedName, [], child.id, 'PAGE');
+      const frameCount = Math.max(0, framesForPage.length);
+
+      return {
+        id: child.id,
+        name: normalizedName,
+        frameCount,
+        selectable: frameCount > 0 && !isReservedPageName(normalizedName),
+        depth: 0,
+      };
+    });
+
+    const availablePages = rawPageNodes.map((page) => normalizePageName(page.name));
+    const pageIdSet = new Set(pageMeta.map((page) => page.id));
+    const pageNameMap = new Map(pageMeta.map((page) => [page.id, page.name]));
+
+    if (validateOnlyMode) {
+      return res.status(200).json({
+        success: true,
+        message: 'Token validated successfully and file key looks valid.',
+        fileName,
+        fileKey,
+        documentId: figmaFile.document.id || '0:0',
+        pages: availablePages,
+        pageMeta,
+      });
+    }
+
+    const normalizedSelection = Array.isArray(selectedPages)
+      ? selectedPages
+          .filter((page) => typeof page === 'string')
+          .map((page) => page.trim())
+          .filter((page) => page.length > 0)
+      : [];
+    const validSelection = normalizedSelection.filter((page) => availablePages.includes(page));
+    const hasCustomSelection = validSelection.length > 0;
+    const includedPages = new Set<string>(hasCustomSelection ? validSelection : availablePages);
+
+    let normalizedIdSelection = Array.isArray(selectedPageIds)
+      ? selectedPageIds
+          .filter((id: any) => typeof id === 'string')
+          .map((id: string) => id.trim())
+          .filter((id: string) => id.length > 0 && pageIdSet.has(id))
+      : [];
+    const hasIdSelection = normalizedIdSelection.length > 0;
+    let includedPageIds = hasIdSelection ? new Set<string>(normalizedIdSelection) : null;
+
+    console.log('🔍 Collecting frames from selected pages...');
+    const getPageDisplayName = (page: FigmaNode) =>
+      pageNameMap.get(page.id) || normalizePageName(page.name);
+    const shouldIncludePage = (page: FigmaNode) => {
+      if (includedPageIds) {
+        return Boolean(page.id && includedPageIds.has(page.id));
+      }
+      const pageName = getPageDisplayName(page);
+      return includedPages.has(pageName);
+    };
+
+    let pageNodes = rawPageNodes.filter((page) => shouldIncludePage(page));
+
+    if (includedPageIds && pageNodes.length === 0 && includedPages.size > 0) {
+      console.warn('⚠️ Selected page IDs not found, falling back to name-based filtering.');
+      includedPageIds = null;
+      pageNodes = rawPageNodes.filter((page) => {
+        const pageName = getPageDisplayName(page);
+        return includedPages.has(pageName);
+      });
+    }
+
+    if ((includedPageIds || includedPages.size > 0) && pageNodes.length === 0) {
+      console.error('⚠️ Page filter result empty', {
+        selectedPageIds: Array.from(includedPageIds || []),
+        selectedPageNames: Array.from(includedPages),
+        availablePages,
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Selected pages were not found in the file. Please re-validate the connection.',
+        details: {
+          selectedPageIds: Array.from(includedPageIds || []),
+          selectedPageNames: Array.from(includedPages),
+          availablePages,
+        },
+      });
+    }
+
+    const frameNodesArray = pageNodes.length > 0
+      ? pageNodes.flatMap((page) =>
+          collectFrameNodes(page, getPageDisplayName(page), [], page.id, 'PAGE')
+        )
+      : collectFrameNodes(
+          figmaFile.document,
+          normalizePageName(figmaFile.document.name),
+          [],
+          undefined,
+          'DOCUMENT'
+        );
+
+    const filteredFrameInfos = frameNodesArray.filter((item) => {
+      if (includedPageIds && includedPageIds.size > 0) {
+        return Boolean(item.pageId && includedPageIds.has(item.pageId));
+      }
+      return includedPages.has(item.pageName);
+    });
+    if (filteredFrameInfos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No frames left after applying the selected pages filter.',
+      });
+    }
+
+    // Don't process frames here - just save node references for later processing
+    // This prevents timeout in create-index-from-figma for large indices
+    const totalFramesCount = filteredFrameInfos.length;
+    if (totalFramesCount > 200) {
+      console.warn(`⚠️ Very large index detected: ${totalFramesCount} frames. Processing will be done in background.`);
+    }
+
+    console.log(`📋 Collected ${totalFramesCount} frame nodes. Processing will be done in background.`);
+    
+    // Save only node references (IDs and basic info) - not full processed data
+    // This allows create-index-from-figma to return quickly
+    const frameNodeRefs = filteredFrameInfos.map((item, index) => ({
+      id: item.node.id,
+      name: item.node.name || 'Untitled',
+      pageName: item.pageName,
+      pageId: item.pageId,
+      sectionName: item.sectionName,
+      sectionId: item.sectionId,
+      index,
+      // Store minimal node data needed for processing later
+      nodeData: {
+        id: item.node.id,
+        name: item.node.name,
+        type: item.node.type,
+        absoluteBoundingBox: item.node.absoluteBoundingBox,
+        visible: item.node.visible,
+      },
+    }));
+
+    const documentId = figmaFile.document.id || '0:0';
+    
+    // Create empty manifest structure - will be filled during processing
+    const emptyManifest: any[] = [];
+    
+    const jobPayload: any = {
+      user_id: user.id,
+      file_key: fileKey,
+      file_name: fileName,
+      project_id: documentId,
+      manifest: emptyManifest, // Empty initially, will be built during processing
+      frame_node_refs: frameNodeRefs, // Store node references for processing
+      document_data: {
+        id: figmaFile.document.id,
+        name: figmaFile.document.name,
+      }, // Store document structure for processing
+      page_meta: pageMeta,
+      selected_pages: Array.from(includedPages),
+      selected_page_ids: includedPageIds ? Array.from(includedPageIds) : null,
+      status: 'pending',
+      next_frame_index: 0,
+      total_frames: totalFramesCount,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Add image_quality if provided (optional field)
+    if (imageQuality !== undefined) {
+      jobPayload.image_quality = imageQuality;
+    }
+
+    // Try to insert job, with fallback if image_quality column doesn't exist
+    let jobRow: any = null;
+    let jobError: any = null;
+    
+    try {
+      const result = await supabaseAdmin
+        .from('index_jobs')
+        .insert(jobPayload)
+        .select('id')
+        .single();
+      jobRow = result.data;
+      jobError = result.error;
+    } catch (err: any) {
+      jobError = err;
+    }
+
+    // If insert failed due to missing image_quality column, try without it
+    if (jobError && (jobError.message?.includes('image_quality') || jobError.code === '42703' || jobError.code === 'PGRST204')) {
+      console.warn('⚠️ image_quality column not available, retrying without it...');
+      const { image_quality, ...jobPayloadWithoutQuality } = jobPayload as any;
+      try {
+        const result = await supabaseAdmin
+          .from('index_jobs')
+          .insert(jobPayloadWithoutQuality)
+          .select('id')
+          .single();
+        jobRow = result.data;
+        jobError = result.error;
+      } catch (err: any) {
+        jobError = err;
+      }
+    }
+
+    if (jobError) {
+      console.error('❌ Failed to enqueue job:', jobError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to schedule background indexing job',
+        details: jobError.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Job scheduled',
+      jobId: jobRow?.id,
+      stats: {
+        totalFrames: totalFramesCount,
+        totalPages: pageMeta.length,
+        estimatedFileSize: 0, // Will be calculated during processing
+      },
+    });
+
+    } catch (error: any) {
+      console.error('❌ Error creating index from Figma API:', {
+        message: error?.message,
+        stack: error?.stack,
+        requestBody: req.body,
+        userId: userIdForLog,
+      });
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      });
+    }
+}
+
