@@ -15,6 +15,8 @@ The entire project is located in the `FigDex` folder:
 - **`FigDex/plugin/`** – Figma Plugin
 - **`FigDex/web/`** – Web Application (Next.js)
 
+**Git Repository:** https://github.com/tarzann/figdex
+
 ---
 
 ## 📋 System Overview
