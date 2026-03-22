@@ -67,15 +67,6 @@ async function uploadCoverFromDataUrl(
   }
 }
 
-/** Get cover data URL for a page. Use plugin's coverImageDataUrl when single-page (plugin finds & displays correct cover, upload must use same).
- *  Fallback: first frame of page. */
-function getCoverForPage(page: any, coverImageDataUrl: string | null, isSinglePage: boolean): string | null {
-  if (isSinglePage && coverImageDataUrl) return coverImageDataUrl;
-  const firstFrame = Array.isArray(page?.frames) && page.frames[0] ? page.frames[0] : null;
-  const frameImage = firstFrame && typeof firstFrame.image === 'string' && firstFrame.image.startsWith('data:image/') ? firstFrame.image : null;
-  return frameImage || null;
-}
-
 function getStoredCoverImageUrl(indexData: any): string | null {
   if (!indexData || typeof indexData !== 'object' || Array.isArray(indexData)) return null;
   return typeof indexData.coverImageUrl === 'string' && indexData.coverImageUrl.trim()
@@ -263,7 +254,6 @@ export default async function handler(
       }
 
       const coverImageDataUrl = typeof bodyEarly.coverImageDataUrl === 'string' ? bodyEarly.coverImageDataUrl : null;
-      const isSinglePage = pagesArray.length === 1;
       console.log(`[${requestId}] guest: distinctFiles=${guestDistinctFileCount}, hasExistingForFile=${hasExistingForFile}, wouldExceedFileLimit=${wouldExceedFileLimit}, framesInPayload=${framesInPayload}`);
 
       if (wouldExceedFileLimit) {
@@ -289,22 +279,19 @@ export default async function handler(
       const dd = String(now.getUTCDate()).padStart(2, '0');
       const safeAnon = guestAnonId.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 64);
       const safeFileKey = fileKeyTrim.replace(/[^a-zA-Z0-9-_.]/g, '_');
+      if (!existingFileCoverUrl && coverImageDataUrl) {
+        const fileCoverObjectPath = `guest/${safeAnon}/${yyyy}/${mm}/${dd}/${safeFileKey}_cover.png`;
+        const uploadedFileCover = await uploadCoverFromDataUrl(supabaseAdmin, coverImageDataUrl, fileCoverObjectPath);
+        if (uploadedFileCover) existingFileCoverUrl = uploadedFileCover;
+      }
 
       for (const page of pagesArray) {
         const pageId = (page as any).id || (page as any).pageId;
         const pageName = normalizePageName((page as any).name || (page as any).pageName);
         const singlePageData = [{ ...page, id: pageId, name: pageName, pageId }];
-
-        const pageCoverDataUrl = getCoverForPage(page, coverImageDataUrl, isSinglePage);
-        const safePageId = (pageId || '').replace(/[^a-zA-Z0-9-_.]/g, '_').slice(0, 32);
-        const coverObjectPath = `guest/${safeAnon}/${yyyy}/${mm}/${dd}/${safeFileKey}_${safePageId}_cover.png`;
-        const coverStoragePath = pageCoverDataUrl
-          ? await uploadCoverFromDataUrl(supabaseAdmin, pageCoverDataUrl, coverObjectPath)
-          : null;
-
-        const indexDataForPage: unknown = coverStoragePath
-          ? { coverImageUrl: coverStoragePath, pages: singlePageData }
-          : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: singlePageData } : { pages: singlePageData });
+        const indexDataForPage: unknown = existingFileCoverUrl
+          ? { coverImageUrl: existingFileCoverUrl, pages: singlePageData }
+          : { pages: singlePageData };
 
         const existingForPage = pageId ? existingByPageId.get(pageId) : null;
         const pageFileName = fileName || 'Untitled';
@@ -323,9 +310,9 @@ export default async function handler(
           }
           const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
           const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
-          const mergedData = coverStoragePath
-            ? { coverImageUrl: coverStoragePath, pages: [mergedPage] }
-            : (keepCover ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+          const mergedData = keepCover
+            ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
+            : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
           const { error: updateErr } = await supabaseAdmin.from('index_files').update({
             file_name: pageFileName,
             project_id: String(docId),
@@ -351,7 +338,6 @@ export default async function handler(
             console.error(`[${requestId}] guest insert page error:`, insertErr);
             return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
           }
-          if (!existingFileCoverUrl && coverStoragePath) existingFileCoverUrl = coverStoragePath;
         }
       }
       return res.status(200).json({ success: true, viewToken: null });
@@ -551,26 +537,23 @@ export default async function handler(
           await incrementDailyIndexCount(supabaseAdmin, user.id);
 
           const coverImageDataUrl = typeof coverImageDataUrlBody === 'string' ? coverImageDataUrlBody : null;
-          const isSinglePage = pagesArray.length === 1;
           const now = new Date();
           const yyyy = String(now.getUTCFullYear());
           const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(now.getUTCDate()).padStart(2, '0');
+          if (!authExistingFileCoverUrl && coverImageDataUrl) {
+            const fileCoverObjectPath = `user/${user.id}/${yyyy}/${mm}/${dd}/${fileKeyTrim}_cover.png`;
+            const uploadedFileCover = await uploadCoverFromDataUrl(supabaseAdmin, coverImageDataUrl, fileCoverObjectPath);
+            if (uploadedFileCover) authExistingFileCoverUrl = uploadedFileCover;
+          }
 
           for (const page of pagesArray) {
             const pageId = (page as any).id || (page as any).pageId;
             const pageName = normalizePageName((page as any).name || (page as any).pageName);
             const singlePageData = [{ ...page, id: pageId, name: pageName, pageId }];
-
-            const pageCoverDataUrl = getCoverForPage(page, coverImageDataUrl, isSinglePage);
-            const safePageId = (pageId || '').replace(/[^a-zA-Z0-9-_.]/g, '_').slice(0, 32);
-            const coverObjectPath = `user/${user.id}/${yyyy}/${mm}/${fileKeyTrim}_${safePageId}_cover.png`;
-            const coverStoragePath = pageCoverDataUrl
-              ? await uploadCoverFromDataUrl(supabaseAdmin, pageCoverDataUrl, coverObjectPath)
-              : null;
-
-            const indexDataForPage: unknown = coverStoragePath
-              ? { coverImageUrl: coverStoragePath, pages: singlePageData }
-              : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: singlePageData } : { pages: singlePageData });
+            const indexDataForPage: unknown = authExistingFileCoverUrl
+              ? { coverImageUrl: authExistingFileCoverUrl, pages: singlePageData }
+              : { pages: singlePageData };
 
             const existingForPage = pageId ? authExistingByPageId.get(pageId) : null;
             const pageFileName = fileName || 'Untitled';
@@ -588,9 +571,9 @@ export default async function handler(
               }
               const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
               const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
-              const mergedData = coverStoragePath
-                ? { coverImageUrl: coverStoragePath, pages: [mergedPage] }
-                : (keepCover ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+              const mergedData = keepCover
+                ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
+                : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
               const { error: updateErr } = await supabaseAdmin.from('index_files').update({
                 file_name: pageFileName,
                 project_id: String(docId),
@@ -615,7 +598,6 @@ export default async function handler(
                 console.error(`[${requestId}] auth insert page error:`, insertErr);
                 return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
               }
-              if (!authExistingFileCoverUrl && coverStoragePath) authExistingFileCoverUrl = coverStoragePath;
             }
           }
           return res.status(200).json({ success: true, viewToken: null });
