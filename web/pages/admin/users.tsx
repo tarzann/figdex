@@ -42,6 +42,7 @@ interface User {
   plan?: string;
   is_active: boolean;
   is_admin: boolean;
+  is_guest?: boolean;
   created_at: string;
   credits_remaining?: number;
   credits_reset_date?: string | null;
@@ -71,6 +72,7 @@ export default function AdminUsers() {
   const [currentUserCredits, setCurrentUserCredits] = useState<{current: number; base: number | null} | null>(null);
 
   const derivePlanValue = (plan?: string, isAdmin?: boolean) => {
+    if (plan === 'guest') return 'guest';
     if (isAdmin) return 'unlimited';
     return (plan || 'free').toLowerCase();
   };
@@ -79,6 +81,7 @@ export default function AdminUsers() {
     const normalized = derivePlanValue(plan, isAdmin);
     if (normalized === 'unlimited') return 'secondary';
     if (normalized === 'pro') return 'primary';
+    if (normalized === 'guest') return 'warning';
     return 'default';
   };
 
@@ -415,6 +418,9 @@ export default function AdminUsers() {
                   {user.is_admin && (
                     <Chip label="Admin" color="primary" size="small" />
                   )}
+                  {user.is_guest && (
+                    <Chip label="Guest" color="warning" size="small" />
+                  )}
                 </TableCell>
                 <TableCell>
                   <Chip
@@ -424,7 +430,9 @@ export default function AdminUsers() {
                   />
                 </TableCell>
                 <TableCell>
-                  {user.is_admin ? (
+                  {user.is_guest ? (
+                    <Typography variant="body2" color="text.secondary">-</Typography>
+                  ) : user.is_admin ? (
                     <Typography variant="body2" color="text.secondary">Unlimited</Typography>
                   ) : (
                     <Typography variant="body2">
@@ -440,7 +448,9 @@ export default function AdminUsers() {
                   {new Date(user.created_at).toLocaleDateString()}
                 </TableCell>
                 <TableCell align="right">
-                  {PROTECTED_ADMIN_EMAILS.includes(user.email) ? (
+                  {user.is_guest ? (
+                    <Typography variant="caption" color="text.secondary">Guest only</Typography>
+                  ) : PROTECTED_ADMIN_EMAILS.includes(user.email) ? (
                     <Typography variant="caption" color="text.secondary">Protected</Typography>
                   ) : (
                     <>
@@ -601,5 +611,4 @@ export default function AdminUsers() {
     </Container>
   );
 }
-
 

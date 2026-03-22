@@ -55,14 +55,83 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           });
         }
 
+        const { data: guestRows, error: guestError } = await supabase
+          .from('index_files')
+          .select('owner_anon_id, uploaded_at, figma_file_key')
+          .is('user_id', null)
+          .not('owner_anon_id', 'is', null)
+          .order('uploaded_at', { ascending: false })
+          .limit(1000);
+
+        if (guestError) {
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch guest users',
+            details: guestError.message
+          });
+        }
+
+        const guestMap = new Map<string, {
+          id: string;
+          email: string;
+          full_name: string;
+          api_key: string;
+          plan: string;
+          is_active: boolean;
+          is_admin: boolean;
+          is_guest: boolean;
+          guest_file_count: number;
+          created_at: string;
+          credits_remaining: number;
+        }>();
+
+        for (const row of guestRows || []) {
+          const anonId = typeof row.owner_anon_id === 'string' ? row.owner_anon_id.trim() : '';
+          if (!anonId) continue;
+          const existingGuest = guestMap.get(anonId);
+          const uploadedAt = row.uploaded_at || new Date().toISOString();
+          if (!existingGuest) {
+            guestMap.set(anonId, {
+              id: `guest:${anonId}`,
+              email: `guest:${anonId.slice(0, 12)}`,
+              full_name: `Guest (${anonId.slice(0, 8)})`,
+              api_key: '',
+              plan: 'guest',
+              is_active: true,
+              is_admin: false,
+              is_guest: true,
+              guest_file_count: row.figma_file_key ? 1 : 0,
+              created_at: uploadedAt,
+              credits_remaining: 0
+            });
+            continue;
+          }
+          if (uploadedAt < existingGuest.created_at) {
+            existingGuest.created_at = uploadedAt;
+          }
+          if (row.figma_file_key) {
+            existingGuest.guest_file_count += 1;
+          }
+        }
+
+        const guestUsers = Array.from(guestMap.values()).map((guest) => ({
+          ...guest,
+          guest_file_count: undefined
+        }));
+        const combinedUsers = [...(users || []), ...guestUsers].sort((a: any, b: any) => {
+          const aTime = new Date(a.created_at || 0).getTime();
+          const bTime = new Date(b.created_at || 0).getTime();
+          return bTime - aTime;
+        });
+
         return res.status(200).json({
           success: true,
-          users: users || [],
+          users: combinedUsers,
           pagination: {
             page,
             limit,
-            total: count || 0,
-            totalPages: Math.ceil((count || 0) / limit)
+            total: (count || 0) + guestUsers.length,
+            totalPages: Math.ceil((((count || 0) + guestUsers.length) || 0) / limit)
           }
         });
 
@@ -84,4 +153,3 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default handler;
-

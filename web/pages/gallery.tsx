@@ -193,6 +193,76 @@ const formatTextSnippet = (text: string, limit = 160): string => {
 // Default empty frames array - will be loaded dynamically
 let frames: Frame[] = [];
 
+function groupLogicalFiles(files: any[]): any[] {
+  const partFiles: any[] = [];
+  const regularFiles: any[] = [];
+
+  files.forEach((file: any) => {
+    const isPart = /\(Part\s+\d+\/\d+\)$/i.test(file.file_name || '');
+    if (isPart) partFiles.push(file);
+    else regularFiles.push(file);
+  });
+
+  const groupedParts = new Map<string, any[]>();
+  partFiles.forEach((file: any) => {
+    const baseName = (file.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
+    const key = `${file.figma_file_key || file.project_id || 'k'}::${baseName}`;
+    if (!groupedParts.has(key)) groupedParts.set(key, []);
+    groupedParts.get(key)!.push(file);
+  });
+
+  const displayFiles: any[] = [...regularFiles];
+  groupedParts.forEach((chunks) => {
+    if (chunks.length === 1) {
+      displayFiles.push(chunks[0]);
+      return;
+    }
+    const first = chunks[0];
+    displayFiles.push({
+      id: first.id,
+      file_name: (first.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim(),
+      uploaded_at: first.uploaded_at,
+      figma_file_key: first.figma_file_key,
+      project_id: first.project_id,
+      _isChunked: true,
+      _chunks: chunks
+    });
+  });
+
+  const finalGroups = new Map<string, any[]>();
+  displayFiles.forEach((file: any) => {
+    const logicalKey = String(file.figma_file_key || file.project_id || file.id || '');
+    if (!logicalKey) {
+      finalGroups.set(`single::${file.id}`, [file]);
+      return;
+    }
+    if (!finalGroups.has(logicalKey)) finalGroups.set(logicalKey, []);
+    finalGroups.get(logicalKey)!.push(file);
+  });
+
+  const groupedDisplay: any[] = [];
+  finalGroups.forEach((group) => {
+    if (group.length === 1) {
+      groupedDisplay.push(group[0]);
+      return;
+    }
+    const sorted = [...group].sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
+    const first = sorted[0];
+    const chunks = sorted.flatMap((item: any) => item._chunks ? item._chunks : [item]);
+    groupedDisplay.push({
+      id: first.id,
+      file_name: first.file_name,
+      uploaded_at: first.uploaded_at,
+      figma_file_key: first.figma_file_key,
+      project_id: first.project_id,
+      _isGroupedFile: true,
+      _chunks: chunks
+    });
+  });
+
+  return groupedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
+}
+
 const modalStyle = {
   position: 'absolute' as const,
   top: '50%',
@@ -371,28 +441,7 @@ export default function Home() {
               setGuestPlan(data.plan);
               if (typeof window !== 'undefined') localStorage.setItem('figdex_plan', data.plan);
             }
-            const partFiles: any[] = [];
-            const regularFiles: any[] = [];
-            data.data.forEach((file: any) => {
-              const isPart = /\(Part\s+\d+\/\d+\)$/i.test(file.file_name || '');
-              if (isPart) partFiles.push(file);
-              else regularFiles.push(file);
-            });
-            const groupedParts = new Map<string, any[]>();
-            partFiles.forEach((file: any) => {
-              const baseName = (file.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
-              const key = `${file.figma_file_key || 'k'}::${baseName}`;
-              if (!groupedParts.has(key)) groupedParts.set(key, []);
-              groupedParts.get(key)!.push(file);
-            });
-            const displayFiles: any[] = [...regularFiles];
-            groupedParts.forEach((chunks) => {
-              if (chunks.length === 1) displayFiles.push(chunks[0]);
-              else {
-                const first = chunks[0];
-                displayFiles.push({ id: first.id, file_name: (first.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim(), uploaded_at: first.uploaded_at, figma_file_key: first.figma_file_key, _isChunked: true, _chunks: chunks });
-              }
-            });
+            const displayFiles = groupLogicalFiles(data.data);
             setIndexFiles(displayFiles);
             setFrames([]);
             // Load file thumbnails and frames for guest (same as user path)
@@ -495,47 +544,7 @@ export default function Home() {
         }
         
         if (data.success && Array.isArray(data.data)) {
-          // Separate real files from chunked parts ("(Part X/Y)")
-          const partFiles: any[] = [];
-          const regularFiles: any[] = [];
-
-          data.data.forEach((file: any) => {
-            const isPart = /\(Part\s+\d+\/\d+\)$/i.test(file.file_name || '');
-            if (isPart) {
-              partFiles.push(file);
-            } else {
-              regularFiles.push(file);
-            }
-          });
-
-          // Group only the part files by baseName + fileKey to avoid merging distinct files with same name
-          const groupedParts = new Map<string, any[]>();
-          partFiles.forEach((file: any) => {
-            const baseName = (file.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
-            const key = `${file.figma_file_key || 'k'}::${baseName}`;
-            if (!groupedParts.has(key)) groupedParts.set(key, []);
-            groupedParts.get(key)!.push(file);
-          });
-
-          const displayFiles: any[] = [...regularFiles];
-          groupedParts.forEach((chunks, key) => {
-            if (chunks.length === 1) {
-              displayFiles.push(chunks[0]);
-            } else {
-              // Create virtual grouped file for the chunked set
-              const first = chunks[0];
-              const baseName = (first.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
-              displayFiles.push({
-                id: first.id,
-                file_name: baseName,
-                uploaded_at: first.uploaded_at,
-                figma_file_key: first.figma_file_key,
-                _isChunked: true,
-                _chunks: chunks
-              });
-            }
-          });
-
+          const displayFiles = groupLogicalFiles(data.data);
           setIndexFiles(displayFiles);
           
           // Load file thumbnails from all indices (for Gallery Lobby)
