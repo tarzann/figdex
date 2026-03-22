@@ -1809,26 +1809,38 @@ export default function Home() {
       const fid = (f as any)._fileId;
       if (fid) countByFileId.set(fid, (countByFileId.get(fid) || 0) + 1);
     }
-    return fileThumbnails.map((file, idx) => {
-      let frameCount = file.frameCount;
+    const thumbByFileId = new Map<string, { thumbnail?: string; frameCount: number }>();
+    fileThumbnails.forEach((file) => {
+      if (!thumbByFileId.has(file.id)) {
+        thumbByFileId.set(file.id, { thumbnail: file.thumbnail, frameCount: file.frameCount });
+        return;
+      }
+      const existing = thumbByFileId.get(file.id)!;
+      existing.frameCount += file.frameCount || 0;
+      if (!existing.thumbnail && file.thumbnail) existing.thumbnail = file.thumbnail;
+    });
+    return indexFiles.map((file: any, idx) => {
+      const thumbInfo = thumbByFileId.get(file.id) || { thumbnail: undefined, frameCount: 0 };
+      let frameCount = thumbInfo.frameCount;
       if (frameCount === 0 && countByFileId.has(file.id)) {
         frameCount = countByFileId.get(file.id) || 0;
       }
       return {
         file: {
           id: file.id,
-          fileName: file.fileName,
+          fileName: file.file_name || file.fileName,
+          _chunks: file._chunks,
           frameCount
         },
         thumb: {
           thumbName: `${file.id}_${idx}`,
-          label: file.fileName,
-          image: file.thumbnail || null, // Use null instead of empty string to avoid placeholder
+          label: file.file_name || file.fileName,
+          image: thumbInfo.thumbnail || null, // Use null instead of empty string to avoid placeholder
         },
         index: idx
       };
     });
-  }, [fileThumbnails, allFramesData]);
+  }, [fileThumbnails, allFramesData, indexFiles]);
 
   // Create gallery thumbs from allFramesData for search in lobby mode
   // Also store fileId mapping for filtering files by matching frames
