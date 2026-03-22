@@ -40,6 +40,12 @@ const STORAGE_KEYS = {
   HAS_EVER_INDEXED: 'hasEverIndexed'
 };
 
+function getDocumentScopeId() {
+  var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+  if (liveFileKey) return liveFileKey;
+  return figma.root.id || rootId || '0:0';
+}
+
 function cryptoRandomString() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -49,7 +55,7 @@ function cryptoRandomString() {
 function storageKey(key) {
   // Global keys: login persists across documents. File key is per-document so each Figma file has its own.
   var globalKeys = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID, STORAGE_KEYS.HAS_EVER_INDEXED];
-  return globalKeys.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + (figma.root.id || '0:0') + '_' + key;
+  return globalKeys.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + getDocumentScopeId() + '_' + key;
 }
 async function getStored(key, def) {
   try {
@@ -335,7 +341,7 @@ function sendStoredIdentityToUI(webToken, webUser) {
   // One-time migration: token used to be stored per-document; move to global key if found
   if ((!webToken || !webUser) && (figma.root.id || '0:0')) {
     try {
-      var docKey = 'figdex_' + (figma.root.id || '0:0') + '_';
+      var docKey = 'figdex_' + getDocumentScopeId() + '_';
       var oldToken = await figma.clientStorage.getAsync(docKey + 'webToken');
       var oldUser = await figma.clientStorage.getAsync(docKey + 'webUser');
       if (oldToken && oldUser) {
@@ -501,8 +507,7 @@ figma.ui.onmessage = async (msg) => {
       try { await figma.clientStorage.deleteAsync(storageKey(k)); } catch (e) { console.warn('clear-storage:', k, e); }
     }
     // Also delete legacy per-document webToken/webUser (migration would otherwise restore them on restart)
-    var docId = figma.root.id || rootId || '0:0';
-    var prefix = 'figdex_' + docId + '_';
+    var prefix = 'figdex_' + getDocumentScopeId() + '_';
     try {
       await figma.clientStorage.deleteAsync(prefix + 'webToken');
       await figma.clientStorage.deleteAsync(prefix + 'webUser');
