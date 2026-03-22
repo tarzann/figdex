@@ -193,6 +193,13 @@ const formatTextSnippet = (text: string, limit = 160): string => {
 // Default empty frames array - will be loaded dynamically
 let frames: Frame[] = [];
 
+function getLogicalFileId(file: any): string {
+  const fileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+  const projectId = typeof file?.project_id === 'string' ? file.project_id.trim() : '';
+  const stableProjectId = projectId && projectId !== '0:0' ? projectId : '';
+  return fileKey || stableProjectId || String(file?.id || '');
+}
+
 function groupLogicalFiles(files: any[]): any[] {
   const partFiles: any[] = [];
   const regularFiles: any[] = [];
@@ -206,7 +213,7 @@ function groupLogicalFiles(files: any[]): any[] {
   const groupedParts = new Map<string, any[]>();
   partFiles.forEach((file: any) => {
     const baseName = (file.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
-    const key = `${file.figma_file_key || file.project_id || 'k'}::${baseName}`;
+    const key = `${getLogicalFileId(file)}::${baseName}`;
     if (!groupedParts.has(key)) groupedParts.set(key, []);
     groupedParts.get(key)!.push(file);
   });
@@ -231,7 +238,7 @@ function groupLogicalFiles(files: any[]): any[] {
 
   const finalGroups = new Map<string, any[]>();
   displayFiles.forEach((file: any) => {
-    const logicalKey = String(file.figma_file_key || file.project_id || file.id || '');
+    const logicalKey = getLogicalFileId(file);
     if (!logicalKey) {
       finalGroups.set(`single::${file.id}`, [file]);
       return;

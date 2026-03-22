@@ -34,6 +34,13 @@ function isReservedPageName(name: string): boolean {
   return lower === 'cover' || lower === 'figdex';
 }
 
+function getLogicalFileId(projectId: unknown, fileKey: unknown): string {
+  const normalizedProjectId = typeof projectId === 'string' ? projectId.trim() : '';
+  const normalizedFileKey = typeof fileKey === 'string' ? fileKey.trim() : '';
+  const stableProjectId = normalizedProjectId && normalizedProjectId !== '0:0' ? normalizedProjectId : '';
+  return normalizedFileKey || stableProjectId || '';
+}
+
 /** Upload cover image from data URL to storage. Returns bucket:path or null. */
 async function uploadCoverFromDataUrl(
   supabaseAdmin: any,
@@ -172,7 +179,7 @@ export default async function handler(
     const fileKeyTrim = (typeof fileKeyEarly === 'string' ? fileKeyEarly : '').trim();
     if (fileKeyTrim.length >= 10) {
       const docId = (bodyEarly.docId ?? bodyEarly.doc_id ?? '0:0');
-      const currentLogicalFileId = String(docId || '').trim() || fileKeyTrim;
+      const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
       const fileName = (typeof bodyEarly.fileName === 'string' ? bodyEarly.fileName : typeof bodyEarly.file_name === 'string' ? bodyEarly.file_name : '')?.trim() || 'Untitled';
       const indexPayload = bodyEarly.indexPayload && typeof bodyEarly.indexPayload === 'object' ? bodyEarly.indexPayload : null;
       const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
@@ -194,9 +201,7 @@ export default async function handler(
         .eq('owner_anon_id', guestAnonId)
         .limit(1000);
       const existingRows = (guestRows || []).filter((row: any) => {
-        const rowProjectId = typeof row.project_id === 'string' ? row.project_id.trim() : '';
-        const rowFileKey = typeof row.figma_file_key === 'string' ? row.figma_file_key.trim() : '';
-        const rowLogicalFileId = rowProjectId || rowFileKey || '';
+        const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
         return rowLogicalFileId === currentLogicalFileId;
       });
       const existingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();

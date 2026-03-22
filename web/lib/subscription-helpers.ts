@@ -277,7 +277,8 @@ export async function getGuestDistinctFileCount(
       .map((r: any) => {
         const projectId = typeof r.project_id === 'string' ? r.project_id.trim() : '';
         const fileKey = typeof r.figma_file_key === 'string' ? r.figma_file_key.trim() : '';
-        return projectId || fileKey || '';
+        const logicalProjectId = projectId && projectId !== '0:0' ? projectId : '';
+        return fileKey || logicalProjectId || '';
       })
       .filter(Boolean)
   );

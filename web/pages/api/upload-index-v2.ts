@@ -704,8 +704,12 @@ function computeUsageStats(
 
   for (const row of rows) {
     if (!row) continue;
-    if (row.project_id) {
-      projectIds.add(row.project_id);
+    const projectId = typeof row.project_id === 'string' ? row.project_id.trim() : '';
+    const fileKey = typeof row.figma_file_key === 'string' ? row.figma_file_key.trim() : '';
+    const stableProjectId = projectId && projectId !== '0:0' ? projectId : '';
+    const logicalFileId = fileKey || stableProjectId || '';
+    if (logicalFileId) {
+      projectIds.add(logicalFileId);
     }
     // Only count frames if index_data exists (avoid errors)
     const frameCount = row.index_data ? countFramesFromIndexData(row.index_data) : 0;
@@ -732,6 +736,5 @@ function computeUsageStats(
     framesThisMonthExcludingCurrent
   };
 }
-
 
 

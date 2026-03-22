@@ -27,7 +27,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Get all index files to calculate usage stats
   const { data: allIndexFiles, error: indexError } = await supabaseAdmin
     .from('index_files')
-    .select('user_id, project_id, uploaded_at')
+    .select('user_id, project_id, figma_file_key, uploaded_at')
     .order('uploaded_at', { ascending: false });
   
   if (indexError) {
@@ -52,7 +52,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         });
       }
       const stats = userStats.get(userId)!;
-      if (file.project_id) stats.projects.add(file.project_id);
+      const projectId = typeof file.project_id === 'string' ? file.project_id.trim() : '';
+      const fileKey = typeof (file as any).figma_file_key === 'string' ? (file as any).figma_file_key.trim() : '';
+      const stableProjectId = projectId && projectId !== '0:0' ? projectId : '';
+      const logicalFileId = fileKey || stableProjectId || '';
+      if (logicalFileId) stats.projects.add(logicalFileId);
       stats.indices++;
       const uploadTime = file.uploaded_at ? new Date(file.uploaded_at).getTime() : 0;
       if (uploadTime > 0 && (!stats.lastUpload || uploadTime > stats.lastUpload)) {
@@ -179,4 +183,3 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default requireAdmin(handler);
-
