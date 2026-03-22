@@ -34,6 +34,12 @@ function isReservedPageName(name: string): boolean {
   return lower === 'cover' || lower === 'figdex';
 }
 
+function normalizeLogicalFileName(name?: string): string {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return 'Untitled';
+  return trimmed.replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim() || 'Untitled';
+}
+
 function getLogicalFileId(projectId: unknown, fileKey: unknown): string {
   const normalizedProjectId = typeof projectId === 'string' ? projectId.trim() : '';
   const normalizedFileKey = typeof fileKey === 'string' ? fileKey.trim() : '';
@@ -180,7 +186,13 @@ export default async function handler(
     if (fileKeyTrim.length >= 10) {
       const docId = (bodyEarly.docId ?? bodyEarly.doc_id ?? '0:0');
       const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
-      const fileName = (typeof bodyEarly.fileName === 'string' ? bodyEarly.fileName : typeof bodyEarly.file_name === 'string' ? bodyEarly.file_name : '')?.trim() || 'Untitled';
+      const fileName = normalizeLogicalFileName(
+        typeof bodyEarly.fileName === 'string'
+          ? bodyEarly.fileName
+          : typeof bodyEarly.file_name === 'string'
+            ? bodyEarly.file_name
+            : ''
+      );
       const indexPayload = bodyEarly.indexPayload && typeof bodyEarly.indexPayload === 'object' ? bodyEarly.indexPayload : null;
       const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
       let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
@@ -286,7 +298,7 @@ export default async function handler(
           : { pages: singlePageData };
 
         const existingForPage = pageId ? existingByPageId.get(pageId) : null;
-        const pageFileName = (fileName || 'Untitled') + (pagesArray.length > 1 ? ` - ${pageName}` : '');
+        const pageFileName = fileName || 'Untitled';
         const nowIso = now.toISOString();
 
         // Only update if existing row has exactly one page (one-index-per-page). Else insert new to avoid overwriting other pages.
@@ -476,7 +488,11 @@ export default async function handler(
       const fileKeyTrim = (typeof fileKeyInput === 'string' ? fileKeyInput : '').trim();
       if (fileKeyTrim.length >= 10) {
         const docId = docIdBody ?? req.body.doc_id ?? '0:0';
-        const fileName = (typeof fileNameInput === 'string' ? fileNameInput : (req.body.fileName ?? req.body.file_name ?? ''))?.trim() || 'Untitled';
+        const fileName = normalizeLogicalFileName(
+          typeof fileNameInput === 'string'
+            ? fileNameInput
+            : (req.body.fileName ?? req.body.file_name ?? '')
+        );
         const indexPayload = indexPayloadBody && typeof indexPayloadBody === 'object' ? indexPayloadBody : null;
         const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
         let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
@@ -545,7 +561,7 @@ export default async function handler(
               : { pages: singlePageData };
 
             const existingForPage = pageId ? authExistingByPageId.get(pageId) : null;
-            const pageFileName = fileName + (pagesArray.length > 1 ? ` - ${pageName}` : '');
+            const pageFileName = fileName || 'Untitled';
             const nowIso = now.toISOString();
 
             if (existingForPage?.id && existingForPage.pageCount === 1) {
