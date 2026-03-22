@@ -76,6 +76,13 @@ function getCoverForPage(page: any, coverImageDataUrl: string | null, isSinglePa
   return frameImage || null;
 }
 
+function getStoredCoverImageUrl(indexData: any): string | null {
+  if (!indexData || typeof indexData !== 'object' || Array.isArray(indexData)) return null;
+  return typeof indexData.coverImageUrl === 'string' && indexData.coverImageUrl.trim()
+    ? indexData.coverImageUrl
+    : null;
+}
+
 function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
   let count = 0;
   const stack: Array<{ node: FigmaNode; parentType: string }> = [{ node, parentType }];
@@ -217,9 +224,11 @@ export default async function handler(
         return rowLogicalFileId === currentLogicalFileId;
       });
       const existingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
+      let existingFileCoverUrl: string | null = null;
       if (Array.isArray(existingRows)) {
         for (const row of existingRows) {
           const d = row.index_data as any;
+          if (!existingFileCoverUrl) existingFileCoverUrl = getStoredCoverImageUrl(d);
           const pages = Array.isArray(d) ? d : (d?.pages ?? []);
           for (const p of pages) {
             const pid = (p?.id ?? p?.pageId);
@@ -295,7 +304,7 @@ export default async function handler(
 
         const indexDataForPage: unknown = coverStoragePath
           ? { coverImageUrl: coverStoragePath, pages: singlePageData }
-          : { pages: singlePageData };
+          : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: singlePageData } : { pages: singlePageData });
 
         const existingForPage = pageId ? existingByPageId.get(pageId) : null;
         const pageFileName = fileName || 'Untitled';
@@ -342,6 +351,7 @@ export default async function handler(
             console.error(`[${requestId}] guest insert page error:`, insertErr);
             return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
           }
+          if (!existingFileCoverUrl && coverStoragePath) existingFileCoverUrl = coverStoragePath;
         }
       }
       return res.status(200).json({ success: true, viewToken: null });
@@ -507,9 +517,11 @@ export default async function handler(
             authExistingRows = (await supabaseAdmin.from('index_files').select('id, index_data').eq('user_id', user.id).eq('project_id', String(docId))).data;
           }
           const authExistingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
+          let authExistingFileCoverUrl: string | null = null;
           if (Array.isArray(authExistingRows)) {
             for (const row of authExistingRows) {
               const d = row.index_data as any;
+              if (!authExistingFileCoverUrl) authExistingFileCoverUrl = getStoredCoverImageUrl(d);
               const pages = Array.isArray(d) ? d : (d?.pages ?? []);
               for (const p of pages) {
                 const pid = (p?.id ?? p?.pageId);
@@ -558,7 +570,7 @@ export default async function handler(
 
             const indexDataForPage: unknown = coverStoragePath
               ? { coverImageUrl: coverStoragePath, pages: singlePageData }
-              : { pages: singlePageData };
+              : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: singlePageData } : { pages: singlePageData });
 
             const existingForPage = pageId ? authExistingByPageId.get(pageId) : null;
             const pageFileName = fileName || 'Untitled';
@@ -603,6 +615,7 @@ export default async function handler(
                 console.error(`[${requestId}] auth insert page error:`, insertErr);
                 return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
               }
+              if (!authExistingFileCoverUrl && coverStoragePath) authExistingFileCoverUrl = coverStoragePath;
             }
           }
           return res.status(200).json({ success: true, viewToken: null });
