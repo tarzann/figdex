@@ -172,6 +172,7 @@ export default async function handler(
     const fileKeyTrim = (typeof fileKeyEarly === 'string' ? fileKeyEarly : '').trim();
     if (fileKeyTrim.length >= 10) {
       const docId = (bodyEarly.docId ?? bodyEarly.doc_id ?? '0:0');
+      const currentLogicalFileId = String(docId || '').trim() || fileKeyTrim;
       const fileName = (typeof bodyEarly.fileName === 'string' ? bodyEarly.fileName : typeof bodyEarly.file_name === 'string' ? bodyEarly.file_name : '')?.trim() || 'Untitled';
       const indexPayload = bodyEarly.indexPayload && typeof bodyEarly.indexPayload === 'object' ? bodyEarly.indexPayload : null;
       const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
@@ -185,23 +186,19 @@ export default async function handler(
       const guestDistinctFileCount = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);
 
-      // Fetch all existing indices for this file (one-index-per-page model)
-      const { data: existingByKey } = await supabaseAdmin
+      // Fetch all guest indices for this anon user, then detect whether current upload belongs to the same logical Figma file.
+      const { data: guestRows } = await supabaseAdmin
         .from('index_files')
-        .select('id, index_data, project_id')
+        .select('id, index_data, project_id, figma_file_key')
         .is('user_id', null)
         .eq('owner_anon_id', guestAnonId)
-        .eq('figma_file_key', fileKeyTrim);
-      let existingRows = existingByKey;
-      if ((!existingRows || existingRows.length === 0) && docId) {
-        const { data: existingByDoc } = await supabaseAdmin
-          .from('index_files')
-          .select('id, index_data, project_id')
-          .is('user_id', null)
-          .eq('owner_anon_id', guestAnonId)
-          .eq('project_id', String(docId));
-        existingRows = existingByDoc;
-      }
+        .limit(1000);
+      const existingRows = (guestRows || []).filter((row: any) => {
+        const rowProjectId = typeof row.project_id === 'string' ? row.project_id.trim() : '';
+        const rowFileKey = typeof row.figma_file_key === 'string' ? row.figma_file_key.trim() : '';
+        const rowLogicalFileId = rowProjectId || rowFileKey || '';
+        return rowLogicalFileId === currentLogicalFileId;
+      });
       const existingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
       if (Array.isArray(existingRows)) {
         for (const row of existingRows) {
@@ -213,7 +210,7 @@ export default async function handler(
           }
         }
       }
-      const hasExistingForFile = existingByPageId.size > 0 || (existingRows && existingRows.length > 0);
+      const hasExistingForFile = existingByPageId.size > 0 || existingRows.length > 0;
       const isAddingNewFile = !hasExistingForFile;
       const wouldExceedFileLimit = isAddingNewFile && guestDistinctFileCount >= maxFilesGuest;
       const estimatedFrameCount = typeof bodyEarly.estimatedFrameCount === 'number' ? bodyEarly.estimatedFrameCount : framesInPayload;
@@ -1124,4 +1121,3 @@ export default async function handler(
       });
     }
 }
-

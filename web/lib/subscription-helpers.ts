@@ -268,11 +268,19 @@ export async function getGuestDistinctFileCount(
 ): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from('index_files')
-    .select('figma_file_key')
+    .select('project_id, figma_file_key')
     .is('user_id', null)
     .eq('owner_anon_id', anonId);
   if (error || !data) return 0;
-  const distinct = new Set(data.map((r: any) => r.figma_file_key).filter(Boolean));
+  const distinct = new Set(
+    data
+      .map((r: any) => {
+        const projectId = typeof r.project_id === 'string' ? r.project_id.trim() : '';
+        const fileKey = typeof r.figma_file_key === 'string' ? r.figma_file_key.trim() : '';
+        return projectId || fileKey || '';
+      })
+      .filter(Boolean)
+  );
   return distinct.size;
 }
 
@@ -291,4 +299,3 @@ export async function getGuestTotalFrames(
   if (error || !rows) return 0;
   return rows.reduce((sum, row) => sum + countFramesInIndexData(row.index_data), 0);
 }
-
