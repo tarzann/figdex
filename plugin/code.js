@@ -629,12 +629,19 @@ figma.ui.onmessage = async (msg) => {
       var selectedIds = msg.selectedPages || [];
       await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
       const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
-      // Prefer figma.fileKey (current document) over stored key - we always index the current doc
+      // Always resolve the key from the current document context.
+      // Never fall back to a cross-document global value during indexing,
+      // otherwise a new file can be uploaded under the previous file's key.
       var currentDocKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
-      var fileKey = currentDocKey || globalFileKey || '';
-      if (currentDocKey && currentDocKey !== globalFileKey) {
-        globalFileKey = currentDocKey;
+      var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
+      if (typeof storedDocKey !== 'string') storedDocKey = '';
+      storedDocKey = storedDocKey ? storedDocKey.trim() : '';
+      var fileKey = currentDocKey || storedDocKey || '';
+      if (currentDocKey && currentDocKey !== storedDocKey) {
         await setStored(STORAGE_KEYS.FILE_KEY, currentDocKey);
+      }
+      if (fileKey && fileKey !== globalFileKey) {
+        globalFileKey = fileKey;
       }
       const docId = figma.root.id || rootId || '0:0';
       const fileName = await getStored(STORAGE_KEYS.FILE_NAME, null) || figma.root.name || 'Untitled';
