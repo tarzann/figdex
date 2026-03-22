@@ -1,4 +1,5 @@
 {
+  "framework": "nextjs",
   "functions": {
     "pages/api/*.ts": {
       "maxDuration": 30

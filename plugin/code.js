@@ -36,7 +36,8 @@ const STORAGE_KEYS = {
   WEB_TOKEN: 'webToken',
   WEB_USER: 'webUser',
   CONNECT_NONCE_DATA: 'connectNonceData',
-  ANON_ID: 'anonId'
+  ANON_ID: 'anonId',
+  HAS_EVER_INDEXED: 'hasEverIndexed'
 };
 
 function cryptoRandomString() {
@@ -47,7 +48,7 @@ function cryptoRandomString() {
 }
 function storageKey(key) {
   // Global keys: login persists across documents. File key is per-document so each Figma file has its own.
-  var globalKeys = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID];
+  var globalKeys = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID, STORAGE_KEYS.HAS_EVER_INDEXED];
   return globalKeys.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + (figma.root.id || '0:0') + '_' + key;
 }
 async function getStored(key, def) {
@@ -406,6 +407,11 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
     return;
   }
+  if (msg.type === 'get-has-ever-indexed') {
+    var hasEver = await getStored(STORAGE_KEYS.HAS_EVER_INDEXED, false);
+    figma.ui.postMessage({ type: 'HAS_EVER_INDEXED', hasEverCompletedIndex: !!hasEver });
+    return;
+  }
   if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
     await figma.loadAllPagesAsync();
     const allPages = figma.root.children
@@ -623,7 +629,13 @@ figma.ui.onmessage = async (msg) => {
       var selectedIds = msg.selectedPages || [];
       await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
       const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
-      const fileKey = globalFileKey || (typeof figma.fileKey === 'string' && figma.fileKey.trim() ? figma.fileKey.trim() : '') || '';
+      // Prefer figma.fileKey (current document) over stored key - we always index the current doc
+      var currentDocKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+      var fileKey = currentDocKey || globalFileKey || '';
+      if (currentDocKey && currentDocKey !== globalFileKey) {
+        globalFileKey = currentDocKey;
+        await setStored(STORAGE_KEYS.FILE_KEY, currentDocKey);
+      }
       const docId = figma.root.id || rootId || '0:0';
       const fileName = await getStored(STORAGE_KEYS.FILE_NAME, null) || figma.root.name || 'Untitled';
       if (!fileKey) {
@@ -780,6 +792,7 @@ figma.ui.onmessage = async (msg) => {
           if (dirtyPageIds.length === 0) {
             figma.notify('No changes — nothing to re-index');
             figma.ui.postMessage({ type: 'pages-indexed', pageIds: selectedIds });
+            await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
             figma.ui.postMessage({ type: 'done' });
             return;
           }
@@ -949,6 +962,7 @@ figma.ui.onmessage = async (msg) => {
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
       else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
       figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
     } catch (e) {
       console.error('[code.js] start-advanced error:', e);

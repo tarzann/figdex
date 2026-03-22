@@ -442,10 +442,12 @@ export default function Home() {
                     frameTags: frame.frameTags || frame.tags || [],
                     customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
                     textContent: frame.textContent || null,
-                    searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null
+                    searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null,
+                    _fileId: file.id,
+                    _fileName: file.file_name
                   }));
                 });
-                return { success: true, fileId: file.id, frames: fileFrames.map((f: any) => ({ ...f, _fileId: file.id })), fileName: file.file_name };
+                return { success: true, fileId: file.id, frames: fileFrames, fileName: file.file_name };
               } catch {
                 return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
               }
@@ -887,7 +889,8 @@ export default function Home() {
             });
           }
           
-          // Process frame results
+          // Process frame results – deduplicate by frame.id to avoid same frame from multiple indices
+          const seenFrameIds = new Set<string>();
           frameResults.forEach(result => {
             if (result.success && result.frames && result.frames.length > 0) {
               console.log(`✅ Added ${result.frames.length} frames from ${result.fileName}`);
@@ -902,11 +905,19 @@ export default function Home() {
                   frameTags: firstFrame.frameTags
                 });
               }
-              // Add fileId to each frame for mapping back to files
-              const framesWithFileId = result.frames.map((frame: any) => ({
-                ...frame,
-                _fileId: result.fileId
-              }));
+              // Add fileId and fileName to each frame; skip duplicates by frame.url (Figma URL is unique) or frame.id
+              const framesWithFileId = result.frames
+                .filter((frame: any) => {
+                  const fid = frame.url || frame.id || `${result.fileId}::${frame.name || 'u'}::${frame.id || ''}`;
+                  if (seenFrameIds.has(fid)) return false;
+                  seenFrameIds.add(fid);
+                  return true;
+                })
+                .map((frame: any) => ({
+                  ...frame,
+                  _fileId: result.fileId,
+                  _fileName: result.fileName
+                }));
               allFrames.push(...framesWithFileId);
             } else if (!result.success) {
               corruptedIndices.push(result.fileId);
@@ -1017,8 +1028,8 @@ export default function Home() {
     return () => document.removeEventListener('visibilitychange', handler);
   }, []);
 
-  // Load frames for specific file
-  const loadFileFrames = async (fileInfo: { id: string; fileName: string }) => {
+  // Load frames for specific file (handles chunked files by merging all chunks)
+  const loadFileFrames = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }) => {
     try {
       setLoading(true);
       setViewMode('file');
@@ -1026,48 +1037,53 @@ export default function Home() {
       // Clear frames first to prevent showing frames from previous file
       setFrames([]);
       
-      const response = await fetch(`/api/get-index-data?indexId=${fileInfo.id}`);
-      const data = await response.json();
+      const indicesToLoad = fileInfo._chunks?.length ? fileInfo._chunks : [{ id: fileInfo.id }];
+      const allFrames: any[] = [];
       
-      if (data.success && data.data && data.data.index_data) {
-        let indexDataContent = data.data.index_data;
-        if (typeof indexDataContent === 'string') {
-          try {
-            indexDataContent = JSON.parse(indexDataContent);
-          } catch (e) {
-            console.error('Error parsing index_data:', e);
-            setError('Failed to parse index data');
-            setLoading(false);
-            return;
-          }
-        }
+      for (const idx of indicesToLoad) {
+        const indexId = typeof idx === 'object' && idx?.id ? idx.id : idx;
+        const response = await fetch(`/api/get-index-data?indexId=${indexId}`);
+        const data = await response.json();
         
-        // Extract all frames from all pages
-        // Support both array format and object format { coverImageUrl, pages: [...] } (guest)
-        const allFrames: any[] = [];
-        let pagesArray: any[] = [];
-        if (Array.isArray(indexDataContent)) {
-          pagesArray = indexDataContent;
-        } else if (indexDataContent && typeof indexDataContent === 'object' && Array.isArray(indexDataContent.pages)) {
-          pagesArray = indexDataContent.pages;
-        }
-        pagesArray.forEach((pageItem: any) => {
-          if (pageItem && pageItem.frames && Array.isArray(pageItem.frames)) {
-            const pageFrames = pageItem.frames.map((frame: any) => ({
-              ...frame,
-              pageName: pageItem.name || pageItem.pageName || frame.pageName || '',
-              frameTags: frame.frameTags || frame.tags || [],
-              customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : [])
-            }));
-            allFrames.push(...pageFrames);
+        if (data.success && data.data && data.data.index_data) {
+          let indexDataContent = data.data.index_data;
+          if (typeof indexDataContent === 'string') {
+            try {
+              indexDataContent = JSON.parse(indexDataContent);
+            } catch (e) {
+              console.error('Error parsing index_data:', e);
+              setError('Failed to parse index data');
+              setLoading(false);
+              return;
+            }
           }
-        });
-        
-        setFrames(allFrames);
-      } else {
-        setError(data.error || 'Failed to load file frames');
-        setFrames([]);
+          
+          let pagesArray: any[] = [];
+          if (Array.isArray(indexDataContent)) {
+            pagesArray = indexDataContent;
+          } else if (indexDataContent && typeof indexDataContent === 'object' && Array.isArray(indexDataContent.pages)) {
+            pagesArray = indexDataContent.pages;
+          }
+          pagesArray.forEach((pageItem: any) => {
+            if (pageItem && pageItem.frames && Array.isArray(pageItem.frames)) {
+              const pageFrames = pageItem.frames.map((frame: any) => ({
+                ...frame,
+                pageName: pageItem.name || pageItem.pageName || frame.pageName || '',
+                frameTags: frame.frameTags || frame.tags || [],
+                customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : [])
+              }));
+              allFrames.push(...pageFrames);
+            }
+          });
+        } else if (indicesToLoad.length === 1) {
+          setError(data.error || 'Failed to load file frames');
+          setFrames([]);
+          setLoading(false);
+          return;
+        }
       }
+      
+      setFrames(allFrames);
     } catch (err: any) {
       console.error('Error loading file frames:', err);
       setError(err.message || 'An error occurred while loading file frames');
@@ -1801,6 +1817,9 @@ export default function Home() {
         });
       }
       
+      const fileName = (frame as any)._fileName || null;
+      const pageName = (frame as any).pageName || null;
+      const filePageSubtitle = [fileName, pageName].filter(Boolean).join(' • ');
       return ({
         frame: {
           name: frame.name || 'Untitled Frame',
@@ -1815,6 +1834,8 @@ export default function Home() {
           // Preserve textContent and searchTokens for search
           textContent: (frame as any).textContent || null,
           searchTokens: (frame as any).searchTokens || null,
+          pageName,
+          _fileName: fileName,
         },
         thumb: {
           thumbName: uniqueId,
@@ -1822,7 +1843,8 @@ export default function Home() {
           image: frame.image || '',
           thumbnail: (frame as any).thumb_url || frame.image || '',
           texts: textBundle,
-          url: frame.url || ''
+          url: frame.url || '',
+          filePageSubtitle, // e.g. "MyFile.fig • Page 1" for display under frame name
         },
         index: currentIdx,
         _fileId: fileId // Store fileId for mapping back to files
@@ -1839,82 +1861,21 @@ export default function Home() {
     if (viewMode === 'lobby' && allFramesGalleryThumbs.length > 0) {
       const q = search.toLowerCase().trim();
       // Find frames that match the search
+      const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
       const matchingFrames = allFramesGalleryThumbs.filter(({ frame, thumb }) => {
-        // Search in frame name
-        if (frame.name && frame.name.toLowerCase().includes(q)) {
-          console.log(`✅ [filteredFileThumbs] Match in name: "${frame.name}"`);
-          return true;
-        }
-        // Search in label
-        if (thumb.label && thumb.label.toLowerCase().includes(q)) {
-          console.log(`✅ [filteredFileThumbs] Match in label: "${thumb.label}"`);
-          return true;
-        }
-        
-        // Search in textContent FIRST (direct from frame) - this is the FULL text, not truncated
-        if ((frame as any).textContent) {
-          const textContent = String((frame as any).textContent || '');
-          const textContentLower = textContent.toLowerCase();
-          // Direct includes match
-          if (textContentLower.includes(q)) {
-            console.log(`✅ [filteredFileThumbs] Match in textContent (includes): "${frame.name}" - found "${q}" in textContent (${textContent.length} chars)`);
-            return true;
-          }
-          // Word boundary match for better accuracy
-          const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-          if (wordBoundaryRegex.test(textContent)) {
-            console.log(`✅ [filteredFileThumbs] Match in textContent (word boundary): "${frame.name}" - found "${q}" in textContent`);
-            return true;
-          }
-        } else {
-          // Debug: log when textContent is missing
-          if (q.length > 2) {
-            console.log(`⚠️ [filteredFileThumbs] No textContent for frame: "${frame.name}"`);
-          }
-        }
-        
-        // Search in searchTokens if available (tokenized text) - search in each token
+        if (frame.name && wordBoundaryRegex.test(frame.name)) return true;
+        if (thumb.label && wordBoundaryRegex.test(thumb.label)) return true;
+        if ((frame as any).pageName && String((frame as any).pageName).toLowerCase().includes(q)) return true;
+        if ((frame as any).textContent && wordBoundaryRegex.test(String((frame as any).textContent))) return true;
         if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
-          const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').toLowerCase().trim()).filter(Boolean);
-          // Check if query matches any token exactly or as substring (bidirectional)
-          const matchingToken = tokens.find((token: string) => token === q || token.includes(q) || q.includes(token));
-          if (matchingToken) {
-            console.log(`✅ [filteredFileThumbs] Match in searchTokens: "${frame.name}" - token "${matchingToken}" matches "${q}"`);
-            return true;
-          }
+          const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
+          if (tokens.some((token: string) => token.toLowerCase() === q || wordBoundaryRegex.test(token))) return true;
         }
-        
-        // Search in texts - use both includes and word boundary search for better matching
-        // This is a fallback (truncated text from collectFrameText)
-        if (thumb.texts) {
-          const textsLower = thumb.texts.toLowerCase();
-          // Direct includes match
-          if (textsLower.includes(q)) {
-            console.log(`✅ [filteredFileThumbs] Match in texts (includes): "${frame.name}" - found "${q}" in texts`);
-            return true;
-          }
-          // Word boundary match for better accuracy (handles "never" vs "nevertheless")
-          const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-          if (wordBoundaryRegex.test(thumb.texts)) {
-            console.log(`✅ [filteredFileThumbs] Match in texts (word boundary): "${frame.name}" - found "${q}" in texts`);
-            return true;
-          }
-        }
-        
-        // Search in custom tags
-        if (frame.customTags && Array.isArray(frame.customTags)) {
-          if (frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) {
-            console.log(`✅ [filteredFileThumbs] Match in customTags: "${frame.name}"`);
-            return true;
-          }
-        }
-        // Search in frame tags (predefined tags)
-        if (frame.frameTags && Array.isArray(frame.frameTags)) {
-          if (frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) {
-            console.log(`✅ [filteredFileThumbs] Match in frameTags: "${frame.name}"`);
-            return true;
-          }
-        }
+        if (thumb.texts && wordBoundaryRegex.test(thumb.texts)) return true;
+        if (frame.customTags && Array.isArray(frame.customTags) &&
+            frame.customTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) return true;
+        if (frame.frameTags && Array.isArray(frame.frameTags) &&
+            frame.frameTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) return true;
         return false;
       });
       
@@ -2005,135 +1966,56 @@ export default function Home() {
       return viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs;
     }
     const q = search.toLowerCase().trim();
-    console.log(`🔍 [Search] Starting search for "${q}" in ${viewMode === 'lobby' ? allFramesGalleryThumbs.length : allGalleryThumbs.length} frames`);
-    // In lobby mode with search, search in all frames; otherwise search in current frames
     const sourceThumbs = viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs;
-    let frameIndex = 0;
-    console.log(`🔍 [Search] Searching for "${q}" in ${sourceThumbs.length} frames`);
+    const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
     return sourceThumbs.filter(({ frame, thumb }) => {
-      const currentIndex = frameIndex++;
-      // Debug: Log frame details for all frames when searching (limit to first 3 to avoid spam)
-      if (currentIndex < 3) {
-        console.log(`🔍 [Search] Frame ${currentIndex}: "${frame.name}"`, {
-          hasTextContent: !!(frame as any).textContent,
-          textContentLength: (frame as any).textContent ? (frame as any).textContent.length : 0,
-          textContentPreview: (frame as any).textContent ? (frame as any).textContent.substring(0, 150) : null,
-          hasSearchTokens: Array.isArray((frame as any).searchTokens),
-          searchTokensCount: Array.isArray((frame as any).searchTokens) ? (frame as any).searchTokens.length : 0,
-          searchQuery: q
-        });
-      }
-      
       // Search in frame name
-      if (frame.name && frame.name.toLowerCase().includes(q)) {
+      if (frame.name && wordBoundaryRegex.test(frame.name)) {
         console.log(`✅ [Search] Match in name: "${frame.name}"`);
         return true;
       }
       // Search in label
-      if (thumb.label && thumb.label.toLowerCase().includes(q)) {
+      if (thumb.label && wordBoundaryRegex.test(thumb.label)) {
         console.log(`✅ [Search] Match in label: "${thumb.label}"`);
         return true;
       }
-      
-      // Search in textContent FIRST (direct from frame) - this is the FULL text, not truncated
-      if ((frame as any).textContent) {
-        const textContent = String((frame as any).textContent || '');
-        const textContentLower = textContent.toLowerCase();
-        
-        // Debug: Log textContent for first 2 frames when searching
-        if (currentIndex < 2 && q.length > 1) {
-          console.log(`🔍 [Search] Frame ${currentIndex} textContent check:`, {
-            frameName: frame.name,
-            query: q,
-            textContentLength: textContent.length,
-            textContentFull: textContent,
-            textContentLower: textContentLower,
-            includesCheck: textContentLower.includes(q),
-            includesResult: textContentLower.includes(q) ? 'MATCH' : 'NO MATCH'
-          });
-        }
-        
-        // Direct includes match
-        if (textContentLower.includes(q)) {
-          console.log(`✅ [Search] Match in textContent (includes): "${frame.name}" - found "${q}" in textContent (${textContent.length} chars)`);
-          return true;
-        }
-        
-        // Word boundary match for better accuracy
-        const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        if (wordBoundaryRegex.test(textContent)) {
-          console.log(`✅ [Search] Match in textContent (word boundary): "${frame.name}" - found "${q}" in textContent`);
-          return true;
-        }
-        
-        // Debug: log when query is not found in textContent (for first 2 frames to avoid spam)
-        if (q.length > 1 && currentIndex < 2) {
-          console.log(`❌ [Search] Query "${q}" NOT found in textContent for "${frame.name}"`);
-          console.log(`🔍 [Search] textContent full: "${textContent}"`);
-          console.log(`🔍 [Search] textContent lower: "${textContentLower}"`);
-        }
-      } else {
-        // Debug: log when textContent is missing
-        if (q.length > 1 && currentIndex < 2) {
-          console.log(`⚠️ [Search] No textContent for frame: "${frame.name}"`);
-        }
+      // Search in pageName (e.g. "novapay" contains "nova") - use includes for compound names
+      if ((frame as any).pageName && String((frame as any).pageName).toLowerCase().includes(q)) {
+        console.log(`✅ [Search] Match in pageName: "${(frame as any).pageName}"`);
+        return true;
       }
       
-      // Search in searchTokens if available (tokenized text) - search in each token
+      // Search in textContent - word boundary only
+      if ((frame as any).textContent && wordBoundaryRegex.test(String((frame as any).textContent || ''))) {
+        console.log(`✅ [Search] Match in textContent: "${frame.name}"`);
+        return true;
+      }
+      
+      // Search in searchTokens - exact or word-boundary (avoid "innovation" matching "nova")
       if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
-        const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').toLowerCase().trim()).filter(Boolean);
-        
-        // Debug: Log searchTokens for first 2 frames
-        if (currentIndex < 2 && q.length > 1) {
-          console.log(`🔍 [Search] Frame ${currentIndex} searchTokens check:`, {
-            frameName: frame.name,
-            query: q,
-            searchTokensCount: tokens.length,
-            searchTokens: tokens,
-            tokensString: tokens.join(', ')
-          });
-        }
-        
-        // Check if query matches any token exactly or as substring (bidirectional)
-        const matchingToken = tokens.find((token: string) => token === q || token.includes(q) || q.includes(token));
-        if (matchingToken) {
-          console.log(`✅ [Search] Match in searchTokens: "${frame.name}" - token "${matchingToken}" matches "${q}"`);
-          return true;
-        } else if (currentIndex < 2 && q.length > 1) {
-          console.log(`❌ [Search] Query "${q}" NOT found in searchTokens for "${frame.name}"`);
-          console.log(`🔍 [Search] searchTokens:`, tokens);
-        }
-      } else if (currentIndex < 2 && q.length > 1) {
-        console.log(`⚠️ [Search] No searchTokens for frame: "${frame.name}"`);
-      }
-      
-      // Search in texts - use both includes and word boundary search for better matching
-      // This is a fallback (truncated text from collectFrameText)
-      if (thumb.texts) {
-        const textsLower = thumb.texts.toLowerCase();
-        // Direct includes match
-        if (textsLower.includes(q)) {
-          console.log(`✅ [Search] Match in texts (includes): "${frame.name}" - found "${q}" in texts`);
-          return true;
-        }
-        // Word boundary match for better accuracy (handles "never" vs "nevertheless")
-        const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        if (wordBoundaryRegex.test(thumb.texts)) {
-          console.log(`✅ [Search] Match in texts (word boundary): "${frame.name}" - found "${q}" in texts`);
+        const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
+        const tokenMatch = tokens.find((token: string) => token.toLowerCase() === q || wordBoundaryRegex.test(token));
+        if (tokenMatch) {
+          console.log(`✅ [Search] Match in searchTokens: "${frame.name}"`);
           return true;
         }
       }
       
-      // Search in custom tags
+      // Search in texts (fallback) - word boundary only
+      if (thumb.texts && wordBoundaryRegex.test(thumb.texts)) {
+        console.log(`✅ [Search] Match in texts: "${frame.name}"`);
+        return true;
+      }
+      
+      // Search in custom tags - exact or word-boundary
       if (frame.customTags && Array.isArray(frame.customTags)) {
-        if (frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) {
+        if (frame.customTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) {
           console.log(`✅ [Search] Match in customTags: "${frame.name}"`);
           return true;
         }
       }
-      // Search in frame tags (predefined tags)
       if (frame.frameTags && Array.isArray(frame.frameTags)) {
-        if (frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) {
+        if (frame.frameTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) {
           console.log(`✅ [Search] Match in frameTags: "${frame.name}"`);
           return true;
         }
@@ -2543,7 +2425,7 @@ export default function Home() {
                   selected={selectedIndex === file.id || (selectedFile?.id === file.id && viewMode === 'file')}
                   onClick={() => {
                     setSelectedIndex(file.id);
-                    loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}` });
+                    loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}`, _chunks: file._chunks });
                   }}
                   sx={{
                     borderRadius: 1,
@@ -3074,13 +2956,16 @@ export default function Home() {
       }}>
         {/* Categorized Tags Display (per frame) */}
         <Grid container spacing={4}>
-        {/* Main gallery: */}
-        <Masonry
-          breakpointCols={{ default: 3, 1200: 3, 900: 2, 600: 1 }}
-          className="masonry-grid"
-          columnClassName="masonry-grid_column"
-          style={{ display: 'flex', gap: 16 }}
-        >
+        {/* Main gallery: lobby uses Grid (avoids Masonry overlap with 1-2 covers), file/allFrames use Masonry */}
+        {viewMode === 'lobby' ? (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: 2,
+              width: '100%'
+            }}
+          >
           {pagedThumbs.map((item: any, idx: number) => {
             // Handle both file and frame views
             if (item.isFile && item.file) {
@@ -3251,6 +3136,18 @@ export default function Home() {
                   {favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}
                 </IconButton>
                 
+                {/* Frame name and file/page */}
+                <Box sx={{ px: 0.5, mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {thumb.label}
+                  </Typography>
+                  {(thumb as any).filePageSubtitle && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {(thumb as any).filePageSubtitle}
+                    </Typography>
+                  )}
+                </Box>
+                
                 {/* Tags Display */}
                 {allTags.length > 0 && (
                   <Box
@@ -3288,7 +3185,54 @@ export default function Home() {
               </Box>
             );
           })}
+          </Box>
+        ) : (
+        <Masonry
+          breakpointCols={{ default: 3, 1200: 3, 900: 2, 600: 1 }}
+          className="masonry-grid"
+          columnClassName="masonry-grid_column"
+          style={{ display: 'flex', gap: 16 }}
+        >
+          {pagedThumbs.map((item: any, idx: number) => {
+            if (item.isFile && item.file) {
+              const { file, thumb } = item;
+              return (
+                <Box key={thumb.thumbName + idx} sx={{ mb: 2, textAlign: 'center', cursor: 'pointer', width: 260, position: 'relative' }} onClick={() => loadFileFrames(file)}>
+                  {thumb.image ? (
+                    <img src={thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 10, border: '1.5px solid #e0e0e0', background: '#fff', marginBottom: 6, width: '100%', height: 156, display: 'block', objectFit: 'cover' }} onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; const box = el.parentElement; if (box && !box.querySelector('.placeholder')) { const p = document.createElement('div'); p.className = 'placeholder'; p.style.cssText = 'padding:40px;text-align:center;color:#999;background:#f5f5f5;border-radius:10px;'; p.textContent = 'No thumbnail'; box.appendChild(p); } }} />
+                  ) : (
+                    <Box sx={{ borderRadius: 10, border: '1.5px solid #e0e0e0', background: '#f5f5f5', marginBottom: 6, width: '100%', height: 156, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}><Typography variant="body2">No thumbnail</Typography></Box>
+                  )}
+                  <Box sx={{ px: 0.5 }}><Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{file.fileName}</Typography><Typography variant="caption" color="text.secondary">{file.frameCount} frames</Typography></Box>
+                </Box>
+              );
+            }
+            if (!item.frame || !item.thumb) return null;
+            const { frame, thumb, index } = item;
+            const allTagsFrame = [...(frame.frameTags || []), ...(frame.sizeTags || []), ...(frame.customTags || [])].filter(Boolean);
+            const originalIndexFrame = index;
+            return (
+              <Box key={thumb.thumbName + idx} sx={{ mb: 2, textAlign: 'center', cursor: 'pointer', width: 260, position: 'relative' }}>
+                <img src={thumb.thumbnail || thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 10, border: (modalIndex === originalIndexFrame) ? '3px solid #667eea' : '1.5px solid #e0e0e0', background: '#fff', marginBottom: 6, width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} onClick={() => { const fi = frameThumbsForModal.findIndex((it: any) => it.index === originalIndexFrame); if (fi !== -1) handleOpenModal(fi); }} />
+                <IconButton onClick={() => toggleFavorite(thumb.thumbName)} color="error" sx={{ position: 'absolute', top: 8, right: 8, background: '#fff8', zIndex: 1 }} aria-label="Add to favorites">{favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}</IconButton>
+                <Box sx={{ px: 0.5, mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{thumb.label}</Typography>
+                  {(thumb as any).filePageSubtitle && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{(thumb as any).filePageSubtitle}</Typography>
+                  )}
+                </Box>
+                {allTagsFrame.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'flex-start', mt: 1, px: 0.5 }}>
+                    {allTagsFrame.map((tag: string, tagIdx: number) => (
+                      <Box key={tagIdx} sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: '16px', bgcolor: '#f5f5f5', border: 'none', fontSize: '0.75rem', fontWeight: 400, color: '#000', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{tag}</Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
         </Masonry>
+        )}
         
         <style jsx global>{`
           .masonry-grid { 

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { resolvePlanId, getPlanLimits } from '../../lib/plans';
-import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getGuestIndexFileCount, getGuestDistinctFileCount, getGuestTotalFrames } from '../../lib/subscription-helpers';
+import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount } from '../../lib/subscription-helpers';
 import {
   fetchFigmaFile,
   collectFrameNodes,
@@ -54,13 +54,13 @@ async function uploadCoverFromDataUrl(
   }
 }
 
-/** Get cover data URL for a page: first frame image, or fallback. */
+/** Get cover data URL for a page. Use plugin's coverImageDataUrl when single-page (plugin finds & displays correct cover, upload must use same).
+ *  Fallback: first frame of page. */
 function getCoverForPage(page: any, coverImageDataUrl: string | null, isSinglePage: boolean): string | null {
+  if (isSinglePage && coverImageDataUrl) return coverImageDataUrl;
   const firstFrame = Array.isArray(page?.frames) && page.frames[0] ? page.frames[0] : null;
   const frameImage = firstFrame && typeof firstFrame.image === 'string' && firstFrame.image.startsWith('data:image/') ? firstFrame.image : null;
-  if (frameImage) return frameImage;
-  if (isSinglePage && coverImageDataUrl) return coverImageDataUrl;
-  return null;
+  return frameImage || null;
 }
 
 function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
@@ -178,11 +178,11 @@ export default async function handler(
       let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
       const framesInPayload = Array.isArray(pagesArray) ? pagesArray.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0) : 0;
       const guestLimits = getPlanLimits('guest', false);
-      const maxFiles = guestLimits.maxProjects ?? 1;
       const maxFrames = guestLimits.maxFramesTotal ?? 50;
       const actionCheckLimit = bodyEarly.action === 'check_limit';
+      const maxFilesGuest = 1; // Guest: 1 Figma file only; unlimited pages within that file
 
-      const guestDistinctFiles = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
+      const guestDistinctFileCount = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);
 
       // Fetch all existing indices for this file (one-index-per-page model)
@@ -214,37 +214,26 @@ export default async function handler(
         }
       }
       const hasExistingForFile = existingByPageId.size > 0 || (existingRows && existingRows.length > 0);
-      const isSameFile = hasExistingForFile;
+      const isAddingNewFile = !hasExistingForFile;
+      const wouldExceedFileLimit = isAddingNewFile && guestDistinctFileCount >= maxFilesGuest;
       const estimatedFrameCount = typeof bodyEarly.estimatedFrameCount === 'number' ? bodyEarly.estimatedFrameCount : framesInPayload;
 
       if (actionCheckLimit) {
-        if (isSameFile) {
-          const framesAfter = guestTotalFrames + estimatedFrameCount;
-          if (framesAfter > maxFrames) {
-            return res.status(403).json({
-              success: false,
-              error: `Guest limit: up to ${maxFrames} frames. Create a free account for more.`,
-              code: 'GUEST_FRAME_LIMIT',
-              upgradeUrl: 'https://www.figdex.com/plugin-connect',
-            });
-          }
-        } else {
-          if (guestDistinctFiles >= maxFiles) {
-            return res.status(403).json({
-              success: false,
-              error: 'Guest limit: 1 file. Create a free account to index more files.',
-              code: 'GUEST_FILE_LIMIT',
-              upgradeUrl: 'https://www.figdex.com/plugin-connect',
-            });
-          }
-          if (guestTotalFrames + estimatedFrameCount > maxFrames) {
-            return res.status(403).json({
-              success: false,
-              error: `Guest limit: up to ${maxFrames} frames. Create a free account for more.`,
-              code: 'GUEST_FRAME_LIMIT',
-              upgradeUrl: 'https://www.figdex.com/plugin-connect',
-            });
-          }
+        if (wouldExceedFileLimit) {
+          return res.status(403).json({
+            success: false,
+            error: 'Guest limit: 1 Figma file. Create a free account to index more files.',
+            code: 'GUEST_FILE_LIMIT',
+            upgradeUrl: 'https://www.figdex.com/plugin-connect',
+          });
+        }
+        if (guestTotalFrames + estimatedFrameCount > maxFrames) {
+          return res.status(403).json({
+            success: false,
+            error: `Guest limit: up to ${maxFrames} frames. Create a free account for more.`,
+            code: 'GUEST_FRAME_LIMIT',
+            upgradeUrl: 'https://www.figdex.com/plugin-connect',
+          });
         }
         console.log(`[${requestId}] guest check_limit: allowed`);
         return res.status(200).json({ success: true, allowed: true });
@@ -252,12 +241,12 @@ export default async function handler(
 
       const coverImageDataUrl = typeof bodyEarly.coverImageDataUrl === 'string' ? bodyEarly.coverImageDataUrl : null;
       const isSinglePage = pagesArray.length === 1;
-      console.log(`[${requestId}] guest: one-index-per-page, pagesArray.length=${pagesArray?.length ?? 0}, framesInPayload=${framesInPayload}`);
+      console.log(`[${requestId}] guest: distinctFiles=${guestDistinctFileCount}, hasExistingForFile=${hasExistingForFile}, wouldExceedFileLimit=${wouldExceedFileLimit}, framesInPayload=${framesInPayload}`);
 
-      if (!isSameFile && guestDistinctFiles >= maxFiles) {
+      if (wouldExceedFileLimit) {
         return res.status(403).json({
           success: false,
-          error: 'Guest limit: 1 file. Create a free account to index more files.',
+          error: 'Guest limit: 1 Figma file. Create a free account to index more files.',
           code: 'GUEST_FILE_LIMIT',
           upgradeUrl: 'https://www.figdex.com/plugin-connect',
         });

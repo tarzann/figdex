@@ -1710,7 +1710,7 @@
     </script>
     <script>
       console.log('[FigDex] UI_BOOT_SIGNATURE', { ts: Date.now() });
-      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '' };
+      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false };
       try { window.__figdexUIState = state; } catch (e) {}
       var controller = null;
       var identityStore = null;
@@ -1926,6 +1926,15 @@
           pageListHelperEl.style.color = '#666';
           if (showNoSelectionHint) pageListHelperEl.textContent = 'Select at least one page to update the index.';
           else if (showIncludeHint) pageListHelperEl.textContent = 'Select the pages you want to include in the updated index.';
+        }
+        var openGalleryFromPagesBtn = document.getElementById('openGalleryFromPagesBtn');
+        if (openGalleryFromPagesBtn) {
+          var isDone = ctrlState === 'DONE';
+          var connected = model.identity && model.identity.exists;
+          var hasUserId = model.identity && model.identity.userId;
+          var showOpenWeb = isDone || (connected && (hasUserId || (state.hasEverCompletedIndex === true)));
+          var parentDiv = openGalleryFromPagesBtn.parentElement;
+          if (parentDiv) parentDiv.style.display = showOpenWeb ? 'block' : 'none';
         }
         var needsConnect = ctrlState === 'NEEDS_CONNECT';
         var isIndexing = ctrlState === 'INDEXING';
@@ -2356,6 +2365,7 @@
           });
         }
         sendIntent('refresh-pages');
+        sendIntent('get-has-ever-indexed');
       }
 
       window.addEventListener('message', function(event) {
@@ -2402,6 +2412,11 @@
             state._telemetryBootSent = true;
             telG.track('plugin_boot', buildTelemetryContext());
           }
+        }
+        if (msg.type === 'HAS_EVER_INDEXED') {
+          state.hasEverCompletedIndex = !!msg.hasEverCompletedIndex;
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+          return;
         }
         if (msg.type === 'set-selected-pages') {
           state.selectedPages = Array.isArray(msg.pages) ? msg.pages.slice(0, 500) : [];
@@ -2510,10 +2525,12 @@
         }
         if (msg.type === 'WEB_INDEX_CREATED') {
           state.resultUrl = msg.resultUrl || '';
+          state.hasEverCompletedIndex = true;
           if (controller) controller.dispatch('web_index_created', { resultUrl: state.resultUrl });
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
         }
         if (msg.type === 'done') {
+          state.hasEverCompletedIndex = true;
           if (controller) controller.dispatch('indexing_done');
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
         }

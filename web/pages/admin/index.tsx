@@ -204,6 +204,14 @@ export default function AdminDashboard() {
 
           <Card 
             sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
+            onClick={() => router.push('/admin/plans')}
+          >
+            <Settings sx={{ mb: 1 }} />
+            <Typography variant="body1">Plans</Typography>
+          </Card>
+
+          <Card 
+            sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
             onClick={() => router.push('/admin/addons')}
           >
             <AddBox sx={{ mb: 1 }} />
