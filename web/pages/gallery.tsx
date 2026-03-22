@@ -193,11 +193,19 @@ const formatTextSnippet = (text: string, limit = 160): string => {
 // Default empty frames array - will be loaded dynamically
 let frames: Frame[] = [];
 
-function getLogicalFileId(file: any): string {
+function getStableLogicalFileId(file: any): string {
   const fileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
   const projectId = typeof file?.project_id === 'string' ? file.project_id.trim() : '';
   const stableProjectId = projectId && projectId !== '0:0' ? projectId : '';
-  return fileKey || stableProjectId || String(file?.id || '');
+  return fileKey || stableProjectId || '';
+}
+
+function getLogicalFileId(file: any): string {
+  return getStableLogicalFileId(file) || String(file?.id || '');
+}
+
+function getNormalizedFileName(file: any): string {
+  return ((file?.file_name || '') as string).replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
 }
 
 function groupLogicalFiles(files: any[]): any[] {
@@ -212,7 +220,7 @@ function groupLogicalFiles(files: any[]): any[] {
 
   const groupedParts = new Map<string, any[]>();
   partFiles.forEach((file: any) => {
-    const baseName = (file.file_name || '').replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim();
+    const baseName = getNormalizedFileName(file);
     const key = `${getLogicalFileId(file)}::${baseName}`;
     if (!groupedParts.has(key)) groupedParts.set(key, []);
     groupedParts.get(key)!.push(file);
@@ -250,7 +258,12 @@ function groupLogicalFiles(files: any[]): any[] {
   const groupedDisplay: any[] = [];
   finalGroups.forEach((group) => {
     if (group.length === 1) {
-      groupedDisplay.push(group[0]);
+      const single = group[0];
+      groupedDisplay.push({
+        ...single,
+        _stableLogicalId: getStableLogicalFileId(single),
+        _normalizedFileName: getNormalizedFileName(single),
+      });
       return;
     }
     const sorted = [...group].sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
@@ -262,12 +275,47 @@ function groupLogicalFiles(files: any[]): any[] {
       uploaded_at: first.uploaded_at,
       figma_file_key: first.figma_file_key,
       project_id: first.project_id,
+      _stableLogicalId: getStableLogicalFileId(first),
+      _normalizedFileName: getNormalizedFileName(first),
       _isGroupedFile: true,
       _chunks: chunks
     });
   });
 
-  return groupedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
+  const groupedByName = new Map<string, any[]>();
+  groupedDisplay.forEach((file: any) => {
+    const normalizedFileName = typeof file._normalizedFileName === 'string' ? file._normalizedFileName : getNormalizedFileName(file);
+    const nameKey = normalizedFileName || String(file.id || '');
+    if (!groupedByName.has(nameKey)) groupedByName.set(nameKey, []);
+    groupedByName.get(nameKey)!.push(file);
+  });
+
+  const mergedDisplay: any[] = [];
+  groupedByName.forEach((nameGroup) => {
+    const stableIds = Array.from(new Set(
+      nameGroup
+        .map((file: any) => (typeof file._stableLogicalId === 'string' ? file._stableLogicalId : ''))
+        .filter(Boolean)
+    ));
+
+    if (nameGroup.length === 1 || stableIds.length > 1) {
+      mergedDisplay.push(...nameGroup);
+      return;
+    }
+
+    const sorted = [...nameGroup].sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
+    const first = sorted[0];
+    const chunks = sorted.flatMap((item: any) => item._chunks ? item._chunks : [item]);
+    mergedDisplay.push({
+      ...first,
+      file_name: first._normalizedFileName || first.file_name,
+      _stableLogicalId: stableIds[0] || '',
+      _isGroupedFile: true,
+      _chunks: chunks
+    });
+  });
+
+  return mergedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
 }
 
 function buildLogicalFileMap(displayFiles: any[]) {
