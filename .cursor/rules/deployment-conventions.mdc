@@ -1,0 +1,14 @@
+---
+description: FigDex deployment rules - plugin local, web deploys from the web app
+globs: /Users/ranmor/Documents/FigDex Codex/**/*
+alwaysApply: true
+---
+
+# FigDex Deployment Conventions
+
+**IMPORTANT – remember:**
+
+1. **Plugin is local** – The Figma plugin (`/Users/ranmor/Documents/FigDex Codex/plugin/`) runs locally. Changes to `code.js`, `ui.html`, `manifest.json` do NOT require deployment. Users load the plugin from their local files.
+
+2. **Web changes deploy from `web/`** – Any changes to the web app (`/Users/ranmor/Documents/FigDex Codex/web/`) should be deployed from that directory with `npx vercel --prod` or `npm run deploy`.
+3. **Verify before production deploys** – Prefer `npm run build` in `/Users/ranmor/Documents/FigDex Codex/web/` before production deploys when the change is substantial.

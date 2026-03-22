@@ -1,0 +1,18 @@
+---
+description: FigDex project context - location and Git
+globs: 
+alwaysApply: true
+---
+
+# FigDex Project Context
+
+## Project Location
+- **Root:** `/Users/ranmor/Documents/FigDex Codex/` (plugin + web unified)
+- **Plugin:** `/Users/ranmor/Documents/FigDex Codex/plugin/`
+- **Web:** `/Users/ranmor/Documents/FigDex Codex/web/` (Next.js)
+
+## Git Repository
+- **GitHub:** https://github.com/tarzann/figdex
+- **Branch:** main (push: `git push origin main`)
+- **Deploy:** `cd /Users/ranmor/Documents/FigDex Codex/web && npx vercel --prod`
+- **Vercel Root Directory:** `web`

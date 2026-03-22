@@ -1,0 +1,17 @@
+---
+description: After editing plugin files, sync copy to backup path
+globs: /Users/ranmor/Documents/FigDex Codex/plugin/**/*
+alwaysApply: false
+---
+
+# Plugin Sync After Edit
+
+**When you edit any file in `/Users/ranmor/Documents/FigDex Codex/plugin/`**, after saving the changes run:
+
+```bash
+rsync -av --exclude='.DS_Store' --exclude='*.backup' --exclude='_archive' "/Users/ranmor/Documents/FigDex Codex/plugin/" "/Users/ranmor/My Drive (ran.3dcube@gmail.com) (1)/FigDex Plugin - latest version/"
+```
+
+This keeps a synced copy at `My Drive/FigDex Plugin - latest version/`.
+
+To change the target path, edit this rule.
