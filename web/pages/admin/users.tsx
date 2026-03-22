@@ -30,7 +30,7 @@ import { Edit, Delete, Add, ArrowBack, DeleteForever } from '@mui/icons-material
 import { getPlanLimits } from '../../lib/plans';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.29.3'; // Protected admin: no edit/delete for ranmor01@gmail.com
+const PAGE_VERSION = 'v1.29.4'; // Adds guest purge support in admin user management
 const PROTECTED_ADMIN_EMAILS = ['ranmor01@gmail.com', 'ranmor@gmail.com'];
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
@@ -319,8 +319,12 @@ export default function AdminUsers() {
     }
   };
 
-  const handlePurge = async (userId: string, email: string) => {
-    const step1 = confirm(`Delete permanently the user ${email}? This will remove account, indices and storage. This action cannot be undone.`);
+  const handlePurge = async (userId: string, email: string, isGuest = false) => {
+    const entityLabel = isGuest ? `guest ${email}` : `user ${email}`;
+    const impactLabel = isGuest
+      ? 'This will remove all guest indices for this anon user.'
+      : 'This will remove account, indices and storage.';
+    const step1 = confirm(`Delete permanently the ${entityLabel}? ${impactLabel} This action cannot be undone.`);
     if (!step1) return;
     const step2 = prompt('Type DELETE to confirm permanent deletion');
     if (step2 !== 'DELETE') return;
@@ -333,7 +337,7 @@ export default function AdminUsers() {
       const data = await response.json();
       if (data.success) {
         await loadUsers();
-        alert('User deleted permanently');
+        alert(isGuest ? 'Guest deleted permanently' : 'User deleted permanently');
       } else {
         setError(data.error || 'Failed to delete user permanently');
       }
@@ -449,7 +453,14 @@ export default function AdminUsers() {
                 </TableCell>
                 <TableCell align="right">
                   {user.is_guest ? (
-                    <Typography variant="caption" color="text.secondary">Guest only</Typography>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handlePurge(user.id, user.email, true)}
+                      title="Delete guest permanently"
+                    >
+                      <DeleteForever />
+                    </IconButton>
                   ) : PROTECTED_ADMIN_EMAILS.includes(user.email) ? (
                     <Typography variant="caption" color="text.secondary">Protected</Typography>
                   ) : (
@@ -611,4 +622,3 @@ export default function AdminUsers() {
     </Container>
   );
 }
-

@@ -16,6 +16,24 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
     }
     const storageBucket = (process.env.STORAGE_BUCKET as string | undefined) || 'figdex-uploads';
     const supabaseAdmin = createClient(serviceUrl, serviceKey);
+    const guestPrefix = 'guest:';
+    if (userId.startsWith(guestPrefix)) {
+      const anonId = userId.slice(guestPrefix.length).trim();
+      if (!anonId) return res.status(400).json({ success: false, error: 'Missing guest anon id' });
+
+      const { error: guestIdxErr } = await supabaseAdmin
+        .from('index_files')
+        .delete()
+        .eq('owner_anon_id', anonId)
+        .is('user_id', null);
+
+      if (guestIdxErr) {
+        return res.status(500).json({ success: false, error: `Failed to delete guest index_files: ${guestIdxErr.message}` });
+      }
+
+      return res.status(200).json({ success: true, deletedGuestAnonId: anonId });
+    }
+
     // Verify user exists and is not protected admin
     const PROTECTED_EMAILS = ['ranmor01@gmail.com', 'ranmor@gmail.com'];
     const { data: user, error: userErr } = await supabaseAdmin.from('users').select('id, email').eq('id', userId).maybeSingle();
@@ -61,5 +79,4 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default requireAdmin(purgeHandler);
-
 
