@@ -263,6 +263,45 @@ function groupLogicalFiles(files: any[]): any[] {
   return groupedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
 }
 
+function buildLogicalFileMap(displayFiles: any[]) {
+  const physicalToLogical = new Map<string, { id: string; fileName: string }>();
+  displayFiles.forEach((file: any) => {
+    const logical = {
+      id: file.id,
+      fileName: file.file_name || `Index ${file.id}`
+    };
+    const units = file._chunks ? file._chunks : [file];
+    units.forEach((unit: any) => {
+      if (unit?.id) physicalToLogical.set(unit.id, logical);
+    });
+  });
+  return physicalToLogical;
+}
+
+function groupLobbyThumbnailResults(displayFiles: any[], thumbnailResults: any[]) {
+  const grouped = new Map<string, { id: string; fileName: string; thumbnail?: string; frameCount: number }>();
+  const physicalToLogical = buildLogicalFileMap(displayFiles);
+
+  thumbnailResults.forEach((result: any) => {
+    if (!result?.success) return;
+    const logical = physicalToLogical.get(result.fileId) || { id: result.fileId, fileName: result.fileName || `Index ${result.fileId}` };
+    const existing = grouped.get(logical.id);
+    if (!existing) {
+      grouped.set(logical.id, {
+        id: logical.id,
+        fileName: logical.fileName,
+        thumbnail: result.thumbnail || undefined,
+        frameCount: result.frameCount || 0
+      });
+      return;
+    }
+    existing.frameCount += result.frameCount || 0;
+    if (!existing.thumbnail && result.thumbnail) existing.thumbnail = result.thumbnail;
+  });
+
+  return Array.from(grouped.values());
+}
+
 const modalStyle = {
   position: 'absolute' as const,
   top: '50%',
@@ -446,6 +485,7 @@ export default function Home() {
             setFrames([]);
             // Load file thumbnails and frames for guest (same as user path)
             const filesToLoad = displayFiles.flatMap((f: any) => (f._chunks ? f._chunks : [f]));
+            const physicalToLogicalGuest = buildLogicalFileMap(displayFiles);
             const loadFileThumbnailGuest = async (file: any) => {
               try {
                 const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
@@ -505,10 +545,17 @@ export default function Home() {
               Promise.all(filesToLoad.map((f: any) => loadFileThumbnailGuest(f))),
               Promise.all(filesToLoad.map((f: any) => loadIndexFramesGuest(f)))
             ]);
-            const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = [];
+            const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = groupLobbyThumbnailResults(displayFiles, thumbResults);
             const allFrames: any[] = [];
-            thumbResults.forEach((r: any) => { if (r.success) allFileThumbnails.push({ id: r.fileId, fileName: r.fileName, thumbnail: r.thumbnail || undefined, frameCount: r.frameCount }); });
-            frameRes.forEach((r: any) => { if (r.success && r.frames?.length) allFrames.push(...r.frames); });
+            frameRes.forEach((r: any) => {
+              if (!r.success || !r.frames?.length) return;
+              const logical = physicalToLogicalGuest.get(r.fileId) || { id: r.fileId, fileName: r.fileName || `Index ${r.fileId}` };
+              allFrames.push(...r.frames.map((frame: any) => ({
+                ...frame,
+                _fileId: logical.id,
+                _fileName: logical.fileName
+              })));
+            });
             setFileThumbnails(allFileThumbnails);
             setAllFramesData(allFrames);
             setLoading(false);
@@ -850,6 +897,9 @@ export default function Home() {
             }
           };
           
+          const filesToLoad = displayFiles.flatMap((f: any) => (f._chunks ? f._chunks : [f]));
+          const physicalToLogical = buildLogicalFileMap(displayFiles);
+
           // Load file thumbnails or frames based on view mode
           let loadPromises: Promise<any>[];
           let thumbnailResults: any[] = [];
@@ -857,8 +907,8 @@ export default function Home() {
           
           if (viewMode === 'lobby') {
             // Load both file thumbnails and all frames for lobby view (frames needed for search)
-            const thumbnailPromises = data.data.map((file: any) => loadFileThumbnail(file));
-            const framePromises = data.data.map((file: any) => loadIndexFrames(file));
+            const thumbnailPromises = filesToLoad.map((file: any) => loadFileThumbnail(file));
+            const framePromises = filesToLoad.map((file: any) => loadIndexFrames(file));
             const [thumbResults, frameRes] = await Promise.all([
               Promise.all(thumbnailPromises),
               Promise.all(framePromises)
@@ -867,11 +917,11 @@ export default function Home() {
             frameResults = frameRes;
           } else if (viewMode === 'allFrames') {
             // Load all frames from all files
-            loadPromises = data.data.map((file: any) => loadIndexFrames(file));
+            loadPromises = filesToLoad.map((file: any) => loadIndexFrames(file));
             frameResults = await Promise.all(loadPromises);
           } else {
             // Load frames for file view (specific file)
-            loadPromises = data.data.map((file: any) => loadIndexFrames(file));
+            loadPromises = filesToLoad.map((file: any) => loadIndexFrames(file));
             frameResults = await Promise.all(loadPromises);
           }
           
@@ -882,19 +932,9 @@ export default function Home() {
           
           // Process thumbnail results (lobby mode only)
           if (viewMode === 'lobby') {
+            allFileThumbnails.push(...groupLobbyThumbnailResults(displayFiles, thumbnailResults));
             thumbnailResults.forEach(result => {
-              if (result.success) {
-                console.log(`✅ Added thumbnail for file ${result.fileName} (${result.frameCount} frames)`);
-                console.log(`📸 [Process thumbnails] thumbnail value:`, result.thumbnail ? `${result.thumbnail.substring(0, 60)}...` : 'null/undefined');
-                allFileThumbnails.push({
-                  id: result.fileId,
-                  fileName: result.fileName,
-                  thumbnail: result.thumbnail || null, // Keep null instead of undefined
-                  frameCount: result.frameCount
-                });
-              } else if (!result.success) {
-                corruptedIndices.push(result.fileId);
-              }
+              if (!result.success) corruptedIndices.push(result.fileId);
             });
           }
           
@@ -924,8 +964,8 @@ export default function Home() {
                 })
                 .map((frame: any) => ({
                   ...frame,
-                  _fileId: result.fileId,
-                  _fileName: result.fileName
+                  _fileId: (physicalToLogical.get(result.fileId) || { id: result.fileId }).id,
+                  _fileName: (physicalToLogical.get(result.fileId) || { fileName: result.fileName }).fileName
                 }));
               allFrames.push(...framesWithFileId);
             } else if (!result.success) {
