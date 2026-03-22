@@ -677,12 +677,32 @@ figma.ui.onmessage = async (msg) => {
         return;
       }
 
-      // Pre-flight: check guest limits before preparing/exporting any frames
+      figma.ui.postMessage({ type: 'upload-started' });
+      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
+
+      // Load last indexed metadata to skip unchanged pages
+      var indexedMeta = [];
+      try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
+      if (!Array.isArray(indexedMeta)) indexedMeta = [];
+
+      // Determine which selected pages have changes (dirty) — skip unchanged
+      var dirtyPageIds = [];
+      for (var di = 0; di < selectedIds.length; di++) {
+        var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
+        if (!pageNode || pageNode.type !== 'PAGE') continue;
+        var currentSigs = await getFrameSignaturesForPage(pageNode);
+        var stored = indexedMeta.find(function (m) { return m.pageId === pageNode.id; });
+        var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
+        if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
+        dirtyPageIds.push(pageNode.id);
+      }
+
+      // Pre-flight: check guest limits against the pages that will actually be uploaded.
       if (isGuestMode && guestAnonId) {
         var estimatedFrameCount = 0;
-        for (var ei = 0; ei < selectedIds.length; ei++) {
-          var pageNode = await figma.getNodeByIdAsync(selectedIds[ei]);
-          if (pageNode && pageNode.type === 'PAGE') estimatedFrameCount += getTopLevelFrameIds(pageNode).length;
+        for (var ei = 0; ei < dirtyPageIds.length; ei++) {
+          var dirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[ei]);
+          if (dirtyPageNode && dirtyPageNode.type === 'PAGE') estimatedFrameCount += getTopLevelFrameIds(dirtyPageNode).length;
         }
         try {
           var checkRes = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
@@ -716,25 +736,6 @@ figma.ui.onmessage = async (msg) => {
         }
       }
 
-      figma.ui.postMessage({ type: 'upload-started' });
-      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
-
-      // Load last indexed metadata to skip unchanged pages
-      var indexedMeta = [];
-      try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
-      if (!Array.isArray(indexedMeta)) indexedMeta = [];
-
-      // Determine which selected pages have changes (dirty) — skip unchanged
-      var dirtyPageIds = [];
-      for (var di = 0; di < selectedIds.length; di++) {
-        var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
-        if (!pageNode || pageNode.type !== 'PAGE') continue;
-        var currentSigs = await getFrameSignaturesForPage(pageNode);
-        var stored = indexedMeta.find(function (m) { return m.pageId === pageNode.id; });
-        var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
-        if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
-        dirtyPageIds.push(pageNode.id);
-      }
       figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
