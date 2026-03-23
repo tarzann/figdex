@@ -698,9 +698,6 @@ figma.ui.onmessage = async (msg) => {
         return;
       }
 
-      figma.ui.postMessage({ type: 'upload-started' });
-      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
-
       // Load last indexed metadata to skip unchanged pages
       var indexedMeta = [];
       try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
@@ -756,6 +753,46 @@ figma.ui.onmessage = async (msg) => {
           return;
         }
       }
+
+      if (!isGuestMode && token) {
+        var estimatedConnectedFrameCount = 0;
+        for (var cei = 0; cei < dirtyPageIds.length; cei++) {
+          var connectedDirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[cei]);
+          if (connectedDirtyPageNode && connectedDirtyPageNode.type === 'PAGE') estimatedConnectedFrameCount += getTopLevelFrameIds(connectedDirtyPageNode).length;
+        }
+        try {
+          var connectedCheckRes = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({
+              source: 'figma-plugin',
+              galleryOnly: true,
+              action: 'check_limit',
+              fileKey: fileKey,
+              docId: docId,
+              fileName: fileName,
+              estimatedFrameCount: estimatedConnectedFrameCount
+            })
+          });
+          if (!connectedCheckRes.ok) {
+            var connectedErrText = '';
+            try { connectedErrText = await connectedCheckRes.text(); } catch (_) {}
+            var connectedErrJson = null;
+            try { connectedErrJson = connectedErrText ? JSON.parse(connectedErrText) : null; } catch (_) {}
+            var connectedErrMsg = (connectedErrJson && connectedErrJson.error) ? String(connectedErrJson.error) : 'Index failed';
+            figma.notify(connectedErrMsg, { error: true });
+            figma.ui.postMessage({ type: 'error', message: connectedErrMsg, code: connectedErrJson ? connectedErrJson.code : null, upgradeUrl: connectedErrJson ? connectedErrJson.upgradeUrl : null });
+            return;
+          }
+        } catch (connectedCheckErr) {
+          figma.notify('Could not verify limits. Please try again.', { error: true });
+          figma.ui.postMessage({ type: 'error', message: 'Could not verify limits. Please try again.' });
+          return;
+        }
+      }
+
+      figma.ui.postMessage({ type: 'upload-started' });
+      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
 
       figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
 

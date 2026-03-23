@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { resolvePlanId, getPlanLimits } from '../../lib/plans';
-import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount } from '../../lib/subscription-helpers';
+import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getCurrentTotalFrames, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount } from '../../lib/subscription-helpers';
 import {
   fetchFigmaFile,
   collectFrameNodes,
@@ -479,6 +479,48 @@ export default async function handler(
     } = req.body;
     const validateOnlyMode = Boolean(validateOnly);
 
+    // Connected plugin pre-flight: check file/frame limits before exporting or uploading frames.
+    if (galleryOnly && fileKeyInput && req.body?.action === 'check_limit') {
+      const fileKeyTrim = (typeof fileKeyInput === 'string' ? fileKeyInput : '').trim();
+      if (fileKeyTrim.length >= 10) {
+        const docId = docIdBody ?? req.body.doc_id ?? '0:0';
+        const estimatedFrameCount = typeof req.body?.estimatedFrameCount === 'number' ? req.body.estimatedFrameCount : 0;
+        const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
+        const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
+        const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
+        const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
+        const { data: authCandidateRows } = await supabaseAdmin
+          .from('index_files')
+          .select('project_id, figma_file_key')
+          .eq('user_id', user.id)
+          .limit(1000);
+        const hasExistingForFile = (authCandidateRows || []).some((row: any) => {
+          const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
+          return rowLogicalFileId === currentLogicalFileId;
+        });
+
+        if (!hasExistingForFile && limits.maxFiles !== null && currentFiles >= limits.maxFiles) {
+          return res.status(403).json({
+            success: false,
+            error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
+            code: 'FILE_LIMIT_REACHED',
+            upgradeUrl: 'https://www.figdex.com/pricing',
+          });
+        }
+
+        if (limits.maxFrames !== null && currentTotalFrames + estimatedFrameCount > limits.maxFrames) {
+          return res.status(403).json({
+            success: false,
+            error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
+            code: 'FRAME_LIMIT_REACHED',
+            upgradeUrl: 'https://www.figdex.com/pricing',
+          });
+        }
+
+        return res.status(200).json({ success: true, allowed: true });
+      }
+    }
+
     // Plugin gallery path: has indexPayload, no figmaToken (plugin exports frames locally)
     if (galleryOnly && fileKeyInput && indexPayloadBody) {
       const fileKeyTrim = (typeof fileKeyInput === 'string' ? fileKeyInput : '').trim();
@@ -498,6 +540,7 @@ export default async function handler(
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
+          const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
           const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
           const { data: authCandidateRows } = await supabaseAdmin
             .from('index_files')
@@ -529,6 +572,14 @@ export default async function handler(
               success: false,
               error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
               code: 'FILE_LIMIT_REACHED',
+              upgradeUrl: 'https://www.figdex.com/pricing',
+            });
+          }
+          if (limits.maxFrames !== null && currentTotalFrames + framesInPayload > limits.maxFrames) {
+            return res.status(403).json({
+              success: false,
+              error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
+              code: 'FRAME_LIMIT_REACHED',
               upgradeUrl: 'https://www.figdex.com/pricing',
             });
           }

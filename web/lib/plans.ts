@@ -34,11 +34,11 @@ const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     id: 'free',
     label: 'Free',
     maxProjects: 2, // 2 files quota (will be refined later)
-    maxFramesTotal: 300, // 300 frames quota
+    maxFramesTotal: 500, // 500 frames quota
     creditsPerMonth: 100, // 100 credits/month - DEPRECATED
     maxUploadsPerDay: null, // No daily limit
     maxUploadsPerMonth: null, // No monthly limit (will be refined later)
-    maxFramesPerMonth: 300, // 300 frames per month
+    maxFramesPerMonth: 500, // 500 frames per month
     maxIndexSizeBytes: 50 * MB,
     retentionDays: 30,
     maxIndexesPerDay: null // No rate limit (will be refined later)
@@ -178,4 +178,3 @@ export function getResetCredits(currentCredits: number, baseCredits: number | nu
   if (baseCredits === null) return currentCredits; // Unlimited plan
   return Math.max(currentCredits, baseCredits);
 }
-
