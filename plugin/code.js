@@ -943,7 +943,7 @@ figma.ui.onmessage = async (msg) => {
         if (errMsg !== 'Index failed' && errJson && errJson.details) errMsg += ' — ' + String(errJson.details);
         if (errMsg === 'Index failed') errMsg = 'Index failed (' + (res.status || '') + ')';
         var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
-        if ((res.status === 401 || res.status === 403) && !isGuestLimit) {
+        if (res.status === 401 && !isGuestLimit) {
           await setStored(STORAGE_KEYS.WEB_TOKEN, null);
           await setStored(STORAGE_KEYS.WEB_USER, null);
           figma.notify('Session expired. Please reconnect.', { error: true });

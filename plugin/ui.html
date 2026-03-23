@@ -2464,8 +2464,14 @@
           if (idStore) idStore.setIdentity(token, user);
           state.connectTimedOut = false;
           state.authExpiredMessage = '';
+          state.lastIndexError = '';
+          state.lastIndexErrorCode = null;
+          state.lastIndexUpgradeUrl = null;
           if (ctrl) {
-            if (token && user && ctrl.getState() === 'NEEDS_CONNECT') ctrl.dispatch('EVT_CONNECT_SUCCESS');
+            if (ctrl.getState && ctrl.getState() === 'ERROR') {
+              ctrl.dispatch('reset');
+            }
+            if (token && user && ctrl.getState && ctrl.getState() === 'NEEDS_CONNECT') ctrl.dispatch('EVT_CONNECT_SUCCESS');
             else ctrl.dispatch('identity_loaded');
           }
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: idStore ? idStore.getIdentity() : null });
@@ -2567,4 +2573,3 @@
     </script>
   </body>
 </html>
-
