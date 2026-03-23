@@ -43,6 +43,8 @@ const STORAGE_KEYS = {
 function getDocumentScopeId() {
   var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
   if (liveFileKey) return liveFileKey;
+  var docName = (typeof figma.root.name === 'string' && figma.root.name.trim()) ? figma.root.name.trim().toLowerCase() : '';
+  if (docName) return 'docname:' + docName;
   return figma.root.id || rootId || '0:0';
 }
 
@@ -337,7 +339,7 @@ function sendStoredIdentityToUI(webToken, webUser) {
     globalFileKey = savedKey;
     await setStored(STORAGE_KEYS.FILE_KEY, savedKey);
   }
-  if (savedKey && hasReliableCurrentFileKey()) {
+  if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
     figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey });
