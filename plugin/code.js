@@ -669,7 +669,7 @@ figma.ui.onmessage = async (msg) => {
             method: 'GET',
             headers: { 'Authorization': 'Bearer ' + token }
           });
-          if (validateRes.status === 401 || validateRes.status === 403) {
+          if (validateRes.status === 401) {
             await setStored(STORAGE_KEYS.WEB_TOKEN, null);
             await setStored(STORAGE_KEYS.WEB_USER, null);
             figma.notify('Session expired. Please reconnect.', { error: true });
