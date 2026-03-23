@@ -193,17 +193,40 @@ export async function getCurrentFileCount(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   userId: string
 ): Promise<number> {
-  const { count, error } = await supabaseAdmin
+  const logicalFileIds = new Set<string>();
+
+  const { data: savedConnections, error: connectionsError } = await supabaseAdmin
     .from('saved_connections')
-    .select('*', { count: 'exact', head: true })
+    .select('file_key')
     .eq('user_id', userId);
 
-  if (error) {
-    console.error('Error getting file count:', error);
-    return 0;
+  if (connectionsError) {
+    console.error('Error getting file count from saved_connections:', connectionsError);
+  } else if (Array.isArray(savedConnections)) {
+    savedConnections.forEach((row: any) => {
+      const fileKey = typeof row.file_key === 'string' ? row.file_key.trim() : '';
+      if (fileKey) logicalFileIds.add(fileKey);
+    });
   }
 
-  return count || 0;
+  const { data: indexFiles, error: indexFilesError } = await supabaseAdmin
+    .from('index_files')
+    .select('project_id, figma_file_key')
+    .eq('user_id', userId);
+
+  if (indexFilesError) {
+    console.error('Error getting file count from index_files:', indexFilesError);
+  } else if (Array.isArray(indexFiles)) {
+    indexFiles.forEach((row: any) => {
+      const fileKey = typeof row.figma_file_key === 'string' ? row.figma_file_key.trim() : '';
+      const projectId = typeof row.project_id === 'string' ? row.project_id.trim() : '';
+      const stableProjectId = projectId && projectId !== '0:0' ? projectId : '';
+      const logicalFileId = fileKey || stableProjectId || '';
+      if (logicalFileId) logicalFileIds.add(logicalFileId);
+    });
+  }
+
+  return logicalFileIds.size;
 }
 
 /**
