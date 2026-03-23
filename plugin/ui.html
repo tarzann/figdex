@@ -2474,6 +2474,12 @@
             if (token && user && ctrl.getState && ctrl.getState() === 'NEEDS_CONNECT') ctrl.dispatch('EVT_CONNECT_SUCCESS');
             else ctrl.dispatch('identity_loaded');
           }
+          sendIntent('get-has-ever-indexed');
+          sendIntent('get-file-key');
+          if (state.fileKey) {
+            sendIntent('refresh-pages');
+            sendIntent('get-file-thumbnail', { fileKey: state.fileKey });
+          }
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: idStore ? idStore.getIdentity() : null });
           var hcbLoaded = document.getElementById('headerConnectBtn');
           if (hcbLoaded) hcbLoaded.disabled = false;
