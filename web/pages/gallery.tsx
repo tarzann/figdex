@@ -655,98 +655,9 @@ export default function Home() {
             try {
               console.log(`📸 [loadFileThumbnail] Starting for file ${file.id} (${file.file_name})`);
               console.log(`📸 [loadFileThumbnail] file.file_thumbnail_url:`, file.file_thumbnail_url ? `${file.file_thumbnail_url.substring(0, 60)}...` : 'null/undefined');
-              
-              // First, try to use file_thumbnail_url from saved_connections (if available)
-              if (file.file_thumbnail_url) {
-                console.log(`✅ [loadFileThumbnail] Using file_thumbnail_url from saved_connections`);
-                
-                // Always fetch index data to get signed URL (even if we have file_thumbnail_url)
-                // This ensures we get a signed URL if the bucket is not public
-                let thumbnailUrl = file.file_thumbnail_url;
-                let totalFrameCount = 0;
-                
-                if (file.frame_count !== null && file.frame_count !== undefined) {
-                  totalFrameCount = file.frame_count;
-                }
-                
-                // Always fetch index data to get signed URL for cover image
-                try {
-                  console.log(`📸 [loadFileThumbnail] Fetching index data to get signed URL for cover image...`);
-                  const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
-                  if (indexResponse.ok) {
-                    const indexData = await indexResponse.json();
-                    console.log(`📸 [loadFileThumbnail] Index data response:`, indexData.success ? 'success' : 'failed');
-                    
-                    if (indexData.success && indexData.data) {
-                      // Count frames if needed
-                      if (totalFrameCount === 0 && indexData.data.index_data) {
-                        let indexDataContent = indexData.data.index_data;
-                        if (typeof indexDataContent === 'string') {
-                          try {
-                            indexDataContent = JSON.parse(indexDataContent);
-                          } catch (e) {
-                            // Ignore parse errors
-                          }
-                        }
-                        if (Array.isArray(indexDataContent)) {
-                          indexDataContent.forEach((pageItem: any) => {
-                            if (pageItem && pageItem.frames && Array.isArray(pageItem.frames)) {
-                              totalFrameCount += pageItem.frames.length;
-                            }
-                          });
-                        } else if (indexDataContent && typeof indexDataContent === 'object' && Array.isArray((indexDataContent as any).pages)) {
-                          (indexDataContent as any).pages.forEach((pageItem: any) => {
-                            if (pageItem && pageItem.frames && Array.isArray(pageItem.frames)) {
-                              totalFrameCount += pageItem.frames.length;
-                            }
-                          });
-                        }
-                      }
-                      
-                      // Always use coverImageUrl from get-index-data if available (it should be signed)
-                      if (indexData.data.coverImageUrl) {
-                        thumbnailUrl = indexData.data.coverImageUrl;
-                        console.log(`✅ [loadFileThumbnail] Got coverImageUrl from get-index-data: ${thumbnailUrl.substring(0, 80)}...`);
-                        console.log(`📸 [loadFileThumbnail] Full coverImageUrl: ${thumbnailUrl}`);
-                        
-                        // Check if it's a storage path format (bucket:path) - this shouldn't happen if get-index-data worked
-                        const isStoragePath = thumbnailUrl.includes(':') && !thumbnailUrl.startsWith('http');
-                        if (isStoragePath) {
-                          console.error(`❌ [loadFileThumbnail] Received storage path format instead of signed URL! This means get-index-data failed to convert it.`);
-                          console.error(`❌ [loadFileThumbnail] Storage path: ${thumbnailUrl}`);
-                          // Don't use it - it won't work
-                          thumbnailUrl = file.file_thumbnail_url || null;
-                        } else {
-                          // Check if URL has token (signed URL)
-                          const hasToken = /[?&]token=/.test(thumbnailUrl);
-                          console.log(`📸 [loadFileThumbnail] URL has token: ${hasToken}`);
-                          if (!hasToken && thumbnailUrl.startsWith('http')) {
-                            console.warn(`⚠️ [loadFileThumbnail] URL doesn't have token but is HTTP - may not be accessible if bucket is not public`);
-                          }
-                        }
-                      } else {
-                        console.warn(`⚠️ [loadFileThumbnail] No coverImageUrl in indexData.data, using file_thumbnail_url: ${thumbnailUrl ? thumbnailUrl.substring(0, 60) + '...' : 'null'}`);
-                      }
-                    }
-                  } else {
-                    console.warn(`⚠️ [loadFileThumbnail] Failed to fetch index data: ${indexResponse.status}`);
-                  }
-                } catch (e) {
-                  console.error(`❌ [loadFileThumbnail] Error fetching index data:`, e);
-                  // Fall back to file_thumbnail_url
-                }
-                return { 
-                  success: true, 
-                  fileId: file.id, 
-                  thumbnail: thumbnailUrl, 
-                  frameCount: totalFrameCount, 
-                  fileName: file.file_name 
-                };
-              }
-              
-              console.log(`⚠️ [loadFileThumbnail] No file_thumbnail_url, checking index_data for coverImageUrl...`);
-              
-              // Fallback: Get thumbnail from index_data (coverImageUrl or first frame)
+
+              // Always trust the cover that belongs to the index itself first.
+              // saved_connections.file_thumbnail_url is only a last-resort fallback.
               const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
               
               if (!indexResponse.ok) {
@@ -831,6 +742,11 @@ export default function Home() {
                 }
               }
               
+              if (!thumbnail && file.file_thumbnail_url) {
+                thumbnail = file.file_thumbnail_url;
+                console.log(`⚠️ [loadFileThumbnail] Falling back to saved connection thumbnail for file ${file.id}`);
+              }
+
               console.log(`📸 [loadFileThumbnail] Final thumbnail for file ${file.id} (${file.file_name}):`, thumbnail ? `${thumbnail.substring(0, 60)}...` : 'null/empty');
               return { success: true, fileId: file.id, thumbnail: thumbnail || null, frameCount: totalFrameCount, fileName: file.file_name };
             } catch (error) {
