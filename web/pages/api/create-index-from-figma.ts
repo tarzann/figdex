@@ -498,10 +498,16 @@ export default async function handler(
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
-          let authExistingRows: any[] | null = (await supabaseAdmin.from('index_files').select('id, index_data').eq('user_id', user.id).eq('figma_file_key', fileKeyTrim)).data;
-          if ((!authExistingRows || authExistingRows.length === 0) && docId) {
-            authExistingRows = (await supabaseAdmin.from('index_files').select('id, index_data').eq('user_id', user.id).eq('project_id', String(docId))).data;
-          }
+          const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
+          const { data: authCandidateRows } = await supabaseAdmin
+            .from('index_files')
+            .select('id, index_data, project_id, figma_file_key')
+            .eq('user_id', user.id)
+            .limit(1000);
+          const authExistingRows = (authCandidateRows || []).filter((row: any) => {
+            const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
+            return rowLogicalFileId === currentLogicalFileId;
+          });
           const authExistingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
           let authExistingFileCoverUrl: string | null = null;
           if (Array.isArray(authExistingRows)) {
