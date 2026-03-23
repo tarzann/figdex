@@ -46,6 +46,10 @@ function getDocumentScopeId() {
   return figma.root.id || rootId || '0:0';
 }
 
+function hasReliableCurrentFileKey() {
+  return typeof figma.fileKey === 'string' && !!figma.fileKey.trim();
+}
+
 function cryptoRandomString() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -90,6 +94,7 @@ function fetchWithTimeout(url, opts) {
 }
 
 let globalFileKey = '';
+let sessionFileKey = '';
 
 // --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
 // Top-level frames: (1) direct FRAME children of Page; (2) direct FRAME children of each Section (one level only). Excludes [NO_INDEX].
@@ -332,8 +337,9 @@ function sendStoredIdentityToUI(webToken, webUser) {
     globalFileKey = savedKey;
     await setStored(STORAGE_KEYS.FILE_KEY, savedKey);
   }
-  if (savedKey) {
+  if (savedKey && hasReliableCurrentFileKey()) {
     globalFileKey = savedKey;
+    sessionFileKey = savedKey;
     figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey });
   }
   var webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
@@ -400,6 +406,7 @@ figma.ui.onmessage = async (msg) => {
   }
   if (msg.type === 'set-file-key') {
     globalFileKey = msg.fileKey || '';
+    sessionFileKey = globalFileKey;
     await setStored(STORAGE_KEYS.FILE_KEY, globalFileKey);
     if (msg.fileName != null) await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName);
     return;
@@ -641,7 +648,7 @@ figma.ui.onmessage = async (msg) => {
       var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
       if (typeof storedDocKey !== 'string') storedDocKey = '';
       storedDocKey = storedDocKey ? storedDocKey.trim() : '';
-      var fileKey = currentDocKey || storedDocKey || '';
+      var fileKey = currentDocKey || sessionFileKey || (hasReliableCurrentFileKey() ? storedDocKey : '') || '';
       if (currentDocKey && currentDocKey !== storedDocKey) {
         await setStored(STORAGE_KEYS.FILE_KEY, currentDocKey);
       }
