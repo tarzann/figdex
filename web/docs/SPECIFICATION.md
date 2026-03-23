@@ -1,7 +1,7 @@
 # FigDex - Complete System Specification
 
-**Version:** v1.30.6  
-**Last Updated:** December 24, 2025  
+**Version:** v1.32.02  
+**Last Updated:** March 23, 2026  
 **Documentation Version:** 2.0
 
 ---
@@ -499,6 +499,5 @@ See `docs/setup/ENVIRONMENT_VARIABLES.md` for complete list.
 ---
 
 **Last Updated:** December 24, 2025  
-**Version:** v1.30.6  
+**Version:** v1.32.02  
 **Documentation Version:** 2.0
-

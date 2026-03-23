@@ -1,12 +1,20 @@
 # FigDex - Version Information
 
-**Current Version:** v1.30.18  
-**Release Date:** December 25, 2025  
-**Build Timestamp:** 2025-12-25 22:42:16
+**Current Version:** v1.32.02  
+**Release Date:** March 23, 2026  
+**Build Timestamp:** 2026-03-23 19:37:53 IST
 
 ---
 
 ## Version History
+
+### v1.32.02 (March 23, 2026)
+- Guest users now appear in admin and can be deleted.
+- Gallery lobby groups multiple pages from the same Figma file into one logical file.
+- File cover is preserved at file level and no longer replaced by later chunk uploads.
+- Connected-user file detection and reopen flow were stabilized.
+- Free plan limits now enforce 2 files and 500 total frames.
+- Plugin indexing now performs a pre-check before export/upload and stops immediately on limit overflow.
 
 ### v1.30.18 (December 25, 2025)
 - **Gallery Lobby View**: New unified navigation menu with file thumbnails
@@ -84,6 +92,5 @@ All core features are operational:
 
 ---
 
-**Last Updated:** December 25, 2025  
-**Version:** v1.30.18
-
+**Last Updated:** March 23, 2026  
+**Version:** v1.32.02

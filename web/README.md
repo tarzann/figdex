@@ -1,7 +1,7 @@
 # FigDex - Figma Indexing Platform
 
-**Version:** v1.30.6  
-**Last Updated:** December 24, 2025
+**Version:** v1.32.02  
+**Last Updated:** March 23, 2026
 
 A comprehensive platform for creating, managing, and sharing searchable indexes of Figma files.
 
@@ -47,7 +47,7 @@ All documentation is organized in the `docs/` directory:
   - Deployment instructions
 
 - **[docs/VERSION.md](./docs/VERSION.md)** - Version information
-  - Current version: v1.30.6
+  - Current version: v1.32.02
   - Version history
   - Release notes
 
@@ -207,14 +207,14 @@ See **[docs/setup/VERCEL_SETUP.md](./docs/setup/VERCEL_SETUP.md)** for detailed 
 
 ## 📊 System Status
 
-**Current Version:** v1.30.6
+**Current Version:** v1.32.02
 
-### Recent Updates (v1.30.6)
-- ✅ Add-ons Management System: Complete management with packages and user subscriptions
-- ✅ Add-on Packages: Predefined add-on packages for files, frames, and daily indexes
-- ✅ Sorting Functionality: Sort all columns in Add-ons Management tables
-- ✅ Subscription Model: Monthly subscription with add-ons
-- ✅ Sharing System: User-level and search results sharing with shortened links
+### Recent Updates (v1.32.02)
+- ✅ Guest and free user flows stabilized end-to-end
+- ✅ Gallery lobby grouping fixed for multiple pages from the same Figma file
+- ✅ File-level cover preservation fixed for page updates and chunked uploads
+- ✅ Connected-user indexing state fixed across reconnect and reopen
+- ✅ Free plan limits enforced at 2 files and 500 total frames with early blocking
 
 ---
 
@@ -245,4 +245,4 @@ For issues or questions:
 ---
 
 **Last Updated:** December 24, 2025  
-**Version:** v1.30.6
+**Version:** v1.32.02

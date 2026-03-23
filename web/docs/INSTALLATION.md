@@ -1,7 +1,7 @@
 # FigDex - Installation Instructions
 
-**Version:** v1.30.6  
-**Last Updated:** December 24, 2025
+**Version:** v1.32.02  
+**Last Updated:** March 23, 2026
 
 Complete installation guide for FigDex platform.
 
@@ -272,5 +272,4 @@ For more help, see `docs/setup/SETUP.md` or contact support.
 ---
 
 **Last Updated:** December 24, 2025  
-**Version:** v1.30.6
-
+**Version:** v1.32.02

@@ -1,5 +1,18 @@
 # Indexo Plugin - Changelog
 
+## Version 1.32.02 - Guest and Free Flow Stabilization
+**Date:** March 23, 2026
+
+### ✅ Fixed
+- Guest users now surface correctly in admin and can be managed from the web.
+- File detection now stays scoped to the current Figma file and no longer leaks across other files.
+- Reopening the plugin restores the current file link without falsely reusing another file state.
+- Connected users no longer see false "already indexed" state on a new file.
+- Plan limit errors no longer disconnect the user or show expired-session behavior.
+- Limit checks run before export/upload begins, so blocked actions stop immediately.
+- Free plan flow now consistently enforces 2 files and 500 total frames.
+- Cover handling stays at file level and remains stable during chunked page uploads.
+
 ## משתמש חדש – כל הפלואו מוכן (New User Full Flow Ready) ✅
 **Date:** January 31, 2026
 

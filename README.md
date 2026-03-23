@@ -1,7 +1,7 @@
 # FigDex - Complete System Documentation
 
-**System Version:** v1.30.77  
-**Last Updated:** January 7, 2026  
+**System Version:** v1.32.02  
+**Last Updated:** March 23, 2026  
 **Status:** ✅ Production Ready
 
 ---
@@ -50,11 +50,11 @@ FigDex/
 
 ## 📦 Component Versions
 
-### Plugin Version: v1.30.77
+### Plugin Version: v1.32.02
 - **Location:** `plugin/`
 - **Main Files:**
-  - `code.js` - Plugin runtime (v1.30.77)
-  - `ui.html` - Plugin UI (v1.30.77)
+  - `code.js` - Plugin runtime (v1.32.02)
+  - `ui.html` - Plugin UI (v1.32.02)
   - `manifest.json` - Plugin manifest
 - **Key Features:**
   - Reads __FRAME_TEXTS__ from thumbnail frames
@@ -63,11 +63,11 @@ FigDex/
   - **Data encryption for sensitive tokens and user info**
   - **Page exclusion from indexing**
 
-### Web Application Version: v1.30.31
+### Web Application Version: v1.32.02
 - **Location:** `FigDex/web/` (production source for www.figdex.com)
 - **Main Components:**
-  - API Routes: v1.30.40 (upload-index-v2.ts)
-  - Gallery Pages: v1.30.24 (gallery.tsx)
+  - API Routes: v1.32.02
+  - Gallery Pages: v1.32.02
   - Core Libraries: Latest
 - **Key Features:**
   - Advanced search with textContent and searchTokens
@@ -257,14 +257,12 @@ Search is performed client-side in `web/pages/gallery.tsx` using:
 
 ## 📝 Version History
 
-### v1.30.77 (Current - January 7, 2026)
-- ✅ **Security Enhancement**: Added AES-256-GCM encryption for sensitive data
-  - Web system tokens encrypted
-  - Supabase tokens encrypted
-  - User information encrypted
-- ✅ **Page Exclusion**: Added ability to exclude pages from indexing
-- ✅ **UI Improvements**: Enhanced success notifications for connected users
-- ✅ **Bug Fixes**: Fixed context menu positioning and page list rendering
+### v1.32.02 (Current - March 23, 2026)
+- ✅ Guest and free flows stabilized end-to-end
+- ✅ Logical file grouping fixed in gallery lobby
+- ✅ File-level cover preserved during chunked updates
+- ✅ Reconnect and reopen behavior fixed for connected users
+- ✅ Free plan limits enforced early: 2 files, 500 total frames
 
 ### v1.30.40 (January 3, 2026)
 - ✅ Fixed text extraction from __FRAME_TEXTS__
@@ -374,7 +372,6 @@ When continuing development:
 
 ---
 
-**Last Updated:** January 7, 2026  
-**System Version:** v1.30.77  
+**Last Updated:** March 23, 2026  
+**System Version:** v1.32.02  
 **Status:** ✅ Production Ready
-

@@ -1,7 +1,7 @@
 # FigDex - Complete Features List
 
-**Version:** v1.30.6  
-**Last Updated:** December 24, 2025
+**Version:** v1.32.02  
+**Last Updated:** March 23, 2026
 
 ---
 
@@ -366,7 +366,7 @@
 
 ---
 
-## 🔄 Recent Updates (v1.30.6)
+## 🔄 Recent Updates (v1.32.02)
 
 ### ✅ New Features Added
 - **Add-ons Management System**: Complete add-ons management with packages and user subscriptions
@@ -383,5 +383,4 @@
 ---
 
 **Last Updated:** December 24, 2025  
-**Version:** v1.30.6
-
+**Version:** v1.32.02

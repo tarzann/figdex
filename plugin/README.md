@@ -1,7 +1,7 @@
 # FigDex Plugin
 
-**Version:** v1.30.77  
-**Last Updated:** January 7, 2026
+**Version:** v1.32.02  
+**Last Updated:** March 23, 2026
 
 ---
 
@@ -101,18 +101,19 @@ The plugin implements encryption for sensitive data stored in the FigDex page:
 
 ---
 
-**Version:** v1.30.77  
-**Build Date:** January 7, 2026
+**Version:** v1.32.02  
+**Build Date:** March 23, 2026
 
 ---
 
 ## 🔄 Recent Updates
 
-### v1.30.77 (January 7, 2026)
-- ✅ **Security Enhancement**: Added encryption for sensitive data (tokens, user info)
-- ✅ **Page Exclusion**: Added ability to exclude pages from indexing
-- ✅ **UI Improvements**: Enhanced success notifications for connected users
-- ✅ **Bug Fixes**: Fixed context menu positioning and page list rendering
+### v1.32.02 (March 23, 2026)
+- ✅ Guest and free user flows stabilized end-to-end
+- ✅ Correct per-file detection across reopen, reconnect, and multi-file switching
+- ✅ Pre-check of limits before any export or upload begins
+- ✅ Free plan aligned to 2 files and 500 total frames
+- ✅ File-level cover preserved across page updates and chunked uploads
 
 ### v1.30.65 (January 2, 2026)
 - ✅ Frame indexing improvements

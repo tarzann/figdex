@@ -1,6 +1,6 @@
 {
   "name": "my-figma-gallery",
-  "version": "1.30.31",
+  "version": "1.32.02",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

@@ -1,3 +1,15 @@
+## 2026-03-23 - v1.32.02 - Guest and Free Flow Stabilization
+
+Status: guest and free flows are now stable end-to-end across plugin and web.
+
+What was closed
+- Guest: one file limit, frame limit, admin visibility, and deletion support.
+- Free: two file limit, 500 total frames limit, and connected-user flow after signup.
+- Gallery: same Figma file pages are grouped correctly as one logical file.
+- Cover: file cover stays stable and is not replaced by later chunk uploads.
+- Plugin state: file link and indexed-state detection stay tied to the current file.
+- Preflight: plugin stops before export/upload when a limit would be exceeded.
+
 ## 2025-12-07 – Figma API Integration (working)
 
 Status: Figma API Integration end-to-end is working (validation, frame counting, job creation, processing, and history entry).
@@ -22,4 +34,3 @@ Key files
 Notes
 - Counting/collection rules match the plugin: FRAME direct children and FRAMEs within SECTIONs, excluding names containing `[NO_INDEX]`.
 - If future issues arise where only 1 frame appears, ensure the frame collection uses `/files/{fileKey}/nodes?ids=...` (or `/files?...depth`) and that `frame_node_refs` hold frame IDs (not just page IDs).
-

@@ -1,6 +1,6 @@
 # FigDex Version Information
 
-**Last Updated:** January 31, 2026
+**Last Updated:** March 23, 2026
 
 ---
 
@@ -23,21 +23,31 @@
 
 ---
 
-## Current System Version: v1.30.40
+## Current System Version: v1.32.02
 
 ### Component Versions
 
 | Component | Version | Location | Last Updated |
 |-----------|---------|----------|--------------|
-| **Plugin Runtime** | v1.30.36 | `plugin/code.js` | Jan 3, 2026 |
-| **Plugin UI** | v1.30.36 | `plugin/ui.html` | Jan 3, 2026 |
-| **API (upload-index-v2)** | v1.30.40 | `web/pages/api/upload-index-v2.ts` | Jan 3, 2026 |
-| **Gallery Page** | v1.30.24 | `web/pages/gallery.tsx` | Jan 2, 2026 |
-| **Index Management** | v1.30.28 | `web/pages/index-management.tsx` | Jan 1, 2026 |
+| **Plugin Runtime** | v1.32.02 | `plugin/code.js` | Mar 23, 2026 |
+| **Plugin UI** | v1.32.02 | `plugin/ui.html` | Mar 23, 2026 |
+| **Web App** | v1.32.02 | `web/package.json` / `web/lib/version.ts` | Mar 23, 2026 |
+| **Create Index API** | v1.32.02 | `web/pages/api/create-index-from-figma.ts` | Mar 23, 2026 |
+| **Gallery Flow** | v1.32.02 | `web/pages/gallery.tsx` | Mar 23, 2026 |
 
 ---
 
 ## Version History
+
+### v1.32.02 - Free and Guest Flow Stabilization (March 23, 2026)
+**Plugin + Web**
+- Guest users now appear in admin and can be deleted from user management.
+- Grouping now treats multiple indexed pages from the same Figma file as one logical file in the gallery lobby.
+- File cover handling was stabilized so the cover is kept at file level and is not replaced by later chunk uploads.
+- Connected-user file detection was fixed, including reopen behavior and avoiding stale file keys across files.
+- Free plan limits were aligned and enforced end-to-end: 2 files and 500 total frames.
+- Limit checks now run before plugin export/upload starts, so blocked indexing stops immediately.
+- Plugin no longer disconnects users on normal plan-limit responses.
 
 ### v1.31.00 – משתמש חדש כל הפלואו מוכן (January 31, 2026)
 **Plugin + Web**
@@ -104,13 +114,12 @@ When updating versions:
 
 ## Deployment Status
 
-- **Plugin**: ✅ Ready (v1.30.36)
-- **Web Application**: ✅ Deployed to Vercel (v1.30.40)
+- **Plugin**: ✅ Ready (v1.32.02)
+- **Web Application**: ✅ Deployed to Vercel (v1.32.02)
 - **Database**: ✅ Supabase (Production)
 - **Storage**: ✅ Supabase Storage (Production)
 
 ---
 
 **Note:** Always verify version numbers match across all components before deployment.
-
 
