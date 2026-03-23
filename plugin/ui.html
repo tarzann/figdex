@@ -1831,6 +1831,13 @@
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showPagesSkeletonNow);
       else setTimeout(showPagesSkeletonNow, 0);
 
+      function currentFileHasIndexedPages(pages) {
+        if (!Array.isArray(pages)) return false;
+        return pages.some(function(p) {
+          return p && (p.status === 'up_to_date' || p.status === 'needs_update');
+        });
+      }
+
       function render(stateOrControllerState, model) {
         if (!model) return;
         var uiState = (typeof stateOrControllerState === 'string') ? (window.__figdexUIState || { step1Expanded: false }) : stateOrControllerState;
@@ -1883,7 +1890,7 @@
             var hasSelection = (model.selectedPages || []).length > 0;
             var disableForNoSelection = ctrlState === 'READY_TO_INDEX' && !hasSelection;
             advanceBtn.disabled = !hasFileAndPages || disableForNoSelection || (ctrlState === 'INDEXING');
-            var isUpdate = model.fileKey && model.identity && model.identity.exists;
+            var isUpdate = model.fileKey && model.identity && model.identity.exists && currentFileHasIndexedPages(model.pages);
             advanceBtn.textContent = isUpdate ? 'Update index' : 'Index selected pages';
           }
         }
@@ -1913,15 +1920,15 @@
           var showHint = ctrlState !== 'ERROR';
           indexOutcomeHintEl.style.display = showHint ? 'block' : 'none';
           if (showHint) {
-            var hasFileAndUser = model.fileKey && model.identity && model.identity.exists;
-            indexOutcomeHintEl.textContent = hasFileAndUser ? 'This file already has an index. Re-indexing will update the existing gallery.' : 'This will create a visual gallery of all selected screens in FigDex Web.';
+            var hasIndexedCurrentFile = model.fileKey && model.identity && model.identity.exists && currentFileHasIndexedPages(model.pages);
+            indexOutcomeHintEl.textContent = hasIndexedCurrentFile ? 'This file already has an index. Re-indexing will update the existing gallery.' : 'This will create a visual gallery of all selected screens in FigDex Web.';
           }
         }
         var pageListHelperEl = document.getElementById('pageListHelperText');
         if (pageListHelperEl) {
           var noPagesSelected = (model.selectedPages || []).length === 0;
           var showNoSelectionHint = ctrlState === 'READY_TO_INDEX' && model.fileKey && model.pages && model.pages.length > 0 && noPagesSelected;
-          var showIncludeHint = ctrlState === 'READY_TO_INDEX' && model.fileKey && model.identity && model.identity.exists && !noPagesSelected;
+          var showIncludeHint = ctrlState === 'READY_TO_INDEX' && model.fileKey && model.identity && model.identity.exists && currentFileHasIndexedPages(model.pages) && !noPagesSelected;
           pageListHelperEl.style.display = (showNoSelectionHint || showIncludeHint) ? 'block' : 'none';
           pageListHelperEl.style.color = '#666';
           if (showNoSelectionHint) pageListHelperEl.textContent = 'Select at least one page to update the index.';
@@ -2560,5 +2567,4 @@
     </script>
   </body>
 </html>
-
 
