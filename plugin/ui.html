@@ -712,7 +712,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.02</div>
+        <div class="version" id="pluginVersionLabel">v1.32.03</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
         <span id="buttonClickLog" style="display: none; font-size: 0.6em; color: #1976d2; margin-left: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Last button click"></span>
       </div>
@@ -742,6 +742,25 @@
 
     <div style="margin: 8px 16px 0 16px; font-size: 0.75em; color: #555; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
       Index this file to browse & search all its screens in FigDex Web.
+    </div>
+
+    <div id="accountStatusCard" style="margin: 10px 16px 0 16px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+        <div style="font-size:0.85em; font-weight:600; color:#1976d2;">Account</div>
+        <span id="accountPlanBadge" style="font-size:0.7em; background:#fff3e0; color:#8d6e63; padding:2px 8px; border-radius:999px; border:1px solid #ffe0b2;">Guest</span>
+      </div>
+      <div id="accountIdentityLine" style="font-size:0.8em; font-weight:600; color:#333; margin-bottom:4px;">Guest mode</div>
+      <div id="accountStatusLine" style="font-size:0.72em; color:#666; margin-bottom:10px;">You can create your first index here and continue on the web later.</div>
+      <button type="button" id="accountPrimaryBtn" style="font-size:0.78em; background:#1976d2; color:#fff; border:none; border-radius:8px; cursor:pointer; padding:9px 14px; font-weight:600; width:100%;">Connect to FigDex</button>
+    </div>
+
+    <div id="currentFileStatusCard" style="margin: 10px 16px 0 16px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+        <div style="font-size:0.85em; font-weight:600; color:#1976d2;">Current File</div>
+        <span id="currentFileBadge" style="font-size:0.7em; background:#f5f5f5; color:#666; padding:2px 8px; border-radius:999px; border:1px solid #e0e0e0;">Link required</span>
+      </div>
+      <div id="currentFileTitle" style="font-size:0.8em; font-weight:600; color:#333; margin-bottom:4px;">This file is not linked yet.</div>
+      <div id="currentFileStatusLine" style="font-size:0.72em; color:#666;">Paste the Figma file link to load pages and keep this file synced correctly.</div>
     </div>
     
     <script>
@@ -907,6 +926,7 @@
         </div>
         <!-- Create Index Button -->
         <div id="actionCard" style="display:block; text-align: center; margin-top: 8px;">
+          <div id="actionStatusTitle" style="font-size:0.82em; font-weight:600; color:#333; margin-bottom:4px;">Ready to create index</div>
           <div id="indexOutcomeHint" style="font-size:0.7em; color:#666; margin-bottom:6px;">This will create a visual gallery of all selected screens in FigDex Web.</div>
           <div id="indexErrorBlock" style="display: none; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; text-align: center;">
             <div id="indexErrorText" style="font-size: 0.75em; color: #555; margin-bottom: 8px;"></div>
@@ -1107,7 +1127,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.02</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.03</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1172,7 +1192,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.02</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.03</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1838,6 +1858,70 @@
         });
       }
 
+      function getConnectedUserLabel(identity) {
+        if (!identity || !identity.exists) return 'Guest mode';
+        var user = identity.user || {};
+        return user.full_name || user.name || user.email || user.id || 'Connected user';
+      }
+
+      function getConnectedPlanLabel(identity) {
+        if (!identity || !identity.exists) return 'Guest';
+        var user = identity.user || {};
+        var plan = String(user.plan || '').toLowerCase();
+        if (plan === 'pro') return 'Pro';
+        if (plan === 'team') return 'Team';
+        if (plan === 'unlimited') return 'Unlimited';
+        return 'Free';
+      }
+
+      function getCurrentFileSummary(model) {
+        var pages = Array.isArray(model.pages) ? model.pages : [];
+        var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
+        var indexedPages = pages.filter(function(p) { return p && p.status === 'up_to_date'; }).length;
+        var dirtyPages = pages.filter(function(p) { return p && p.status === 'needs_update'; }).length;
+        var hasIndexedCurrentFile = !!(model.fileKey && currentFileHasIndexedPages(pages));
+        if (!model.fileKey) {
+          return { badge: 'Link required', badgeBg: '#f5f5f5', badgeColor: '#666', title: 'This file is not linked yet.', detail: 'Paste the Figma file link to load pages and keep this file synced correctly.' };
+        }
+        if (!pages.length) {
+          return { badge: 'Loading pages', badgeBg: '#e3f2fd', badgeColor: '#1565c0', title: 'This file is linked.', detail: 'Loading pages for this file now.' };
+        }
+        if (!hasIndexedCurrentFile) {
+          return { badge: 'Not indexed', badgeBg: '#fff3e0', badgeColor: '#8d6e63', title: 'This file is ready for its first index.', detail: selectedPages.length + ' pages selected from ' + pages.length + ' available.' };
+        }
+        if (dirtyPages > 0) {
+          return { badge: 'Needs update', badgeBg: '#fff8e1', badgeColor: '#a66b00', title: 'This file already has an index.', detail: dirtyPages + ' pages need update. ' + selectedPages.length + ' pages currently selected.' };
+        }
+        return { badge: 'Indexed', badgeBg: '#e8f5e9', badgeColor: '#2e7d32', title: 'This file is indexed and up to date.', detail: indexedPages + ' indexed pages. Select pages if you want to update the gallery.' };
+      }
+
+      function getPrimaryActionConfig(model, ctrlState) {
+        var pages = Array.isArray(model.pages) ? model.pages : [];
+        var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
+        var hasPages = pages.length > 0;
+        var hasSelection = selectedPages.length > 0;
+        var currentFileIndexed = !!(model.fileKey && currentFileHasIndexedPages(pages));
+        var isAuthError = !!(state.authExpiredMessage === 'Session expired');
+        var isLimitError = state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED';
+        if (ctrlState === 'INDEXING') return { title: 'Index in progress', detail: 'Please wait while FigDex prepares your gallery.', button: 'Indexing...', disabled: true, action: 'none' };
+        if (ctrlState === 'DONE') return { title: 'Index completed', detail: 'Open FigDex Web to review the updated gallery.', button: 'View in FigDex Web', disabled: false, action: 'open-web' };
+        if (ctrlState === 'ERROR') {
+          if (isAuthError) return { title: 'Reconnect required', detail: state.lastIndexError || 'Your session expired. Reconnect to continue indexing.', button: 'Reconnect', disabled: false, action: 'connect' };
+          if (isLimitError) return { title: 'Plan limit reached', detail: state.lastIndexError || 'This action exceeds your current plan limits.', button: 'Upgrade on Web', disabled: false, action: 'upgrade' };
+          return { title: 'Action blocked', detail: state.lastIndexError || 'Please review the message below and try again.', button: 'Try again', disabled: false, action: 'retry' };
+        }
+        if (!model.fileKey) return { title: 'Link this file first', detail: 'Paste the Figma file link before indexing.', button: 'Link file to continue', disabled: true, action: 'none' };
+        if (!hasPages) return { title: 'Loading pages', detail: 'Pages for this file are still loading.', button: 'Loading pages...', disabled: true, action: 'none' };
+        if (!hasSelection) return { title: 'Select at least one page', detail: 'Choose the pages you want to include in the gallery.', button: currentFileIndexed ? 'Select pages to update' : 'Select pages to index', disabled: true, action: 'none' };
+        return {
+          title: currentFileIndexed ? 'Ready to update index' : 'Ready to create index',
+          detail: currentFileIndexed ? 'Update the existing gallery with the selected pages.' : 'Create a searchable gallery for the selected pages in FigDex Web.',
+          button: currentFileIndexed ? 'Update index' : 'Create index',
+          disabled: false,
+          action: 'index'
+        };
+      }
+
       function render(stateOrControllerState, model) {
         if (!model) return;
         var uiState = (typeof stateOrControllerState === 'string') ? (window.__figdexUIState || { step1Expanded: false }) : stateOrControllerState;
@@ -1882,16 +1966,58 @@
         }
         var actionCardButtonsWrap = document.getElementById('actionCardButtonsWrap');
         if (actionCardButtonsWrap) actionCardButtonsWrap.style.display = ctrlState === 'ERROR' ? 'none' : 'flex';
+        var accountPlanBadge = document.getElementById('accountPlanBadge');
+        var accountIdentityLine = document.getElementById('accountIdentityLine');
+        var accountStatusLine = document.getElementById('accountStatusLine');
+        var accountPrimaryBtn = document.getElementById('accountPrimaryBtn');
+        var currentFileBadge = document.getElementById('currentFileBadge');
+        var currentFileTitle = document.getElementById('currentFileTitle');
+        var currentFileStatusLine = document.getElementById('currentFileStatusLine');
+        var actionStatusTitle = document.getElementById('actionStatusTitle');
+        var primaryAction = getPrimaryActionConfig(model, ctrlState);
+        var fileSummary = getCurrentFileSummary(model);
+        var connected = model.identity && model.identity.exists;
+        if (accountPlanBadge) {
+          accountPlanBadge.textContent = getConnectedPlanLabel(model.identity);
+          accountPlanBadge.style.background = connected ? '#e8f5e9' : '#fff3e0';
+          accountPlanBadge.style.color = connected ? '#2e7d32' : '#8d6e63';
+          accountPlanBadge.style.borderColor = connected ? '#c8e6c9' : '#ffe0b2';
+        }
+        if (accountIdentityLine) accountIdentityLine.textContent = getConnectedUserLabel(model.identity);
+        if (accountStatusLine) {
+          if (connected) accountStatusLine.textContent = 'Your account is connected and ready to work with this file.';
+          else if (state.authExpiredMessage) accountStatusLine.textContent = 'Reconnect to continue indexing and syncing this file.';
+          else accountStatusLine.textContent = 'You can create your first index here and continue on the web later.';
+        }
+        if (accountPrimaryBtn) {
+          if (connected) {
+            accountPrimaryBtn.textContent = 'Open FigDex Web';
+            accountPrimaryBtn.dataset.action = 'open-web';
+          } else if (state.lastIndexUpgradeUrl || state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED') {
+            accountPrimaryBtn.textContent = 'Create free account';
+            accountPrimaryBtn.dataset.action = 'upgrade';
+          } else if (state.authExpiredMessage) {
+            accountPrimaryBtn.textContent = 'Reconnect';
+            accountPrimaryBtn.dataset.action = 'connect';
+          } else {
+            accountPrimaryBtn.textContent = 'Connect to FigDex';
+            accountPrimaryBtn.dataset.action = 'connect';
+          }
+        }
+        if (currentFileBadge) {
+          currentFileBadge.textContent = fileSummary.badge;
+          currentFileBadge.style.background = fileSummary.badgeBg;
+          currentFileBadge.style.color = fileSummary.badgeColor;
+        }
+        if (currentFileTitle) currentFileTitle.textContent = fileSummary.title;
+        if (currentFileStatusLine) currentFileStatusLine.textContent = fileSummary.detail;
+        if (actionStatusTitle) actionStatusTitle.textContent = primaryAction.title;
         if (advanceBtn) {
           var isErrorState = ctrlState === 'ERROR';
           advanceBtn.style.display = isErrorState ? 'none' : '';
           if (!isErrorState) {
-            var hasFileAndPages = model.fileKey && model.pages && model.pages.length > 0;
-            var hasSelection = (model.selectedPages || []).length > 0;
-            var disableForNoSelection = ctrlState === 'READY_TO_INDEX' && !hasSelection;
-            advanceBtn.disabled = !hasFileAndPages || disableForNoSelection || (ctrlState === 'INDEXING');
-            var isUpdate = model.fileKey && model.identity && model.identity.exists && currentFileHasIndexedPages(model.pages);
-            advanceBtn.textContent = isUpdate ? 'Update index' : 'Index selected pages';
+            advanceBtn.disabled = !!primaryAction.disabled || primaryAction.action !== 'index';
+            advanceBtn.textContent = primaryAction.button;
           }
         }
         if (headerBanner) headerBanner.style.display = model.identity && model.identity.exists ? 'none' : 'flex';
@@ -1919,10 +2045,7 @@
         if (indexOutcomeHintEl) {
           var showHint = ctrlState !== 'ERROR';
           indexOutcomeHintEl.style.display = showHint ? 'block' : 'none';
-          if (showHint) {
-            var hasIndexedCurrentFile = model.fileKey && model.identity && model.identity.exists && currentFileHasIndexedPages(model.pages);
-            indexOutcomeHintEl.textContent = hasIndexedCurrentFile ? 'This file already has an index. Re-indexing will update the existing gallery.' : 'This will create a visual gallery of all selected screens in FigDex Web.';
-          }
+          if (showHint) indexOutcomeHintEl.textContent = primaryAction.detail;
         }
         var pageListHelperEl = document.getElementById('pageListHelperText');
         if (pageListHelperEl) {
@@ -1980,7 +2103,7 @@
         if (isError) {
           var errMsg = state.lastIndexError || 'Something went wrong.';
           var isAuthError = state.authExpiredMessage === 'Session expired' || (errMsg && (errMsg.indexOf('Session expired') >= 0 || errMsg.indexOf('Connect your FigDex') >= 0));
-          var isGuestLimit = state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT';
+          var isGuestLimit = state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED';
           if (indexErrorText) indexErrorText.textContent = errMsg;
           if (indexErrorActionBtn) {
             indexErrorActionBtn.textContent = isAuthError ? 'Continue on Web' : (isGuestLimit ? 'Create free account' : 'Try again');
@@ -2273,6 +2396,19 @@
           headerSaveSyncLink.addEventListener('click', function(e) {
             e.preventDefault();
             sendIntent('UI_OPEN_FIGDEX_WEB_UPGRADE');
+          });
+        }
+        var accountPrimaryBtn = document.getElementById('accountPrimaryBtn');
+        if (accountPrimaryBtn) {
+          accountPrimaryBtn.addEventListener('click', function() {
+            var action = accountPrimaryBtn.dataset.action || 'connect';
+            if (action === 'open-web') {
+              window.open(buildGalleryUrl(), 'figdex_web', 'width=1200,height=800');
+            } else if (action === 'upgrade') {
+              sendIntent('UI_OPEN_FIGDEX_WEB_UPGRADE');
+            } else {
+              sendIntent('UI_OPEN_FIGDEX_WEB');
+            }
           });
         }
         var connectTimeoutRetryBtn = document.getElementById('connectTimeoutRetryBtn');
