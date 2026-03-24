@@ -30,7 +30,7 @@ import { Edit, Delete, Add, ArrowBack, DeleteForever } from '@mui/icons-material
 import { getPlanLimits } from '../../lib/plans';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.29.4'; // Adds guest purge support in admin user management
+const PAGE_VERSION = 'v1.32.03'; // Faster admin users load by removing heavy computed stats
 const PROTECTED_ADMIN_EMAILS = ['ranmor01@gmail.com', 'ranmor@gmail.com'];
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 

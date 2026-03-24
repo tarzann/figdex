@@ -43,32 +43,10 @@ export default async function handler(
       if (guestErr) {
         return res.status(500).json({ success: false, error: guestErr.message });
       }
-      const guestIds = (guestIndices || []).map((idx: any) => idx.id).filter(Boolean);
-      const idToFrames = new Map<string, number>();
-      if (guestIds.length > 0) {
-        try {
-          const { data: rows } = await svc.from('index_files').select('id, index_data').in('id', guestIds);
-          if (Array.isArray(rows)) {
-            for (const row of rows) {
-              let json: any = row.index_data;
-              if (typeof json === 'string') {
-                try { json = JSON.parse(json); } catch { json = null; }
-              }
-              let frames = 0;
-              if (Array.isArray(json)) {
-                frames = json.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
-              } else if (json && typeof json === 'object' && Array.isArray((json as any).pages)) {
-                frames = (json as any).pages.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
-              }
-              idToFrames.set(row.id, frames);
-            }
-          }
-        } catch {}
-      }
       const indices = (guestIndices || []).map((idx: any) => ({
         ...idx,
         source: 'plugin',
-        frame_count: idToFrames.get(idx.id) ?? null,
+        frame_count: null,
       }));
       return res.status(200).json({
         success: true,
@@ -153,73 +131,6 @@ export default async function handler(
     }
     indices = (indicesByUserId || []);
 
-    // Compute missing stats (file_size and frames_count) only for entries that need it
-    // Since file_size column doesn't exist, we'll compute it for all indices
-    const idsNeedingStats = indices
-      .map((idx: any) => idx.id)
-      .filter(Boolean);
-
-    const idToSize = new Map<string, number>();
-    const idToFrames = new Map<string, number>();
-
-    if (idsNeedingStats.length > 0) {
-      try {
-        // Fetch only index_data for those ids
-        const { data: rows, error: rowsErr } = await svc
-          .from('index_files')
-          .select('id, index_data')
-          .in('id', idsNeedingStats);
-        if (!rowsErr && Array.isArray(rows)) {
-          // For storage pointers, fetch JSON from Storage
-          const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
-          const admin = (serviceUrl && serviceKey) ? createClient(serviceUrl, serviceKey) : null;
-          for (const row of rows) {
-            try {
-              let json: any = null;
-              if (row.index_data && typeof row.index_data === 'object' && row.index_data.storageRef && admin) {
-                // Handle storage reference
-                const [bucket, ...pathParts] = String(row.index_data.storageRef).split(':');
-                const path = pathParts.join(':');
-                const dl = await (admin as any).storage.from(bucket).download(path);
-                if (dl?.error) continue;
-                const txt = await dl.data.text();
-                json = JSON.parse(txt || '[]');
-              } else if (Array.isArray(row.index_data)) {
-                // Handle array format directly
-                json = row.index_data;
-              } else if (row.index_data && typeof row.index_data === 'object' && !row.index_data.storageRef) {
-                // Handle object format directly (e.g., { coverImageUrl, pages: [...] })
-                json = row.index_data;
-              } else if (typeof row.index_data === 'string') {
-                // Handle string format (parse JSON)
-                try { json = JSON.parse(row.index_data); } catch { json = null; }
-              }
-              if (json) {
-                const bytes = Buffer.byteLength(JSON.stringify(json), 'utf8');
-                idToSize.set(row.id, bytes);
-                // frames_count = sum of item.frames.length (supports array or object with pages)
-                let frames = 0;
-                if (Array.isArray(json)) {
-                  frames = json.reduce((sum: number, item: any) => sum + (Array.isArray(item?.frames) ? item.frames.length : 0), 0);
-                } else if (json && typeof json === 'object' && Array.isArray((json as any).pages)) {
-                  frames = (json as any).pages.reduce((sum: number, page: any) => sum + (Array.isArray(page?.frames) ? page.frames.length : 0), 0);
-                }
-                idToFrames.set(row.id, frames);
-                if (idToFrames.size <= 5) {
-                  console.log(`[get-indices] frames counted for id=${row.id}:`, frames, `(json type: ${Array.isArray(json) ? 'array' : typeof json}, has pages: ${json && typeof json === 'object' && Array.isArray((json as any).pages)})`);
-                }
-              } else {
-                console.warn(`[get-indices] Could not parse index_data for id=${row.id}, type: ${typeof row.index_data}`);
-              }
-            } catch (e) {
-              console.error(`[get-indices] Error processing row ${row.id}:`, e);
-            }
-          }
-        }
-      } catch {}
-    }
-
     // Check which indices were created via API (have index_jobs entry)
     const indexIds = indices.map((idx: any) => idx.id).filter(Boolean);
     const apiIndexIds = new Set<string>();
@@ -278,8 +189,8 @@ export default async function handler(
       figma_file_key: idx.figma_file_key,
       file_name: idx.file_name,
       uploaded_at: idx.uploaded_at,
-      file_size: (typeof idx.file_size === 'number' && idx.file_size > 0) ? idx.file_size : (idToSize.get(idx.id) || 0),
-      frame_count: idToFrames.get(idx.id) || null,
+      file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
+      frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
       source: apiIndexIds.has(idx.id) ? 'API' : 'Plugin', // Indicate if created via API or Plugin
       file_thumbnail_url: fileKeyToThumbnail.get(idx.figma_file_key) || null
     }));

@@ -98,7 +98,7 @@ import DevicesIcon from '@mui/icons-material/Devices';
 // import Header from '../components/Header';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.30.24'; // Cover image fixes; lobby frame count fix
+const PAGE_VERSION = 'v1.32.03'; // Faster lobby load with deferred frame hydration
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
 type Thumbnail = {
@@ -420,6 +420,7 @@ export default function Home() {
   const [fileThumbnails, setFileThumbnails] = useState<Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }>>([]);
   const [allFramesData, setAllFramesData] = useState<any[]>([]); // Store all frames for allFrames view
   const [guestPlan, setGuestPlan] = useState<string | null>(null); // Plan from get-indices when guest (e.g. 'guest')
+  const [lobbyFramesLoading, setLobbyFramesLoading] = useState(false);
   const [authFromUrlApplied, setAuthFromUrlApplied] = useState(0); // Incremented when apiKey/viewToken applied from URL; triggers reload
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0); // Incremented when tab becomes visible; triggers reload (e.g. after indexing from plugin)
 
@@ -526,10 +527,10 @@ export default function Home() {
         }
         // Prefer logged-in user over anonId: after claim, indices move to user_id so guest path returns empty
         const useGuestPath = anonId && (!user || !user.email);
-        if (useGuestPath && anonId) {
-          setCurrentIndexFile('guest');
-          const response = await fetch(`/api/get-indices?anonId=${encodeURIComponent(anonId)}`);
-          const data = await response.json();
+          if (useGuestPath && anonId) {
+            setCurrentIndexFile('guest');
+            const response = await fetch(`/api/get-indices?anonId=${encodeURIComponent(anonId)}`);
+            const data = await response.json();
           if (data.success && Array.isArray(data.data)) {
             if (data.plan) {
               setGuestPlan(data.plan);
@@ -596,24 +597,29 @@ export default function Home() {
                 return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
               }
             };
-            const [thumbResults, frameRes] = await Promise.all([
-              Promise.all(filesToLoad.map((f: any) => loadFileThumbnailGuest(f))),
-              Promise.all(filesToLoad.map((f: any) => loadIndexFramesGuest(f)))
-            ]);
+            const thumbResults = await Promise.all(filesToLoad.map((f: any) => loadFileThumbnailGuest(f)));
             const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = groupLobbyThumbnailResults(displayFiles, thumbResults);
-            const allFrames: any[] = [];
-            frameRes.forEach((r: any) => {
-              if (!r.success || !r.frames?.length) return;
-              const logical = physicalToLogicalGuest.get(r.fileId) || { id: r.fileId, fileName: r.fileName || `Index ${r.fileId}` };
-              allFrames.push(...r.frames.map((frame: any) => ({
-                ...frame,
-                _fileId: logical.id,
-                _fileName: logical.fileName
-              })));
-            });
             setFileThumbnails(allFileThumbnails);
-            setAllFramesData(allFrames);
+            setAllFramesData([]);
             setLoading(false);
+            setLobbyFramesLoading(true);
+            Promise.all(filesToLoad.map((f: any) => loadIndexFramesGuest(f))).then((frameRes) => {
+              const allFrames: any[] = [];
+              frameRes.forEach((r: any) => {
+                if (!r.success || !r.frames?.length) return;
+                const logical = physicalToLogicalGuest.get(r.fileId) || { id: r.fileId, fileName: r.fileName || `Index ${r.fileId}` };
+                allFrames.push(...r.frames.map((frame: any) => ({
+                  ...frame,
+                  _fileId: logical.id,
+                  _fileName: logical.fileName
+                })));
+              });
+              setAllFramesData(allFrames);
+            }).catch(() => {
+              // Keep lobby usable even if background frame loading fails.
+            }).finally(() => {
+              setLobbyFramesLoading(false);
+            });
             return;
           }
         }
@@ -877,15 +883,8 @@ export default function Home() {
           let frameResults: any[] = [];
           
           if (viewMode === 'lobby') {
-            // Load both file thumbnails and all frames for lobby view (frames needed for search)
-            const thumbnailPromises = filesToLoad.map((file: any) => loadFileThumbnail(file));
-            const framePromises = filesToLoad.map((file: any) => loadIndexFrames(file));
-            const [thumbResults, frameRes] = await Promise.all([
-              Promise.all(thumbnailPromises),
-              Promise.all(framePromises)
-            ]);
-            thumbnailResults = thumbResults;
-            frameResults = frameRes;
+            // Load lobby thumbnails first so the page becomes interactive quickly.
+            thumbnailResults = await Promise.all(filesToLoad.map((file: any) => loadFileThumbnail(file)));
           } else if (viewMode === 'allFrames') {
             // Load all frames from all files
             loadPromises = filesToLoad.map((file: any) => loadIndexFrames(file));
@@ -1006,8 +1005,39 @@ export default function Home() {
               console.log(`✅ Successfully loaded ${allFileThumbnails.length} file thumbnails from ${data.data.length - corruptedIndices.length} valid indices`);
             }
             setFileThumbnails(allFileThumbnails);
-            // Also load all frames for search functionality in lobby
-            setAllFramesData(allFrames);
+            setAllFramesData([]);
+            setLoading(false);
+            setLobbyFramesLoading(true);
+            Promise.all(filesToLoad.map((file: any) => loadIndexFrames(file)))
+              .then((deferredFrameResults) => {
+                const deferredFrames: any[] = [];
+                const seenDeferredFrameIds = new Set<string>();
+                deferredFrameResults.forEach((result) => {
+                  if (!result.success || !result.frames?.length) return;
+                  const logical = physicalToLogical.get(result.fileId) || { id: result.fileId, fileName: result.fileName };
+                  const framesWithFileId = result.frames
+                    .filter((frame: any) => {
+                      const fid = frame.url || frame.id || `${result.fileId}::${frame.name || 'u'}::${frame.id || ''}`;
+                      if (seenDeferredFrameIds.has(fid)) return false;
+                      seenDeferredFrameIds.add(fid);
+                      return true;
+                    })
+                    .map((frame: any) => ({
+                      ...frame,
+                      _fileId: logical.id,
+                      _fileName: logical.fileName
+                    }));
+                  deferredFrames.push(...framesWithFileId);
+                });
+                setAllFramesData(deferredFrames);
+              })
+              .catch((backgroundError) => {
+                console.warn('Background lobby frame loading failed:', backgroundError);
+              })
+              .finally(() => {
+                setLobbyFramesLoading(false);
+              });
+            return;
           } else if (viewMode === 'allFrames') {
             if (allFrames.length > 0) {
               console.log(`✅ Successfully loaded ${allFrames.length} total frames from ${data.data.length - corruptedIndices.length} valid indices`);
