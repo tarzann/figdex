@@ -28,30 +28,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(serviceUrl, serviceKey);
 
   let token: string;
-  let userId: string;
+  let connectedUser: { id: string; email?: string | null; full_name?: string | null; plan?: string | null; is_admin?: boolean } | null = null;
 
   if (bearer.startsWith('figdex_') && bearer.length >= 20) {
     let uid = await getUserIdFromApiKey(req);
     if (!uid) {
       const { data: userByKey, error: keyErr } = await supabase
         .from('users')
-        .select('id, is_active')
+        .select('id, email, full_name, plan, is_admin, is_active')
         .eq('api_key', bearer)
         .maybeSingle();
-      if (!keyErr && userByKey && userByKey.is_active !== false) uid = userByKey.id;
+      if (!keyErr && userByKey && userByKey.is_active !== false) {
+        uid = userByKey.id;
+        connectedUser = {
+          id: userByKey.id,
+          email: userByKey.email,
+          full_name: userByKey.full_name,
+          plan: userByKey.is_admin ? 'unlimited' : (userByKey.plan || 'free'),
+          is_admin: !!userByKey.is_admin,
+        };
+      }
     }
     if (!uid) return res.status(401).json({ error: 'Invalid API key' });
-    userId = uid;
+    if (!connectedUser) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id, email, full_name, plan, is_admin')
+        .eq('id', uid)
+        .single();
+      connectedUser = {
+        id: uid,
+        email: userRow?.email || null,
+        full_name: userRow?.full_name || null,
+        plan: userRow?.is_admin ? 'unlimited' : (userRow?.plan || 'free'),
+        is_admin: !!userRow?.is_admin,
+      };
+    }
     token = bearer;
   } else {
     const { data: { user }, error } = await supabase.auth.getUser(bearer);
     if (error || !user) return res.status(401).json({ error: 'Invalid session' });
-    userId = user.id;
-    const { data: row } = await supabase.from('users').select('api_key').eq('id', user.id).single();
+    const { data: row } = await supabase.from('users').select('api_key, email, full_name, plan, is_admin').eq('id', user.id).single();
     if (!row?.api_key) return res.status(400).json({ error: 'No API key for user' });
+    connectedUser = {
+      id: user.id,
+      email: row.email || user.email || null,
+      full_name: row.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null,
+      plan: row.is_admin ? 'unlimited' : (row.plan || 'free'),
+      is_admin: !!row.is_admin,
+    };
     token = row.api_key;
   }
 
-  setPluginConnect(nonce, token, userId);
+  setPluginConnect(nonce, token, connectedUser!);
   return res.status(200).json({ ok: true });
 }

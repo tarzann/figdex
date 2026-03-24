@@ -552,10 +552,11 @@ figma.ui.onmessage = async (msg) => {
       try {
         const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
         const data = res.ok ? await res.json() : {};
-        if (data.ready === true && data.token && data.userId) {
+        if (data.ready === true && data.token && (data.user || data.userId)) {
           try { console.log('[FigDex] poll_success'); } catch (e) {}
+          const connectedUser = typeof data.user === 'object' && data.user ? data.user : (typeof data.userId === 'object' ? data.userId : { id: data.userId });
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
-          await setStored(STORAGE_KEYS.WEB_USER, typeof data.userId === 'object' ? data.userId : { id: data.userId });
+          await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
           try {
             var claimRes = await fetch('https://www.figdex.com/api/claim/by-anon-id', {
               method: 'POST',
@@ -567,7 +568,7 @@ figma.ui.onmessage = async (msg) => {
               try { console.log('[FigDex] claim_by_anon_id claimed=' + claimData.claimed); } catch (_) {}
             }
           } catch (_) {}
-          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: typeof data.userId === 'object' ? data.userId : { id: data.userId } });
+          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
           return;
         }
         try { console.log('[FigDex] poll_tick'); } catch (e) {}
@@ -609,11 +610,12 @@ figma.ui.onmessage = async (msg) => {
       try {
         const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
         const data = res.ok ? await res.json() : {};
-        if (data.ready === true && data.token && data.userId) {
+        if (data.ready === true && data.token && (data.user || data.userId)) {
           try { console.log('[FigDex] poll_success'); } catch (e) {}
+          const connectedUser = typeof data.user === 'object' && data.user ? data.user : (typeof data.userId === 'object' ? data.userId : { id: data.userId });
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
-          await setStored(STORAGE_KEYS.WEB_USER, typeof data.userId === 'object' ? data.userId : { id: data.userId });
-          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: typeof data.userId === 'object' ? data.userId : { id: data.userId } });
+          await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
+          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
           return;
         }
         try { console.log('[FigDex] poll_tick'); } catch (e) {}

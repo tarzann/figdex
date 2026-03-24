@@ -7,7 +7,13 @@ const TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 interface Entry {
   token: string;
-  userId: string;
+  user: {
+    id: string;
+    email?: string | null;
+    full_name?: string | null;
+    plan?: string | null;
+    is_admin?: boolean;
+  };
   createdAt: number;
 }
 
@@ -20,12 +26,12 @@ function prune() {
   }
 }
 
-export function set(nonce: string, token: string, userId: string): void {
+export function set(nonce: string, token: string, user: { id: string; email?: string | null; full_name?: string | null; plan?: string | null; is_admin?: boolean }): void {
   prune();
-  store.set(nonce, { token, userId, createdAt: Date.now() });
+  store.set(nonce, { token, user, createdAt: Date.now() });
 }
 
-export function get(nonce: string): { token: string; userId: string } | null {
+export function get(nonce: string): { token: string; user: { id: string; email?: string | null; full_name?: string | null; plan?: string | null; is_admin?: boolean } } | null {
   prune();
   const entry = store.get(nonce);
   if (!entry) return null;
@@ -33,5 +39,5 @@ export function get(nonce: string): { token: string; userId: string } | null {
     store.delete(nonce);
     return null;
   }
-  return { token: entry.token, userId: entry.userId };
+  return { token: entry.token, user: entry.user };
 }

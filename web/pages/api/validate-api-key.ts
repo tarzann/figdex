@@ -51,7 +51,7 @@ export default async function handler(
     // Find user by API key
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, full_name, is_active')
+      .select('id, email, full_name, plan, is_admin, is_active')
       .eq('api_key', apiKey)
       .single();
 
@@ -76,7 +76,9 @@ export default async function handler(
       user: {
         id: user.id,
         email: user.email,
-        full_name: user.full_name
+        full_name: user.full_name,
+        plan: user.is_admin ? 'unlimited' : (user.plan || 'free'),
+        is_admin: !!user.is_admin
       }
     });
 
