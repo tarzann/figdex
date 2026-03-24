@@ -331,6 +331,23 @@ function sendStoredIdentityToUI(webToken, webUser) {
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
   }
 }
+
+async function refreshStoredWebUser(webToken) {
+  if (!webToken || typeof webToken !== 'string' || webToken.length < 10) return null;
+  try {
+    var validateRes = await fetch('https://www.figdex.com/api/validate-api-key', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + webToken }
+    });
+    if (!validateRes.ok) return null;
+    var validateData = await validateRes.json();
+    if (!validateData || !validateData.user || typeof validateData.user !== 'object') return null;
+    await setStored(STORAGE_KEYS.WEB_USER, validateData.user);
+    return validateData.user;
+  } catch (e) {
+    return null;
+  }
+}
 (async function bootstrap() {
   var savedKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
   // Fallback: figma.fileKey gives current file's key (when available, e.g. published plugins)
@@ -359,6 +376,10 @@ function sendStoredIdentityToUI(webToken, webUser) {
         webUser = oldUser;
       }
     } catch (e) { /* ignore */ }
+  }
+  if (webToken && (!webUser || !webUser.email || !webUser.plan)) {
+    var refreshedWebUser = await refreshStoredWebUser(webToken);
+    if (refreshedWebUser) webUser = refreshedWebUser;
   }
   sendStoredIdentityToUI(webToken, webUser);
   var anonId = await getOrCreateAnonId();
@@ -679,6 +700,15 @@ figma.ui.onmessage = async (msg) => {
             figma.notify('Session expired. Please reconnect.', { error: true });
             figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
             return;
+          }
+          if (validateRes.ok) {
+            try {
+              var validateData = await validateRes.json();
+              if (validateData && validateData.user) {
+                await setStored(STORAGE_KEYS.WEB_USER, validateData.user);
+                figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: token, user: validateData.user });
+              }
+            } catch (_) {}
           }
         } catch (e) { isGuestMode = true; }
       }
