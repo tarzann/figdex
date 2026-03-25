@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.13';
+const PLUGIN_VERSION = '1.32.14';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -598,13 +598,24 @@ function sendStoredIdentityToUI(webToken, webUser) {
   }
 }
 
+async function clearStoredWebIdentity() {
+  await setStored(STORAGE_KEYS.WEB_TOKEN, null);
+  await setStored(STORAGE_KEYS.WEB_USER, null);
+  figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+  figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
+}
+
 async function refreshStoredWebUser(webToken) {
   if (!webToken || typeof webToken !== 'string' || webToken.length < 10) return null;
   try {
-    var validateRes = await fetch('https://www.figdex.com/api/validate-api-key', {
+    var validateRes = await fetchWithTimeout('https://www.figdex.com/api/validate-api-key', {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
+    if (validateRes.status === 401) {
+      await clearStoredWebIdentity();
+      return null;
+    }
     if (!validateRes.ok) return null;
     var validateData = await validateRes.json();
     if (!validateData || !validateData.user || typeof validateData.user !== 'object') return null;
@@ -621,12 +632,15 @@ async function loadUserLimitsToUI(webToken) {
     return null;
   }
   try {
-    var limitsRes = await fetch('https://www.figdex.com/api/user/limits', {
+    var limitsRes = await fetchWithTimeout('https://www.figdex.com/api/user/limits', {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
+    if (limitsRes.status === 401) {
+      await clearStoredWebIdentity();
+      return null;
+    }
     if (!limitsRes.ok) {
-      figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
       return null;
     }
     var limitsJson = await limitsRes.json();
@@ -634,7 +648,6 @@ async function loadUserLimitsToUI(webToken) {
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: limits });
     return limits;
   } catch (e) {
-    figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
     return null;
   }
 }
@@ -674,6 +687,8 @@ async function loadUserLimitsToUI(webToken) {
   }
   sendStoredIdentityToUI(webToken, webUser);
   await loadUserLimitsToUI(webToken);
+  webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+  webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
   var anonId = await getOrCreateAnonId();
   figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
   if (webToken && typeof webToken === 'string' && anonId) {
@@ -982,29 +997,8 @@ figma.ui.onmessage = async (msg) => {
       var isGuestMode = !token || token.length < 10;
       if (!isGuestMode) {
         try {
-          var validateRes = await fetch('https://www.figdex.com/api/validate-api-key', {
-            method: 'GET',
-            headers: { 'Authorization': 'Bearer ' + token }
-          });
-          if (validateRes.status === 401) {
-            await setStored(STORAGE_KEYS.WEB_TOKEN, null);
-            await setStored(STORAGE_KEYS.WEB_USER, null);
-            figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
-            figma.notify('Session expired. Please reconnect.', { error: true });
-            figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
-            return;
-          }
-          if (validateRes.ok) {
-            try {
-              var validateData = await validateRes.json();
-              if (validateData && validateData.user) {
-                await setStored(STORAGE_KEYS.WEB_USER, validateData.user);
-                figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: token, user: validateData.user });
-                await loadUserLimitsToUI(token);
-              }
-            } catch (_) {}
-          }
-        } catch (e) { isGuestMode = true; }
+          await loadUserLimitsToUI(token);
+        } catch (_) {}
       }
       await figma.loadAllPagesAsync();
       const allPages = figma.root.children
