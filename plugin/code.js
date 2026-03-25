@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.12';
+const PLUGIN_VERSION = '1.32.13';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -163,6 +163,25 @@ async function deleteCurrentDocumentLegacyState() {
 }
 
 const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for large uploads
+const CHUNK_RETRYABLE_STATUSES = { 429: true, 502: true, 503: true, 504: true };
+const MAX_CHUNK_UPLOAD_ATTEMPTS = 4;
+
+function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+function getRetryAfterMs(res, attempt) {
+  try {
+    if (res && typeof res.headers?.get === 'function') {
+      var retryAfter = res.headers.get('Retry-After');
+      if (retryAfter) {
+        var seconds = Number(retryAfter);
+        if (!Number.isNaN(seconds) && seconds > 0) return seconds * 1000;
+      }
+    }
+  } catch (e) {}
+  return Math.min(12000, 1500 * Math.pow(2, Math.max(0, attempt - 1)));
+}
 function fetchWithTimeout(url, opts) {
   var controller = null;
   try { controller = new AbortController(); } catch (e) { controller = null; }
@@ -182,6 +201,38 @@ function fetchWithTimeout(url, opts) {
     }),
     timeoutPromise
   ]);
+}
+
+async function postChunkWithRetry(url, requestOptions, meta) {
+  var lastError = null;
+  var lastResponse = null;
+  for (var attempt = 1; attempt <= MAX_CHUNK_UPLOAD_ATTEMPTS; attempt++) {
+    try {
+      var response = await fetchWithTimeout(url, requestOptions);
+      if (response.ok) {
+        return { ok: true, response: response, attempts: attempt };
+      }
+      lastResponse = response;
+      var isRetryable = !!CHUNK_RETRYABLE_STATUSES[response.status];
+      if (!isRetryable || attempt === MAX_CHUNK_UPLOAD_ATTEMPTS) {
+        return { ok: false, response: response, attempts: attempt };
+      }
+      var waitMs = getRetryAfterMs(response, attempt);
+      var retryStep = 'Retrying part ' + meta.chunkNumber + '/' + meta.totalChunks + ' in ' + Math.ceil(waitMs / 1000) + 's...';
+      figma.notify(retryStep, { timeout: 1500 });
+      figma.ui.postMessage({ type: 'upload-progress', step: retryStep, framesDone: meta.framesDone });
+      await sleep(waitMs);
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_CHUNK_UPLOAD_ATTEMPTS) break;
+      var networkWaitMs = Math.min(10000, 1200 * Math.pow(2, Math.max(0, attempt - 1)));
+      var networkRetryStep = 'Connection issue on part ' + meta.chunkNumber + '/' + meta.totalChunks + '. Retrying...';
+      figma.notify(networkRetryStep, { timeout: 1500 });
+      figma.ui.postMessage({ type: 'upload-progress', step: networkRetryStep, framesDone: meta.framesDone });
+      await sleep(networkWaitMs);
+    }
+  }
+  return { ok: false, response: lastResponse, error: lastError, attempts: MAX_CHUNK_UPLOAD_ATTEMPTS };
 }
 
 function estimateJsonBytes(value) {
@@ -1227,6 +1278,8 @@ figma.ui.onmessage = async (msg) => {
       var totalChunks = chunkSpecs.length;
       var totalUploaded = 0;
       var lastViewToken = null;
+      var res = null;
+      var finalChunkError = null;
       figma.ui.postMessage({ type: 'upload-progress', step: 'Uploading to FigDex...', framesDone: totalUploaded });
       for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         var chunkPages = mergePages ? chunkSpecs[chunkIndex] : chunkSpecs[chunkIndex];
@@ -1253,35 +1306,44 @@ figma.ui.onmessage = async (msg) => {
         }
         if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
         var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
-        totalUploaded += chunkFrameCount;
         figma.notify(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks + '...' : 'Uploading to FigDex...');
         figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', framesDone: totalUploaded });
         var headers = { 'Content-Type': 'application/json' };
         if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
-        var res = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
+        var chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
           method: 'POST',
           headers: headers,
           body: JSON.stringify(body)
+        }, {
+          chunkNumber: chunkIndex + 1,
+          totalChunks: totalChunks,
+          framesDone: totalUploaded
         });
-        if (!res.ok) {
+        res = chunkAttempt.response || null;
+        finalChunkError = chunkAttempt.error || null;
+        if (!chunkAttempt.ok || !res || !res.ok) {
           totalChunks = -1;
           break;
         }
+        totalUploaded += chunkFrameCount;
+        figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploaded part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploaded to FigDex...', framesDone: totalUploaded });
         try {
           var data = await res.json();
           if (data && data.viewToken) lastViewToken = data.viewToken;
         } catch (_) {}
+        if (chunkIndex < totalChunks - 1) await sleep(250);
       }
-      if (totalChunks <= 0 || !res.ok) {
+      if (totalChunks <= 0 || !res || !res.ok) {
         var errText = '';
-        try { errText = await res.text(); } catch (_) {}
+        try { if (res && typeof res.text === 'function') errText = await res.text(); } catch (_) {}
         var errJson = null;
         try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
         var errMsg = (errJson && errJson.error) ? String(errJson.error) : 'Index failed';
+        if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message) errMsg = String(finalChunkError.message);
         if (errMsg !== 'Index failed' && errJson && errJson.details) errMsg += ' — ' + String(errJson.details);
-        if (errMsg === 'Index failed') errMsg = 'Index failed (' + (res.status || '') + ')';
+        if (errMsg === 'Index failed') errMsg = 'Index failed (' + ((res && res.status) || '') + ')';
         var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
-        if (res.status === 401 && !isGuestLimit) {
+        if (res && res.status === 401 && !isGuestLimit) {
           await setStored(STORAGE_KEYS.WEB_TOKEN, null);
           await setStored(STORAGE_KEYS.WEB_USER, null);
           figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
