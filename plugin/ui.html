@@ -712,7 +712,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.10</div>
+        <div class="version" id="pluginVersionLabel">v1.32.11</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
         <span id="buttonClickLog" style="display: none; font-size: 0.6em; color: #1976d2; margin-left: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Last button click"></span>
       </div>
@@ -944,6 +944,8 @@
         <div id="indexingBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
           <div id="indexingBlockText" style="font-size: 0.9em; color: #333; font-weight: 500;">Updating index…</div>
           <div id="indexingBlockSubtext" style="font-size: 0.8em; color: #666; margin-top: 4px;">Your existing gallery is being updated with the selected pages.</div>
+          <div id="indexingBlockHint" style="display:none; font-size:0.72em; color:#8d6e63; margin-top:8px;">This is taking longer than usual. Large or very long frames may need extra time.</div>
+          <button type="button" id="indexingDismissBtn" style="margin-top:10px; font-size:0.75em; background:transparent; color:#666; border:1px solid #ccc; border-radius:6px; cursor:pointer; padding:8px 12px;">Close status</button>
         </div>
         <!-- DONE: simple section + View in FigDex Web -->
         <div id="doneBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -1131,7 +1133,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.10</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.11</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1196,7 +1198,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.10</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.11</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1734,7 +1736,7 @@
     </script>
     <script>
       console.log('[FigDex] UI_BOOT_SIGNATURE', { ts: Date.now() });
-      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, accountLimits: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false };
+      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, accountLimits: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false, indexingStatusText: 'Updating index…', indexingStartedAt: 0, indexingLastProgressAt: 0 };
       try { window.__figdexUIState = state; } catch (e) {}
       var controller = null;
       var identityStore = null;
@@ -2125,8 +2127,19 @@
           indexingBlock.style.display = isIndexing ? 'block' : 'none';
           var indexingTextEl = document.getElementById('indexingBlockText');
           var indexingSubEl = document.getElementById('indexingBlockSubtext');
-          if (indexingTextEl && isIndexing) indexingTextEl.textContent = 'Updating index…';
+          var indexingHintEl = document.getElementById('indexingBlockHint');
+          if (indexingTextEl && isIndexing) indexingTextEl.textContent = state.indexingStatusText || 'Updating index…';
           if (indexingSubEl) indexingSubEl.style.display = isIndexing ? 'block' : 'none';
+          if (indexingHintEl) {
+            var isSlow = false;
+            if (isIndexing && state.indexingStartedAt) {
+              var nowTs = Date.now();
+              var sinceStart = nowTs - state.indexingStartedAt;
+              var sinceProgress = state.indexingLastProgressAt ? (nowTs - state.indexingLastProgressAt) : sinceStart;
+              isSlow = sinceStart > 15000 && sinceProgress > 8000;
+            }
+            indexingHintEl.style.display = isSlow ? 'block' : 'none';
+          }
         }
         if (doneBlock) doneBlock.style.display = isDone ? 'block' : 'none';
         var doneTitleEl = document.getElementById('doneBlockTitle');
@@ -2495,6 +2508,20 @@
             }
           });
         }
+        var indexingDismissBtn = document.getElementById('indexingDismissBtn');
+        if (indexingDismissBtn) {
+          indexingDismissBtn.addEventListener('click', function() {
+            state.indexingStatusText = 'Updating index…';
+            state.indexingStartedAt = 0;
+            state.indexingLastProgressAt = 0;
+            if (controller && controller.dispatch) {
+              controller.dispatch('reset');
+              if (typeof notifyStateChange === 'function') notifyStateChange(controller.getState());
+              var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+              render(state, model);
+            }
+          });
+        }
         var indexErrorActionBtn = document.getElementById('indexErrorActionBtn');
         if (indexErrorActionBtn) {
           indexErrorActionBtn.addEventListener('click', function() {
@@ -2717,20 +2744,31 @@
           window.open(msg.url || 'https://www.figdex.com/plugin-connect?from=figma-plugin', 'figdex_web', 'width=1200,height=800');
         }
         if (msg.type === 'upload-started') {
+          state.indexingStatusText = 'Preparing…';
+          state.indexingStartedAt = Date.now();
+          state.indexingLastProgressAt = Date.now();
           var indexingText = document.getElementById('indexingBlockText');
-          if (indexingText) indexingText.textContent = 'Updating index…';
+          if (indexingText) indexingText.textContent = state.indexingStatusText;
         }
         if (msg.type === 'upload-progress') {
+          state.indexingStatusText = msg.step || 'Updating index…';
+          state.indexingLastProgressAt = Date.now();
           var indexingText = document.getElementById('indexingBlockText');
-          if (indexingText && msg.step) indexingText.textContent = msg.step;
+          if (indexingText) indexingText.textContent = state.indexingStatusText;
         }
         if (msg.type === 'WEB_INDEX_CREATED') {
+          state.indexingStatusText = 'Index completed';
+          state.indexingStartedAt = 0;
+          state.indexingLastProgressAt = 0;
           state.resultUrl = msg.resultUrl || '';
           state.hasEverCompletedIndex = true;
           if (controller) controller.dispatch('web_index_created', { resultUrl: state.resultUrl });
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
         }
         if (msg.type === 'done') {
+          state.indexingStatusText = 'Index completed';
+          state.indexingStartedAt = 0;
+          state.indexingLastProgressAt = 0;
           state.hasEverCompletedIndex = true;
           if (controller) controller.dispatch('indexing_done');
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
@@ -2739,6 +2777,8 @@
           if (msg.url) window.open(msg.url, 'figdex_web', 'width=1200,height=800');
         }
         if (msg.type === 'error') {
+          state.indexingStartedAt = 0;
+          state.indexingLastProgressAt = 0;
           state.lastIndexError = msg.message || 'Indexing failed.';
           state.lastIndexErrorCode = msg.code || null;
           state.lastIndexUpgradeUrl = msg.upgradeUrl || null;
