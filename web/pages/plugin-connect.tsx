@@ -24,6 +24,8 @@ export default function PluginConnect() {
 
     const run = async () => {
       try {
+        const buildReturnUrl = () => `/plugin-connect${claimTokenStr ? `?claimToken=${encodeURIComponent(claimTokenStr)}` : `?nonce=${encodeURIComponent(nonceStr)}`}${claimTokenStr && nonceStr ? `&nonce=${encodeURIComponent(nonceStr)}` : ''}${docId ? `&docId=${encodeURIComponent(String(docId))}` : ''}`;
+
         if (modeStr === 'upgrade' && anonIdStr && !claimTokenStr) {
           setStatus('redirecting');
           try {
@@ -94,7 +96,7 @@ export default function PluginConnect() {
 
         if (!apiKey) {
           setStatus('redirecting');
-          const returnUrl = `/plugin-connect?nonce=${encodeURIComponent(nonceStr)}${docId ? `&docId=${encodeURIComponent(String(docId))}` : ''}`;
+          const returnUrl = buildReturnUrl();
           window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
           return;
         }
@@ -112,6 +114,14 @@ export default function PluginConnect() {
           return;
         }
         const err = await res.json().catch(() => ({}));
+        if (res.status === 401 || /invalid api key/i.test(String(err?.error || ''))) {
+          if (typeof window !== 'undefined') {
+            try { localStorage.removeItem('figma_web_user'); } catch (_) {}
+          }
+          setStatus('redirecting');
+          window.location.href = `/login?returnUrl=${encodeURIComponent(buildReturnUrl())}`;
+          return;
+        }
         throw new Error(err?.error || 'Failed to connect');
       } catch (e: any) {
         setStatus('error');
