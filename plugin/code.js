@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.07';
+const PLUGIN_VERSION = '1.32.08';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -276,6 +276,38 @@ function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
     specs.unshift(splitChunks[0]);
   }
   return normalized;
+}
+
+function getAdaptiveExportScale(width, height) {
+  var w = Math.max(1, Number(width) || 1);
+  var h = Math.max(1, Number(height) || 1);
+  var longestSide = Math.max(w, h);
+  var pixelArea = w * h;
+  var scale = 0.75;
+  if (longestSide > 20000 || pixelArea > 40000000) scale = Math.min(scale, 0.12);
+  else if (longestSide > 14000 || pixelArea > 24000000) scale = Math.min(scale, 0.18);
+  else if (longestSide > 10000 || pixelArea > 16000000) scale = Math.min(scale, 0.24);
+  else if (longestSide > 7000 || pixelArea > 9000000) scale = Math.min(scale, 0.33);
+  else if (longestSide > 4500 || pixelArea > 5000000) scale = Math.min(scale, 0.5);
+  return Math.max(0.08, scale);
+}
+
+async function exportFrameImageData(frame, width, height) {
+  var attempts = [getAdaptiveExportScale(width, height), 0.5, 0.33, 0.24, 0.18, 0.12, 0.08];
+  var tried = {};
+  for (var i = 0; i < attempts.length; i++) {
+    var scale = Math.max(0.08, Math.min(1, attempts[i]));
+    var key = scale.toFixed(3);
+    if (tried[key]) continue;
+    tried[key] = true;
+    try {
+      var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: scale } });
+      if (bytes && bytes.length > 0) {
+        return { bytes: bytes, scale: scale };
+      }
+    } catch (e) {}
+  }
+  throw new Error('FRAME_EXPORT_FAILED');
 }
 
 let globalFileKey = '';
@@ -1040,7 +1072,6 @@ figma.ui.onmessage = async (msg) => {
       figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
-      const SCALE = 0.75;
       const FRAMES_PER_CHUNK = 10;
       var allPageFrames = [];
       var newSignaturesByPage = {};
@@ -1066,7 +1097,8 @@ figma.ui.onmessage = async (msg) => {
               var searchTokens = buildSearchTokens(allTexts);
               var sectionName = getSectionNameForFrame(frame);
               var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
-              var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: SCALE } });
+              var exportResult = await exportFrameImageData(frame, w, h);
+              var bytes = exportResult.bytes;
               var b64 = figma.base64Encode(bytes);
               var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
               var frameItem = {
