@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.05';
+const PLUGIN_VERSION = '1.32.06';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -437,6 +437,30 @@ async function refreshStoredWebUser(webToken) {
     return null;
   }
 }
+
+async function loadUserLimitsToUI(webToken) {
+  if (!webToken || typeof webToken !== 'string' || webToken.length < 10) {
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
+    return null;
+  }
+  try {
+    var limitsRes = await fetch('https://www.figdex.com/api/user/limits', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + webToken }
+    });
+    if (!limitsRes.ok) {
+      figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
+      return null;
+    }
+    var limitsJson = await limitsRes.json();
+    var limits = limitsJson && limitsJson.limits ? limitsJson.limits : null;
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: limits });
+    return limits;
+  } catch (e) {
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
+    return null;
+  }
+}
 (async function bootstrap() {
   await migrateDocumentScopedStateToReliableFileKey();
   var savedKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
@@ -472,6 +496,7 @@ async function refreshStoredWebUser(webToken) {
     if (refreshedWebUser) webUser = refreshedWebUser;
   }
   sendStoredIdentityToUI(webToken, webUser);
+  await loadUserLimitsToUI(webToken);
   var anonId = await getOrCreateAnonId();
   figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
   if (webToken && typeof webToken === 'string' && anonId) {
@@ -497,6 +522,7 @@ async function refreshStoredWebUser(webToken) {
   // Resend after delay so UI gets identity if it missed the first message (race on load)
   setTimeout(function () { sendStoredIdentityToUI(webToken, webUser); }, 400);
   setTimeout(function () { sendStoredIdentityToUI(webToken, webUser); }, 1200);
+  setTimeout(function () { loadUserLimitsToUI(webToken); }, 700);
   setTimeout(function () {
     getOrCreateAnonId().then(function (id) { figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: id }); });
   }, 500);
@@ -631,6 +657,7 @@ figma.ui.onmessage = async (msg) => {
     sessionFileKey = '';
     figma.ui.postMessage({ type: 'set-file-key', fileKey: '' });
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+    figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
     return;
   }
   if (msg.type === 'clear-indexed-pages') {
@@ -676,6 +703,7 @@ figma.ui.onmessage = async (msg) => {
             }
           } catch (_) {}
           figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
+          await loadUserLimitsToUI(data.token);
           return;
         }
         try { console.log('[FigDex] poll_tick'); } catch (e) {}
@@ -723,6 +751,7 @@ figma.ui.onmessage = async (msg) => {
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
           await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
           figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
+          await loadUserLimitsToUI(data.token);
           return;
         }
         try { console.log('[FigDex] poll_tick'); } catch (e) {}
@@ -783,6 +812,7 @@ figma.ui.onmessage = async (msg) => {
           if (validateRes.status === 401) {
             await setStored(STORAGE_KEYS.WEB_TOKEN, null);
             await setStored(STORAGE_KEYS.WEB_USER, null);
+            figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
             figma.notify('Session expired. Please reconnect.', { error: true });
             figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
             return;
@@ -793,6 +823,7 @@ figma.ui.onmessage = async (msg) => {
               if (validateData && validateData.user) {
                 await setStored(STORAGE_KEYS.WEB_USER, validateData.user);
                 figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: token, user: validateData.user });
+                await loadUserLimitsToUI(token);
               }
             } catch (_) {}
           }
@@ -1103,6 +1134,7 @@ figma.ui.onmessage = async (msg) => {
         if (res.status === 401 && !isGuestLimit) {
           await setStored(STORAGE_KEYS.WEB_TOKEN, null);
           await setStored(STORAGE_KEYS.WEB_USER, null);
+          figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
           figma.notify('Session expired. Please reconnect.', { error: true });
           figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
           return;

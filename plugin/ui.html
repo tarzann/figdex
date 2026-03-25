@@ -712,7 +712,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.05</div>
+        <div class="version" id="pluginVersionLabel">v1.32.06</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
         <span id="buttonClickLog" style="display: none; font-size: 0.6em; color: #1976d2; margin-left: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Last button click"></span>
       </div>
@@ -751,6 +751,10 @@
       </div>
       <div id="accountIdentityLine" style="font-size:0.8em; font-weight:600; color:#333; margin-bottom:4px;">Guest mode</div>
       <div id="accountStatusLine" style="font-size:0.72em; color:#666; margin-bottom:10px;">You can create your first index here and continue on the web later.</div>
+      <div id="accountUsageWrap" style="display:none; margin-bottom:10px; padding:8px 10px; background:#f8f9fb; border:1px solid #e6e8ee; border-radius:8px;">
+        <div id="accountUsageFiles" style="font-size:0.72em; color:#333; margin-bottom:4px;">Files: --</div>
+        <div id="accountUsageFrames" style="font-size:0.72em; color:#333;">Frames: --</div>
+      </div>
       <button type="button" id="accountPrimaryBtn" style="font-size:0.78em; background:#1976d2; color:#fff; border:none; border-radius:8px; cursor:pointer; padding:9px 14px; font-weight:600; width:100%;">Connect to FigDex</button>
     </div>
 
@@ -1127,7 +1131,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.05</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.06</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1192,7 +1196,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.05</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.06</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1730,7 +1734,7 @@
     </script>
     <script>
       console.log('[FigDex] UI_BOOT_SIGNATURE', { ts: Date.now() });
-      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false };
+      var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, accountLimits: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false };
       try { window.__figdexUIState = state; } catch (e) {}
       var controller = null;
       var identityStore = null;
@@ -1882,6 +1886,22 @@
         return 'Free';
       }
 
+      function formatLimitValue(value) {
+        if (value === null || value === undefined) return 'Unlimited';
+        var num = Number(value);
+        if (!isFinite(num)) return 'Unlimited';
+        return num.toLocaleString();
+      }
+
+      function getAccountUsageSummary() {
+        var limits = state.accountLimits;
+        if (!limits || typeof limits !== 'object') return null;
+        return {
+          files: 'Files: ' + formatLimitValue(limits.currentFiles || 0) + ' / ' + formatLimitValue(limits.maxFiles),
+          frames: 'Frames: ' + formatLimitValue(limits.currentFrames || 0) + ' / ' + formatLimitValue(limits.maxFrames)
+        };
+      }
+
       function getCurrentFileSummary(model) {
         var pages = Array.isArray(model.pages) ? model.pages : [];
         var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
@@ -1977,6 +1997,9 @@
         var accountPlanBadge = document.getElementById('accountPlanBadge');
         var accountIdentityLine = document.getElementById('accountIdentityLine');
         var accountStatusLine = document.getElementById('accountStatusLine');
+        var accountUsageWrap = document.getElementById('accountUsageWrap');
+        var accountUsageFiles = document.getElementById('accountUsageFiles');
+        var accountUsageFrames = document.getElementById('accountUsageFrames');
         var accountPrimaryBtn = document.getElementById('accountPrimaryBtn');
         var currentFileBadge = document.getElementById('currentFileBadge');
         var currentFileTitle = document.getElementById('currentFileTitle');
@@ -1996,6 +2019,14 @@
           if (connected) accountStatusLine.textContent = 'Your account is connected and ready to work with this file.';
           else if (state.authExpiredMessage) accountStatusLine.textContent = 'Reconnect to continue indexing and syncing this file.';
           else accountStatusLine.textContent = 'You can create your first index here and continue on the web later.';
+        }
+        if (accountUsageWrap) {
+          var usageSummary = connected ? getAccountUsageSummary() : null;
+          accountUsageWrap.style.display = usageSummary ? 'block' : 'none';
+          if (usageSummary) {
+            if (accountUsageFiles) accountUsageFiles.textContent = usageSummary.files;
+            if (accountUsageFrames) accountUsageFrames.textContent = usageSummary.frames;
+          }
         }
         if (accountPrimaryBtn) {
           if (connected) {
@@ -2599,6 +2630,7 @@
           if (!token || !user) {
             if (idStore) idStore.clearIdentity();
             state.identityPending = null;
+            state.accountLimits = null;
             state.authExpiredMessage = '';
             if (ctrl) ctrl.dispatch('identity_loaded');
             render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: null });
@@ -2628,6 +2660,11 @@
           var hcbLoaded = document.getElementById('headerConnectBtn');
           if (hcbLoaded) hcbLoaded.disabled = false;
         }
+        if (msg.type === 'WEB_ACCOUNT_LIMITS_LOADED') {
+          state.accountLimits = msg.limits && typeof msg.limits === 'object' ? msg.limits : null;
+          render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
+          return;
+        }
         if (msg.type === 'CONNECT_TIMEOUT') {
           state.connectTimedOut = true;
           if (telemetry) telemetry.log('connect_timeout');
@@ -2641,6 +2678,7 @@
         if (msg.type === 'AUTH_EXPIRED') {
           if (identityStore) identityStore.clearIdentity();
           state.authExpiredMessage = 'Session expired';
+          state.accountLimits = null;
           if (controller) controller.dispatch('auth_expired', { selectedPages: msg.selectedPages || [] });
           if (telemetry) telemetry.log('auth_expired');
           if (telemetry && telemetry.track) telemetry.track('auth_expired', buildTelemetryContext());

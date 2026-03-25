@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getUserIdFromApiKey } from '../../../lib/api-auth';
-import { getUserEffectiveLimits, getCurrentFileCount } from '../../../lib/subscription-helpers';
+import { getUserEffectiveLimits, getCurrentFileCount, getCurrentFrameCount } from '../../../lib/subscription-helpers';
 import { getPlanLimitsFromDb } from '../../../lib/plans';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -45,6 +45,7 @@ export default async function handler(
 
     // Get current file count
     const currentFiles = await getCurrentFileCount(supabaseAdmin, userId);
+    const currentFrames = await getCurrentFrameCount(supabaseAdmin, userId);
 
     // Get plan info
     const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
@@ -56,6 +57,7 @@ export default async function handler(
         currentFiles,
         remainingFiles: limits.maxFiles === null ? null : Math.max(0, limits.maxFiles - currentFiles),
         maxFrames: limits.maxFrames,
+        currentFrames,
         maxIndexesPerDay: limits.maxIndexesPerDay,
         planId: planLimits.id,
         planLabel: planLimits.label,
