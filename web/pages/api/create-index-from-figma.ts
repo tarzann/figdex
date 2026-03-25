@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { resolvePlanId, getPlanLimits } from '../../lib/plans';
+import { resolvePlanId, getPlanLimits, getPlanLimitsFromDb } from '../../lib/plans';
 import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getCurrentTotalFrames, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount } from '../../lib/subscription-helpers';
 import {
   fetchFigmaFile,
@@ -195,7 +195,7 @@ export default async function handler(
       const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
       let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
       const framesInPayload = Array.isArray(pagesArray) ? pagesArray.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0) : 0;
-      const guestLimits = getPlanLimits('guest', false);
+      const guestLimits = await getPlanLimitsFromDb(supabaseAdmin, 'guest', false);
       const maxFrames = guestLimits.maxFramesTotal ?? 50;
       const actionCheckLimit = bodyEarly.action === 'check_limit';
       const maxFilesGuest = guestLimits.maxProjects ?? 1;
@@ -382,7 +382,7 @@ export default async function handler(
     }
 
     const planId = resolvePlanId(user.plan, user.is_admin);
-    const planLimits = getPlanLimits(user.plan, user.is_admin);
+    const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
 
     // Helper function to check if file already exists (for re-index detection)
     const checkIfFileExists = async (fileKey: string, userId: string): Promise<boolean> => {

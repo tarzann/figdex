@@ -4,7 +4,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getPlanLimits } from './plans';
+import { getPlanLimitsFromDb } from './plans';
 
 export interface CreditTransaction {
   userId: string;
@@ -110,7 +110,7 @@ export async function getUserCredits(
       return { success: false, error: 'User not found' };
     }
 
-    const planLimits = getPlanLimits(user.plan, false);
+    const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, false);
     const baseCredits = planLimits.creditsPerMonth;
 
     return {
@@ -191,4 +191,3 @@ export async function getCreditTransactions(
     return { success: false, error: error.message || 'Unknown error' };
   }
 }
-

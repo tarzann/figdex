@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getUserIdFromApiKey } from '../../../lib/api-auth';
 import { getUserEffectiveLimits, getCurrentFileCount } from '../../../lib/subscription-helpers';
-import { getPlanLimits } from '../../../lib/plans';
+import { getPlanLimitsFromDb } from '../../../lib/plans';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -47,7 +47,7 @@ export default async function handler(
     const currentFiles = await getCurrentFileCount(supabaseAdmin, userId);
 
     // Get plan info
-    const planLimits = getPlanLimits(user.plan, user.is_admin);
+    const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
 
     return res.status(200).json({
       success: true,
@@ -67,4 +67,3 @@ export default async function handler(
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
-

@@ -4,7 +4,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getPlanLimits } from './plans';
+import { getPlanLimitsFromDb } from './plans';
 
 export interface UserEffectiveLimits {
   maxFiles: number;
@@ -30,7 +30,7 @@ export async function getUserEffectiveLimits(
   isAdmin?: boolean
 ): Promise<UserEffectiveLimits> {
   // Get plan limits
-  const planLimits = getPlanLimits(userPlan, isAdmin);
+  const planLimits = await getPlanLimitsFromDb(supabaseAdmin, userPlan, isAdmin);
   let maxFiles = planLimits.maxProjects || 0;
   let maxFrames = planLimits.maxFramesTotal || 0;
   let maxIndexesPerDay = planLimits.maxIndexesPerDay || 0;
@@ -75,7 +75,7 @@ export async function canCreateIndex(
     return { allowed: true };
   }
 
-  const planLimits = getPlanLimits(userPlan, isAdmin);
+  const planLimits = await getPlanLimitsFromDb(supabaseAdmin, userPlan, isAdmin);
   if (planLimits.maxIndexesPerDay === null) {
     return { allowed: true };
   }

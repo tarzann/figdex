@@ -14,6 +14,21 @@ export interface PlanLimits {
   maxIndexesPerDay: number | null; // Daily rate limit for indexes (NEW)
 }
 
+export interface DbPlanRow {
+  plan_id: PlanId;
+  label: string | null;
+  max_projects: number | null;
+  max_frames_total: number | null;
+  credits_per_month: number | null;
+  max_uploads_per_day: number | null;
+  max_uploads_per_month: number | null;
+  max_frames_per_month: number | null;
+  max_index_size_bytes: number | null;
+  retention_days: number | null;
+  max_indexes_per_day: number | null;
+  enabled?: boolean | null;
+}
+
 const MB = 1024 * 1024;
 
 const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
@@ -98,6 +113,54 @@ export function resolvePlanId(plan?: string | null, isAdmin?: boolean): PlanId {
 export function getPlanLimits(plan?: string | null, isAdmin?: boolean): PlanLimits {
   const planId = resolvePlanId(plan, isAdmin);
   return PLAN_LIMITS[planId];
+}
+
+export function mergePlanLimits(planId: PlanId, overrides?: Partial<PlanLimits> | null): PlanLimits {
+  const base = PLAN_LIMITS[planId];
+  return { ...base, ...(overrides || {}), id: planId };
+}
+
+export function dbPlanRowToPlanLimits(row: DbPlanRow, fallbackPlanId?: PlanId): PlanLimits {
+  const planId = fallbackPlanId || row.plan_id;
+  return mergePlanLimits(planId, {
+    label: typeof row.label === 'string' && row.label.trim() ? row.label.trim() : PLAN_LIMITS[planId].label,
+    maxProjects: row.max_projects ?? null,
+    maxFramesTotal: row.max_frames_total ?? null,
+    creditsPerMonth: row.credits_per_month ?? null,
+    maxUploadsPerDay: row.max_uploads_per_day ?? null,
+    maxUploadsPerMonth: row.max_uploads_per_month ?? null,
+    maxFramesPerMonth: row.max_frames_per_month ?? null,
+    maxIndexSizeBytes: row.max_index_size_bytes ?? null,
+    retentionDays: row.retention_days ?? null,
+    maxIndexesPerDay: row.max_indexes_per_day ?? null,
+  });
+}
+
+export async function getPlanLimitsFromDb(
+  supabaseAdmin: { from: (table: string) => any },
+  plan?: string | null,
+  isAdmin?: boolean
+): Promise<PlanLimits> {
+  const planId = resolvePlanId(plan, isAdmin);
+  if (!supabaseAdmin || typeof supabaseAdmin.from !== 'function') {
+    return getPlanLimits(plan, isAdmin);
+  }
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('plans')
+      .select('plan_id,label,max_projects,max_frames_total,credits_per_month,max_uploads_per_day,max_uploads_per_month,max_frames_per_month,max_index_size_bytes,retention_days,max_indexes_per_day,enabled')
+      .eq('plan_id', planId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return getPlanLimits(plan, isAdmin);
+    }
+
+    return dbPlanRowToPlanLimits(data as DbPlanRow, planId);
+  } catch (_) {
+    return getPlanLimits(plan, isAdmin);
+  }
 }
 
 export function formatBytes(bytes: number): string {

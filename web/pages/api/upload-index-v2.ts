@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { getPlanLimits, formatBytes } from '../../lib/plans';
+import { getPlanLimitsFromDb, formatBytes } from '../../lib/plans';
 import { archiveExistingIndex } from '../../lib/index-archive';
 
 // Version tracking - Update this number for each fix/change
@@ -124,7 +124,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       finalFileName = `Figma_Index_${timestamp}_${timeStr}`;
     }
 
-    const planLimits = getPlanLimits(user.plan, user.is_admin);
+    const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
 
     // Debug: Log incoming data structure
     console.log(`📥 [upload-index-v2] Received request:`, {
@@ -736,5 +736,4 @@ function computeUsageStats(
     framesThisMonthExcludingCurrent
   };
 }
-
 
