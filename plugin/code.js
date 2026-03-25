@@ -172,7 +172,7 @@ function sleep(ms) {
 
 function getRetryAfterMs(res, attempt) {
   try {
-    if (res && typeof res.headers?.get === 'function') {
+    if (res && res.headers && typeof res.headers.get === 'function') {
       var retryAfter = res.headers.get('Retry-After');
       if (retryAfter) {
         var seconds = Number(retryAfter);
