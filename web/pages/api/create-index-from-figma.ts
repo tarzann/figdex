@@ -198,7 +198,7 @@ export default async function handler(
       const guestLimits = getPlanLimits('guest', false);
       const maxFrames = guestLimits.maxFramesTotal ?? 50;
       const actionCheckLimit = bodyEarly.action === 'check_limit';
-      const maxFilesGuest = 1; // Guest: 1 Figma file only; unlimited pages within that file
+      const maxFilesGuest = guestLimits.maxProjects ?? 1;
 
       const guestDistinctFileCount = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);

@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.04';
+const PLUGIN_VERSION = '1.32.05';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -37,6 +37,15 @@ function getCurrentDocumentFallbackScope() {
   }
   var signature = docName + '|' + pageNames.length + '|' + pageNames.join('|');
   return 'doc:' + simpleHash(signature);
+}
+function getLegacyDocumentScopeIds() {
+  var scopes = [];
+  var currentFallbackScope = getCurrentDocumentFallbackScope();
+  if (currentFallbackScope) scopes.push(currentFallbackScope);
+  var docName = (typeof figma.root.name === 'string' && figma.root.name.trim()) ? figma.root.name.trim().toLowerCase() : '';
+  if (docName) scopes.push('docname:' + docName);
+  if (rootId) scopes.push(rootId);
+  return Array.from(new Set(scopes.filter(Boolean)));
 }
 function getCurrentDocumentId() {
   var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
@@ -72,6 +81,9 @@ const STORAGE_KEYS = {
   HAS_EVER_INDEXED: 'hasEverIndexed'
 };
 
+const GLOBAL_STORAGE_KEYS = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID, STORAGE_KEYS.HAS_EVER_INDEXED];
+const DOCUMENT_SCOPED_STORAGE_KEYS = [STORAGE_KEYS.FILE_KEY, STORAGE_KEYS.FILE_NAME, STORAGE_KEYS.SELECTED_PAGES, STORAGE_KEYS.INDEXED_PAGES, STORAGE_KEYS.CONNECT_NONCE_DATA];
+
 function getDocumentScopeId() {
   var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
   if (liveFileKey) return liveFileKey;
@@ -91,9 +103,10 @@ function cryptoRandomString() {
   return s;
 }
 function storageKey(key) {
-  // Global keys: login persists across documents. File key is per-document so each Figma file has its own.
-  var globalKeys = [STORAGE_KEYS.WEB_TOKEN, STORAGE_KEYS.WEB_USER, STORAGE_KEYS.ANON_ID, STORAGE_KEYS.HAS_EVER_INDEXED];
-  return globalKeys.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + getDocumentScopeId() + '_' + key;
+  return GLOBAL_STORAGE_KEYS.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + getDocumentScopeId() + '_' + key;
+}
+function storageKeyForScope(scopeId, key) {
+  return GLOBAL_STORAGE_KEYS.indexOf(key) >= 0 ? 'figdex_' + key : 'figdex_' + scopeId + '_' + key;
 }
 async function getStored(key, def) {
   try {
@@ -101,8 +114,52 @@ async function getStored(key, def) {
     return v !== undefined ? v : def;
   } catch (e) { return def; }
 }
+async function getStoredForScope(scopeId, key, def) {
+  try {
+    const v = await figma.clientStorage.getAsync(storageKeyForScope(scopeId, key));
+    return v !== undefined ? v : def;
+  } catch (e) { return def; }
+}
 async function setStored(key, value) {
   try { await figma.clientStorage.setAsync(storageKey(key), value); } catch (e) { console.error(e); }
+}
+async function setStoredForScope(scopeId, key, value) {
+  try { await figma.clientStorage.setAsync(storageKeyForScope(scopeId, key), value); } catch (e) { console.error(e); }
+}
+async function deleteStoredForScope(scopeId, key) {
+  try { await figma.clientStorage.deleteAsync(storageKeyForScope(scopeId, key)); } catch (e) { console.warn('deleteStoredForScope:', scopeId, key, e); }
+}
+
+async function migrateDocumentScopedStateToReliableFileKey() {
+  var reliableFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+  if (!reliableFileKey) return;
+  var legacyScopes = getLegacyDocumentScopeIds().filter(function (scopeId) { return scopeId && scopeId !== reliableFileKey; });
+  if (!legacyScopes.length) return;
+  for (var li = 0; li < legacyScopes.length; li++) {
+    var legacyScope = legacyScopes[li];
+    for (var ki = 0; ki < DOCUMENT_SCOPED_STORAGE_KEYS.length; ki++) {
+      var scopedKey = DOCUMENT_SCOPED_STORAGE_KEYS[ki];
+      var currentValue = await getStoredForScope(reliableFileKey, scopedKey, undefined);
+      if (currentValue !== undefined && currentValue !== null) continue;
+      var legacyValue = await getStoredForScope(legacyScope, scopedKey, undefined);
+      if (legacyValue === undefined || legacyValue === null) continue;
+      await setStoredForScope(reliableFileKey, scopedKey, legacyValue);
+    }
+  }
+}
+
+async function deleteCurrentDocumentLegacyState() {
+  var reliableFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+  var scopes = getLegacyDocumentScopeIds();
+  if (reliableFileKey) scopes.push(reliableFileKey);
+  var uniqueScopes = Array.from(new Set(scopes.filter(Boolean)));
+  for (var si = 0; si < uniqueScopes.length; si++) {
+    for (var ki = 0; ki < DOCUMENT_SCOPED_STORAGE_KEYS.length; ki++) {
+      await deleteStoredForScope(uniqueScopes[si], DOCUMENT_SCOPED_STORAGE_KEYS[ki]);
+    }
+    await deleteStoredForScope(uniqueScopes[si], STORAGE_KEYS.WEB_TOKEN);
+    await deleteStoredForScope(uniqueScopes[si], STORAGE_KEYS.WEB_USER);
+  }
 }
 
 const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for large uploads
@@ -381,6 +438,7 @@ async function refreshStoredWebUser(webToken) {
   }
 }
 (async function bootstrap() {
+  await migrateDocumentScopedStateToReliableFileKey();
   var savedKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
   // Fallback: figma.fileKey gives current file's key (when available, e.g. published plugins)
   if (!savedKey && typeof figma.fileKey === 'string' && figma.fileKey.trim()) {
@@ -568,13 +626,9 @@ figma.ui.onmessage = async (msg) => {
     for (const k of keysToClear) {
       try { await figma.clientStorage.deleteAsync(storageKey(k)); } catch (e) { console.warn('clear-storage:', k, e); }
     }
-    // Also delete legacy per-document webToken/webUser (migration would otherwise restore them on restart)
-    var prefix = 'figdex_' + getDocumentScopeId() + '_';
-    try {
-      await figma.clientStorage.deleteAsync(prefix + 'webToken');
-      await figma.clientStorage.deleteAsync(prefix + 'webUser');
-    } catch (e) { console.warn('clear-storage legacy:', e); }
+    await deleteCurrentDocumentLegacyState();
     globalFileKey = '';
+    sessionFileKey = '';
     figma.ui.postMessage({ type: 'set-file-key', fileKey: '' });
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
     return;
