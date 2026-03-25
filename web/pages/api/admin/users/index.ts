@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '../../../../lib/admin-middleware';
+import { dbPlanRowToPlanLimits, type DbPlanRow } from '../../../../lib/plans';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -70,10 +71,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   const guests = Array.from(guestMap.values());
+
+  const { data: planRows } = await supabaseAdmin
+    .from('plans')
+    .select('plan_id,label,max_projects,max_frames_total,credits_per_month,max_uploads_per_day,max_uploads_per_month,max_frames_per_month,max_index_size_bytes,retention_days,max_indexes_per_day,enabled');
+
+  const plans = Array.isArray(planRows)
+    ? planRows.map((row: any) => dbPlanRowToPlanLimits(row as DbPlanRow))
+    : [];
   
   return res.status(200).json({
     success: true,
-    users: [...users, ...guests].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    users: [...users, ...guests].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()),
+    plans
   });
 }
 

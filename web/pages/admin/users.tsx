@@ -27,7 +27,7 @@ import {
   Stack
 } from '@mui/material';
 import { Edit, Delete, Add, ArrowBack, DeleteForever } from '@mui/icons-material';
-import { getPlanLimits } from '../../lib/plans';
+import type { PlanLimits } from '../../lib/plans';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.32.03'; // Faster admin users load by removing heavy computed stats
@@ -48,11 +48,14 @@ interface User {
   credits_reset_date?: string | null;
 }
 
+type PlanMap = Record<string, PlanLimits>;
+
 export default function AdminUsers() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [planMap, setPlanMap] = useState<PlanMap>({});
   const [error, setError] = useState('');
   const [editDialog, setEditDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -128,6 +131,11 @@ export default function AdminUsers() {
       const data = await response.json();
       if (response.ok && data.success) {
         setUsers(data.users || []);
+        const nextPlanMap: PlanMap = {};
+        (data.plans || []).forEach((plan: PlanLimits) => {
+          if (plan?.id) nextPlanMap[plan.id] = plan;
+        });
+        setPlanMap(nextPlanMap);
         setError('');
       } else {
         setError(data.error || data.message || `Failed to load users (${response.status})`);
@@ -153,10 +161,11 @@ export default function AdminUsers() {
     setResetDate(user.credits_reset_date || '');
     
     // Set current user credits
-    const planLimits = getPlanLimits(user.plan, user.is_admin);
+    const normalizedPlanId = user.is_admin ? 'unlimited' : ((user.plan || 'free').toLowerCase());
+    const planLimits = planMap[normalizedPlanId];
     setCurrentUserCredits({
       current: user.credits_remaining || 0,
-      base: planLimits.creditsPerMonth
+      base: planLimits ? planLimits.creditsPerMonth : null
     });
     
     setEditDialog(true);
