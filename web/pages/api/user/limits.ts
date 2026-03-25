@@ -1,11 +1,37 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { getUserIdFromApiKey } from '../../../lib/api-auth';
 import { getUserEffectiveLimits, getCurrentFileCount, getCurrentFrameCount } from '../../../lib/subscription-helpers';
 import { getPlanLimitsFromDb } from '../../../lib/plans';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+async function getAuthorizedUserId(
+  req: NextApiRequest,
+  supabaseAdmin: any
+): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  const bearer = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.substring(7).trim()
+    : '';
+
+  if (!bearer) return null;
+
+  if (bearer.startsWith('figdex_') && bearer.length >= 20) {
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, is_active')
+      .eq('api_key', bearer)
+      .maybeSingle();
+    const typedUser = user as { id?: string; is_active?: boolean | null } | null;
+    if (typedUser && typedUser.id && typedUser.is_active !== false) return typedUser.id;
+    return null;
+  }
+
+  const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(bearer);
+  if (authError || !authData?.user?.id) return null;
+  return authData.user.id;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -23,15 +49,15 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Get user ID from API key
-  const userId = await getUserIdFromApiKey(req);
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+  // Get user ID from API key or Supabase session token
+  const userId = await getAuthorizedUserId(req, supabaseAdmin);
   if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized. Please provide a valid API key.' });
+    return res.status(401).json({ error: 'Unauthorized. Please provide a valid account token.' });
   }
 
   try {
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
     // Get user info
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')

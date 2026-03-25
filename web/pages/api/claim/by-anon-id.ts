@@ -3,6 +3,28 @@ import { createClient } from '@supabase/supabase-js';
 
 const MAX_ANON_ID_LEN = 200;
 
+async function getAuthorizedUserId(
+  supabase: any,
+  token: string
+): Promise<string | null> {
+  if (!token) return null;
+
+  if (token.startsWith('figdex_') && token.length >= 20) {
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, is_active')
+      .eq('api_key', token)
+      .maybeSingle();
+    const typedUser = user as { id?: string; is_active?: boolean | null } | null;
+    if (typedUser && typedUser.id && typedUser.is_active !== false) return typedUser.id;
+    return null;
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user?.id) return null;
+  return authData.user.id;
+}
+
 /**
  * Allows authenticated user to claim their guest data by anonId.
  * Used as fallback when the web claim flow (claimToken) doesn't complete.
@@ -35,21 +57,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-    if (!token || !token.startsWith('figdex_')) {
-      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    const userId = await getAuthorizedUserId(supabase, token);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Invalid account token' });
     }
-
-    const { data: u } = await supabase
-      .from('users')
-      .select('id')
-      .eq('api_key', token)
-      .maybeSingle();
-
-    if (!u?.id) {
-      return res.status(401).json({ success: false, error: 'Invalid API key' });
-    }
-
-    const userId = u.id;
 
     const { data: guestRows } = await supabase
       .from('index_files')
