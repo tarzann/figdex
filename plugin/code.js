@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.14';
+const PLUGIN_VERSION = '1.32.15';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -612,10 +612,6 @@ async function refreshStoredWebUser(webToken) {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
-    if (validateRes.status === 401) {
-      await clearStoredWebIdentity();
-      return null;
-    }
     if (!validateRes.ok) return null;
     var validateData = await validateRes.json();
     if (!validateData || !validateData.user || typeof validateData.user !== 'object') return null;
@@ -636,10 +632,6 @@ async function loadUserLimitsToUI(webToken) {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
-    if (limitsRes.status === 401) {
-      await clearStoredWebIdentity();
-      return null;
-    }
     if (!limitsRes.ok) {
       return null;
     }
