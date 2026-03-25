@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.09';
+const PLUGIN_VERSION = '1.32.10';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -1324,6 +1324,8 @@ figma.ui.onmessage = async (msg) => {
       await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
       if (!isGuestMode && token) {
         await loadUserLimitsToUI(token);
+        setTimeout(function () { loadUserLimitsToUI(token); }, 1500);
+        setTimeout(function () { loadUserLimitsToUI(token); }, 4000);
       }
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
     } catch (e) {
