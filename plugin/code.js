@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.06';
+const PLUGIN_VERSION = '1.32.07';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -182,6 +182,100 @@ function fetchWithTimeout(url, opts) {
     }),
     timeoutPromise
   ]);
+}
+
+function estimateJsonBytes(value) {
+  try {
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(JSON.stringify(value)).length;
+    }
+  } catch (e) {}
+  try {
+    return JSON.stringify(value).length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function countFramesInChunkPages(chunkPages) {
+  if (!Array.isArray(chunkPages)) return 0;
+  var total = 0;
+  for (var i = 0; i < chunkPages.length; i++) {
+    var page = chunkPages[i];
+    total += Array.isArray(page && page.frames) ? page.frames.length : 0;
+  }
+  return total;
+}
+
+function splitChunkPagesInHalf(chunkPages) {
+  if (!Array.isArray(chunkPages) || chunkPages.length === 0) return null;
+  var flattened = [];
+  for (var i = 0; i < chunkPages.length; i++) {
+    var page = chunkPages[i];
+    var frames = Array.isArray(page && page.frames) ? page.frames : [];
+    for (var j = 0; j < frames.length; j++) {
+      flattened.push({
+        id: page.id || page.pageId,
+        name: page.name || page.pageName || 'Page',
+        frame: frames[j]
+      });
+    }
+  }
+  if (flattened.length <= 1) return null;
+  var midpoint = Math.ceil(flattened.length / 2);
+  function buildChunk(entries) {
+    var pageMap = {};
+    for (var k = 0; k < entries.length; k++) {
+      var entry = entries[k];
+      if (!pageMap[entry.id]) pageMap[entry.id] = { id: entry.id, name: entry.name, frames: [] };
+      pageMap[entry.id].frames.push(entry.frame);
+    }
+    var pages = [];
+    for (var pageId in pageMap) pages.push(pageMap[pageId]);
+    return pages;
+  }
+  return [buildChunk(flattened.slice(0, midpoint)), buildChunk(flattened.slice(midpoint))];
+}
+
+function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
+  var specs = Array.isArray(chunkSpecs) ? chunkSpecs.slice() : [];
+  var normalized = [];
+  var maxBytes = options && options.maxBytes ? options.maxBytes : 7 * 1024 * 1024;
+  while (specs.length > 0) {
+    var chunkPages = specs.shift();
+    var chunkBody = {
+      fileKey: options.fileKey,
+      docId: options.docId,
+      fileName: options.fileName,
+      chunkIndex: 0,
+      totalChunks: 1,
+      selectedPages: options.selectedPages,
+      source: 'figma-plugin',
+      version: options.version,
+      galleryOnly: true,
+      imageQuality: 0.75,
+      indexPayload: { pages: chunkPages },
+      coverImageDataUrl: options.includeCover ? (options.coverImageDataUrl || undefined) : undefined
+    };
+    if (options.mergePages && options.replacePageIds && options.replacePageIds.length > 0) {
+      chunkBody.mergePages = true;
+      chunkBody.replacePageIds = options.replacePageIds;
+    }
+    if (options.anonId) chunkBody.anonId = options.anonId;
+    var estimatedBytes = estimateJsonBytes(chunkBody);
+    if (estimatedBytes <= maxBytes || countFramesInChunkPages(chunkPages) <= 1) {
+      normalized.push(chunkPages);
+      continue;
+    }
+    var splitChunks = splitChunkPagesInHalf(chunkPages);
+    if (!splitChunks) {
+      normalized.push(chunkPages);
+      continue;
+    }
+    specs.unshift(splitChunks[1]);
+    specs.unshift(splitChunks[0]);
+  }
+  return normalized;
 }
 
 let globalFileKey = '';
@@ -1026,6 +1120,16 @@ figma.ui.onmessage = async (msg) => {
       if (!coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
         coverImageDataUrl = allPageFrames[0].frameItem.image;
       }
+      if (coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
+        var firstFrameImage = allPageFrames[0].frameItem.image;
+        if (firstFrameImage && coverImageDataUrl.length > firstFrameImage.length * 1.5) {
+          coverImageDataUrl = firstFrameImage;
+        }
+      }
+      if (coverImageDataUrl && coverImageDataUrl.length > 4 * 1024 * 1024) {
+        console.warn('[code.js] cover image too large, omitting cover upload for this run');
+        coverImageDataUrl = null;
+      }
 
       var baseFileName = (fileName || '').trim() || 'Untitled';
       // When merging by page, chunk by full pages so server can replace whole pages
@@ -1073,6 +1177,20 @@ figma.ui.onmessage = async (msg) => {
           start = end;
         }
       }
+
+      chunkSpecs = normalizeChunkSpecsForRequestSize(chunkSpecs, {
+        fileKey: fileKey,
+        docId: docId,
+        fileName: baseFileName,
+        selectedPages: selectedPages,
+        version: PLUGIN_VERSION,
+        coverImageDataUrl: coverImageDataUrl,
+        includeCover: !!coverImageDataUrl,
+        mergePages: mergePages,
+        replacePageIds: dirtyPageIds,
+        anonId: isGuestMode && guestAnonId ? guestAnonId : null,
+        maxBytes: 7 * 1024 * 1024
+      });
 
       var totalChunks = chunkSpecs.length;
       var totalUploaded = 0;
