@@ -730,36 +730,7 @@ export default function AccountPage() {
                 </Card>
               )}
 
-              {/* Rate Limit Add-on */}
-              {addonPackages.filter(pkg => pkg.addon_type === 'rate_limit').length > 0 && (
-                <Card variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Additional Daily Indexes
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                    Increase your daily index limit. Billed monthly.
-                  </Typography>
-                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                    {addonPackages
-                      .filter(pkg => pkg.addon_type === 'rate_limit')
-                      .map((pkg) => (
-                        <Button
-                          key={pkg.id}
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handlePurchaseAddon(pkg.addon_type, pkg.addon_value, parseFloat(pkg.price_usd))}
-                        >
-                          {pkg.display_name || `+${pkg.addon_value}/Day`}
-                          <Typography component="span" sx={{ ml: 0.5, fontWeight: 600, fontSize: '0.75rem' }}>
-                            +${parseFloat(pkg.price_usd).toFixed(2)}/mo
-                          </Typography>
-                        </Button>
-                      ))}
-                  </Stack>
-                </Card>
-              )}
-
-              {addonPackages.length === 0 && (
+              {addonPackages.filter(pkg => pkg.addon_type !== 'rate_limit').length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
                   No add-on packages available at this time.
                 </Typography>

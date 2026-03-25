@@ -9,7 +9,7 @@ import { getPlanLimitsFromDb } from './plans';
 export interface UserEffectiveLimits {
   maxFiles: number;
   maxFrames: number;
-  maxIndexesPerDay: number;
+  maxIndexesPerDay: number | null;
 }
 
 export interface CanCreateIndexResult {
@@ -17,8 +17,11 @@ export interface CanCreateIndexResult {
   reason?: string;
   waitUntil?: Date;
   currentCount?: number;
-  maxCount?: number;
+  maxCount?: number | null;
 }
+
+// Temporarily disable daily index limits until they are counted per logical file.
+const DAILY_INDEX_LIMITS_ENABLED = false;
 
 /**
  * Get user's effective limits (base plan + addons)
@@ -33,7 +36,7 @@ export async function getUserEffectiveLimits(
   const planLimits = await getPlanLimitsFromDb(supabaseAdmin, userPlan, isAdmin);
   let maxFiles = planLimits.maxProjects || 0;
   let maxFrames = planLimits.maxFramesTotal || 0;
-  let maxIndexesPerDay = planLimits.maxIndexesPerDay || 0;
+  let maxIndexesPerDay = DAILY_INDEX_LIMITS_ENABLED ? (planLimits.maxIndexesPerDay ?? 0) : null;
 
   // Get active addons (today's date for comparison)
   const today = new Date().toISOString().split('T')[0];
@@ -52,7 +55,7 @@ export async function getUserEffectiveLimits(
         maxFiles += addon.addon_value;
       } else if (addon.addon_type === 'frames') {
         maxFrames += addon.addon_value;
-      } else if (addon.addon_type === 'rate_limit') {
+      } else if (addon.addon_type === 'rate_limit' && DAILY_INDEX_LIMITS_ENABLED && maxIndexesPerDay !== null) {
         maxIndexesPerDay += addon.addon_value;
       }
     }
@@ -70,6 +73,10 @@ export async function canCreateIndex(
   userPlan?: string | null,
   isAdmin?: boolean
 ): Promise<CanCreateIndexResult> {
+  if (!DAILY_INDEX_LIMITS_ENABLED) {
+    return { allowed: true, currentCount: 0, maxCount: null };
+  }
+
   // Admins and unlimited plans have no rate limit
   if (isAdmin) {
     return { allowed: true };
@@ -82,6 +89,9 @@ export async function canCreateIndex(
 
   // Get effective limits (plan + addons)
   const limits = await getUserEffectiveLimits(supabaseAdmin, userId, userPlan, isAdmin);
+  if (limits.maxIndexesPerDay === null) {
+    return { allowed: true, currentCount: 0, maxCount: null };
+  }
 
   // Get today's count (UTC)
   const today = new Date().toISOString().split('T')[0];
@@ -126,6 +136,10 @@ export async function incrementDailyIndexCount(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   userId: string
 ): Promise<number> {
+  if (!DAILY_INDEX_LIMITS_ENABLED) {
+    return 0;
+  }
+
   const today = new Date().toISOString().split('T')[0];
 
   // Try using the RPC function first (more efficient)
