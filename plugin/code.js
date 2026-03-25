@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.03';
+const PLUGIN_VERSION = '1.32.04';
 figma.showUI(__html__, { width: 386, height: 800 });
 console.log('FigDex v' + PLUGIN_VERSION);
 
@@ -11,9 +11,41 @@ try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION });
 setTimeout(() => { try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {} }, 500);
 
 const rootId = figma.root.id || '0:0';
-figma.ui.postMessage({ type: 'set-document-id', documentId: rootId });
+function normalizeDocumentToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[|:]/g, '-');
+}
+function simpleHash(value) {
+  var input = String(value || '');
+  var hash = 5381;
+  for (var i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash) + input.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  return hash.toString(36);
+}
+function getCurrentDocumentFallbackScope() {
+  var docName = normalizeDocumentToken(figma.root.name || 'untitled');
+  var pages = Array.isArray(figma.root.children) ? figma.root.children : [];
+  var pageNames = [];
+  for (var i = 0; i < pages.length; i++) {
+    var page = pages[i];
+    if (page && page.type === 'PAGE') pageNames.push(normalizeDocumentToken(page.name || 'page'));
+  }
+  var signature = docName + '|' + pageNames.length + '|' + pageNames.join('|');
+  return 'doc:' + simpleHash(signature);
+}
+function getCurrentDocumentId() {
+  var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+  if (liveFileKey) return 'file:' + liveFileKey;
+  return getCurrentDocumentFallbackScope();
+}
+figma.ui.postMessage({ type: 'set-document-id', documentId: getCurrentDocumentId() });
 figma.on('currentpagechange', () => {
-  figma.ui.postMessage({ type: 'set-document-id', documentId: figma.root.id || '0:0' });
+  figma.ui.postMessage({ type: 'set-document-id', documentId: getCurrentDocumentId() });
 });
 
 figma.on('selectionchange', () => {
@@ -43,8 +75,8 @@ const STORAGE_KEYS = {
 function getDocumentScopeId() {
   var liveFileKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
   if (liveFileKey) return liveFileKey;
-  var docName = (typeof figma.root.name === 'string' && figma.root.name.trim()) ? figma.root.name.trim().toLowerCase() : '';
-  if (docName) return 'docname:' + docName;
+  var fallbackScope = getCurrentDocumentFallbackScope();
+  if (fallbackScope) return fallbackScope;
   return figma.root.id || rootId || '0:0';
 }
 
@@ -431,7 +463,7 @@ figma.ui.onmessage = async (msg) => {
     globalFileKey = msg.fileKey || '';
     sessionFileKey = globalFileKey;
     await setStored(STORAGE_KEYS.FILE_KEY, globalFileKey);
-    if (msg.fileName != null) await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName);
+    await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName != null ? msg.fileName : (figma.root.name || 'Untitled'));
     return;
   }
   if (msg.type === 'get-file-key') {
