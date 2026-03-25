@@ -47,7 +47,7 @@ export default async function handler(
     // Get specific index data
     const { data: indexData, error: indexError } = await svc
       .from('index_files')
-      .select('*')
+      .select('id, user_id, file_name, index_data, uploaded_at, project_id, figma_file_key, share_token, frame_tags, custom_tags, naming_tags, size_tags, file_size, frame_count')
       .eq('id', indexId)
       .single();
 
@@ -630,5 +630,4 @@ export default async function handler(
     });
   }
 }
-
 

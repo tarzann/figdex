@@ -4,6 +4,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
+function countFramesFromPages(pages: any[]): number {
+  if (!Array.isArray(pages)) return 0;
+  return pages.reduce((sum: number, page: any) => {
+    const frames = Array.isArray(page?.frames) ? page.frames.length : 0;
+    return sum + frames;
+  }, 0);
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -158,6 +166,8 @@ export default async function handler(
         figma_file_key: fileKey,
         file_name: baseFileName,
         index_data: mergedPages,
+        frame_count: countFramesFromPages(mergedPages),
+        file_size: Buffer.byteLength(JSON.stringify(mergedPages), 'utf8'),
         uploaded_at: new Date().toISOString(),
         frame_tags: frameTags,
         custom_tags: customTags,
@@ -166,11 +176,22 @@ export default async function handler(
       };
 
       // Insert merged index
-      const { data: mergedData, error: mergeError } = await supabase
+      let { data: mergedData, error: mergeError } = await supabase
         .from('index_files')
         .insert(mergedIndex)
         .select()
         .single();
+
+      if (mergeError && /(file_size|frame_count)/i.test(mergeError.message || '')) {
+        const { file_size, frame_count, ...fallbackIndex } = mergedIndex;
+        const fallbackInsert = await supabase
+          .from('index_files')
+          .insert(fallbackIndex)
+          .select()
+          .single();
+        mergedData = fallbackInsert.data;
+        mergeError = fallbackInsert.error;
+      }
 
       if (mergeError) {
         console.error(`❌ Error merging chunks for ${fileKey}:`, mergeError);
@@ -214,4 +235,3 @@ export default async function handler(
     });
   }
 }
-

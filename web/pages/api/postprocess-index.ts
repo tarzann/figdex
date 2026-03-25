@@ -1,6 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
+function countFramesFromPages(pages: any[]): number {
+  if (!Array.isArray(pages)) return 0;
+  return pages.reduce((sum: number, page: any) => {
+    const frames = Array.isArray(page?.frames) ? page.frames.length : 0;
+    return sum + frames;
+  }, 0);
+}
+
 export const config = {
   api: {
     bodyParser: {
@@ -126,14 +134,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       contentType: 'application/json'
     });
 
-    // Update file_size
+    // Update metadata
     const newSize = Buffer.byteLength(optimized, 'utf8') + totalImageBytes;
-    await supabaseAdmin.from('index_files').update({ file_size: newSize }).eq('id', indexId);
+    let updateResp = await supabaseAdmin
+      .from('index_files')
+      .update({ file_size: newSize, frame_count: countFramesFromPages(pages) })
+      .eq('id', indexId);
+
+    if (updateResp.error && /(file_size|frame_count)/i.test(updateResp.error.message || '')) {
+      updateResp = await supabaseAdmin
+        .from('index_files')
+        .update({ file_size: newSize })
+        .eq('id', indexId);
+    }
 
     return res.status(200).json({ success: true, processed: true, indexId });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || 'Processing failed' });
   }
 }
-
 
