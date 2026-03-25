@@ -123,6 +123,9 @@ async function mergeSplitJobs(
     figma_file_key: parentJob.file_key,
     file_name: parentJob.file_name,
     index_data: mergedManifest,
+    frame_count: Array.isArray(mergedManifest)
+      ? mergedManifest.reduce((sum: number, page: any) => sum + (Array.isArray(page?.frames) ? page.frames.length : 0), 0)
+      : 0,
     uploaded_at: new Date().toISOString(),
     frame_tags: Array.from(allFrameTags),
     custom_tags: Array.from(allCustomTags),
@@ -154,9 +157,9 @@ async function mergeSplitJobs(
   // Insert merged index
   console.log(`[${requestId}] 💾 Inserting merged index...`);
   let insertion = await supabaseAdmin.from('index_files').insert(indexData).select('id').single();
-  if (insertion.error && /file_size/i.test(insertion.error.message || '')) {
-    console.log(`[${requestId}] ⚠️ file_size column error, retrying without it...`);
-    const { file_size, ...indexWithoutSize } = indexData;
+  if (insertion.error && /(file_size|frame_count)/i.test(insertion.error.message || '')) {
+    console.log(`[${requestId}] ⚠️ file_size/frame_count column error, retrying without optional metadata...`);
+    const { file_size, frame_count, ...indexWithoutSize } = indexData;
     insertion = await supabaseAdmin.from('index_files').insert(indexWithoutSize).select('id').single();
   }
   
@@ -1928,6 +1931,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         figma_file_key: job.file_key,
         file_name: job.file_name,
         index_data: manifest,
+        frame_count: frameIds.length,
         uploaded_at: new Date().toISOString(),
         frame_tags: Array.from(allFrameTags),
         custom_tags: Array.from(allCustomTags),
@@ -1978,9 +1982,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       console.log(`[${requestId}] 💾 Inserting index into index_files table...`);
       let insertion = await supabaseAdmin.from('index_files').insert(indexData).select('id').single();
-      if (insertion.error && /file_size/i.test(insertion.error.message || '')) {
-        console.log(`[${requestId}] ⚠️ file_size column error, retrying without it...`);
-        const { file_size, ...indexWithoutSize } = indexData;
+      if (insertion.error && /(file_size|frame_count)/i.test(insertion.error.message || '')) {
+        console.log(`[${requestId}] ⚠️ file_size/frame_count column error, retrying without optional metadata...`);
+        const { file_size, frame_count, ...indexWithoutSize } = indexData;
         insertion = await supabaseAdmin.from('index_files').insert(indexWithoutSize).select('id').single();
       }
 
@@ -2247,4 +2251,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-

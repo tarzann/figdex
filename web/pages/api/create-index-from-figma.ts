@@ -74,6 +74,14 @@ function getStoredCoverImageUrl(indexData: any): string | null {
     : null;
 }
 
+function countFramesInPages(pages: any[]): number {
+  if (!Array.isArray(pages)) return 0;
+  return pages.reduce((sum: number, page: any) => {
+    const frames = Array.isArray(page?.frames) ? page.frames.length : 0;
+    return sum + frames;
+  }, 0);
+}
+
 function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
   let count = 0;
   const stack: Array<{ node: FigmaNode; parentType: string }> = [{ node, parentType }];
@@ -203,17 +211,13 @@ export default async function handler(
       const guestDistinctFileCount = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);
 
-      // Fetch all guest indices for this anon user, then detect whether current upload belongs to the same logical Figma file.
-      const { data: guestRows } = await supabaseAdmin
+      const { data: existingRows } = await supabaseAdmin
         .from('index_files')
-        .select('id, index_data, project_id, figma_file_key')
+        .select('id, index_data, project_id, figma_file_key, frame_count')
         .is('user_id', null)
         .eq('owner_anon_id', guestAnonId)
-        .limit(1000);
-      const existingRows = (guestRows || []).filter((row: any) => {
-        const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
-        return rowLogicalFileId === currentLogicalFileId;
-      });
+        .eq('figma_file_key', fileKeyTrim)
+        .limit(500);
       const existingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
       let existingFileCoverUrl: string | null = null;
       if (Array.isArray(existingRows)) {
@@ -227,7 +231,7 @@ export default async function handler(
           }
         }
       }
-      const hasExistingForFile = existingByPageId.size > 0 || existingRows.length > 0;
+      const hasExistingForFile = existingByPageId.size > 0 || (existingRows?.length ?? 0) > 0;
       const isAddingNewFile = !hasExistingForFile;
       const wouldExceedFileLimit = isAddingNewFile && guestDistinctFileCount >= maxFilesGuest;
       const estimatedFrameCount = typeof bodyEarly.estimatedFrameCount === 'number' ? bodyEarly.estimatedFrameCount : framesInPayload;
@@ -317,6 +321,7 @@ export default async function handler(
             file_name: pageFileName,
             project_id: String(docId),
             figma_file_key: fileKeyTrim,
+            frame_count: countFramesInPages([mergedPage]),
             uploaded_at: nowIso,
             index_data: mergedData,
           }).eq('id', existingForPage.id);
@@ -331,6 +336,7 @@ export default async function handler(
             figma_file_key: fileKeyTrim,
             file_name: pageFileName,
             project_id: String(docId),
+            frame_count: countFramesInPages(singlePageData),
             index_data: indexDataForPage,
             uploaded_at: nowIso,
           });
@@ -541,16 +547,12 @@ export default async function handler(
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
           const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
-          const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
-          const { data: authCandidateRows } = await supabaseAdmin
+          const { data: authExistingRows } = await supabaseAdmin
             .from('index_files')
-            .select('id, index_data, project_id, figma_file_key')
+            .select('id, index_data, project_id, figma_file_key, frame_count')
             .eq('user_id', user.id)
-            .limit(1000);
-          const authExistingRows = (authCandidateRows || []).filter((row: any) => {
-            const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
-            return rowLogicalFileId === currentLogicalFileId;
-          });
+            .eq('figma_file_key', fileKeyTrim)
+            .limit(500);
           const authExistingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
           let authExistingFileCoverUrl: string | null = null;
           if (Array.isArray(authExistingRows)) {
@@ -635,6 +637,7 @@ export default async function handler(
                 file_name: pageFileName,
                 project_id: String(docId),
                 figma_file_key: fileKeyTrim,
+                frame_count: countFramesInPages([mergedPage]),
                 uploaded_at: nowIso,
                 index_data: mergedData,
               }).eq('id', existingForPage.id);
@@ -648,6 +651,7 @@ export default async function handler(
                 figma_file_key: fileKeyTrim,
                 file_name: pageFileName,
                 project_id: String(docId),
+                frame_count: countFramesInPages(singlePageData),
                 index_data: indexDataForPage,
                 uploaded_at: nowIso,
               });

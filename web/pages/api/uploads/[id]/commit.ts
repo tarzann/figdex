@@ -109,7 +109,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Store a lightweight pointer in DB; actual JSON is in storage
     index_data: { storageRef: `${bucket}:${storagePath}` },
     uploaded_at: new Date().toISOString(),
-    file_size: fileSizeBytes
+    file_size: fileSizeBytes,
+    frame_count: framesCount
   };
 
   // Insert with fallback if file_size column is missing
@@ -121,9 +122,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .insert(insertData)
     .select(selectWithSize)
     .single();
-  if (resp.error && /file_size/.test(resp.error.message || '')) {
+  if (resp.error && /(file_size|frame_count)/.test(resp.error.message || '')) {
     const fallback = { ...insertData } as any;
     delete fallback.file_size;
+    delete fallback.frame_count;
     resp = await supabaseAdmin
       .from('index_files')
       .insert(fallback)
@@ -179,5 +181,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     size: +(fileSizeBytes / 1024 / 1024).toFixed(2)
   });
 }
-
 

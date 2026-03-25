@@ -45,10 +45,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
         // Fetch indices without index_data to avoid timeouts
         // Note: created_at might not exist, so we'll use uploaded_at as fallback
-        // Try to include file_size if the column exists, but don't fail if it doesn't
         let query = supabase
           .from('index_files')
-          .select('id, user_id, project_id, figma_file_key, file_name, uploaded_at', { count: 'exact' });
+          .select('id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count', { count: 'exact' });
 
         // Apply search filter
         if (search && search.trim()) {
@@ -65,9 +64,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           .order('uploaded_at', { ascending: false })
           .range(offset, offset + limit - 1);
 
-        // If error is about file_size column not existing, retry without it
-        if (error && error.message && error.message.includes('file_size')) {
-          console.warn('⚠️ file_size column does not exist, retrying without it');
+        // If optional metadata columns do not exist yet, retry without them
+        if (error && error.message && /(file_size|frame_count)/i.test(error.message)) {
+          console.warn('⚠️ file_size/frame_count column does not exist, retrying without optional metadata');
           query = supabase
             .from('index_files')
             .select('id, user_id, project_id, figma_file_key, file_name, uploaded_at', { count: 'exact' });
@@ -143,7 +142,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
         // Compute fallback sizes and frames for entries without accurate stats (limited to current page)
         const needStatsIds = (indices || [])
-          .filter((idx: any) => !idx.file_size || idx.file_size <= 1024)
+          .filter((idx: any) => {
+            const hasFileSize = typeof idx.file_size === 'number' && idx.file_size > 1024;
+            const hasFrameCount = typeof idx.frame_count === 'number';
+            return !hasFileSize || !hasFrameCount;
+          })
           .map((idx: any) => idx.id)
           .filter(Boolean);
         const idToSize = new Map<string, number>();
@@ -277,8 +280,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               user_id: idx.user_id,
               user_email: userEmail,
               file_name: idx.file_name || 'Untitled',
-              file_size: idx.file_size && idx.file_size > 0 ? idx.file_size : (idToSize.get(idx.id) || 0),
-              frame_count: idToFrames.get(idx.id) || null,
+              file_size: (typeof idx.file_size === 'number' && idx.file_size > 0) ? idx.file_size : (idToSize.get(idx.id) || 0),
+              frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : (idToFrames.get(idx.id) || null),
               created_at: idx.uploaded_at || new Date().toISOString(), // Use uploaded_at as created_at
               uploaded_at: idx.uploaded_at,
               figma_file_key: idx.figma_file_key,
@@ -409,4 +412,3 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default handler;
-

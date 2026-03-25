@@ -267,10 +267,40 @@ function countFramesInIndexData(indexData: unknown): number {
   return 0;
 }
 
+async function sumStoredFrameCount(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  filters: { userId?: string | null; anonId?: string | null }
+): Promise<number | null> {
+  let query = supabaseAdmin
+    .from('index_files')
+    .select('frame_count');
+
+  if (filters.userId) {
+    query = query.eq('user_id', filters.userId);
+  } else {
+    query = query.is('user_id', null);
+  }
+
+  if (filters.anonId) {
+    query = query.eq('owner_anon_id', filters.anonId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    if ((error.message || '').toLowerCase().includes('frame_count')) return null;
+    return 0;
+  }
+  if (!data) return 0;
+  return data.reduce((sum: number, row: any) => sum + (typeof row?.frame_count === 'number' ? row.frame_count : 0), 0);
+}
+
 export async function getCurrentTotalFrames(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   userId: string
 ): Promise<number> {
+  const summedFrameCount = await sumStoredFrameCount(supabaseAdmin, { userId });
+  if (summedFrameCount !== null) return summedFrameCount;
+
   const { data: rows, error } = await supabaseAdmin
     .from('index_files')
     .select('index_data')
@@ -329,6 +359,9 @@ export async function getGuestTotalFrames(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   anonId: string
 ): Promise<number> {
+  const summedFrameCount = await sumStoredFrameCount(supabaseAdmin, { anonId });
+  if (summedFrameCount !== null) return summedFrameCount;
+
   const { data: rows, error } = await supabaseAdmin
     .from('index_files')
     .select('index_data')

@@ -4,7 +4,7 @@ import { getPlanLimitsFromDb, formatBytes } from '../../lib/plans';
 import { archiveExistingIndex } from '../../lib/index-archive';
 
 // Version tracking - Update this number for each fix/change
-const API_VERSION = 'v1.30.24'; // Cover image signing; omit frame_count column (missing in prod)
+const API_VERSION = 'v1.30.24'; // Cover image signing
 
 // Lighter body limit: manifest only (no base64 images)
 export const config = {
@@ -271,14 +271,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const now = new Date();
     const startOfDayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-    // Fetch usage rows - need index_data only if frame limits are enforced
-    // For now, fetch it but limit the query to avoid timeout (max 100 rows)
+    // Fetch lightweight usage rows. Avoid heavy index_data reads on hot path.
     const { data: usageRows, error: usageErr } = await supabaseAdmin
       .from('index_files')
-      .select('id, project_id, figma_file_key, index_data, uploaded_at')
+      .select('id, project_id, figma_file_key, frame_count, uploaded_at')
       .eq('user_id', user.id)
       .order('uploaded_at', { ascending: false })
-      .limit(100); // Limit to recent 100 to avoid timeout
+      .limit(1000);
 
     if (usageErr) {
       return res.status(500).json({
@@ -688,7 +687,7 @@ function countFramesFromPages(pages: any[]): number {
 }
 
 function computeUsageStats(
-  rows: Array<{ id: string; project_id: string | null; figma_file_key: string | null; index_data: any; uploaded_at: string | null }>,
+  rows: Array<{ id: string; project_id: string | null; figma_file_key: string | null; frame_count?: number | null; uploaded_at: string | null }>,
   currentIndexId: string | null,
   startOfDayUtc: Date
 ) {
@@ -711,8 +710,7 @@ function computeUsageStats(
     if (logicalFileId) {
       projectIds.add(logicalFileId);
     }
-    // Only count frames if index_data exists (avoid errors)
-    const frameCount = row.index_data ? countFramesFromIndexData(row.index_data) : 0;
+    const frameCount = typeof row.frame_count === 'number' ? row.frame_count : 0;
     const uploadedAtDate = row.uploaded_at ? new Date(row.uploaded_at) : null;
     if (currentIndexId && row.id === currentIndexId) {
       continue;
@@ -736,4 +734,3 @@ function computeUsageStats(
     framesThisMonthExcludingCurrent
   };
 }
-

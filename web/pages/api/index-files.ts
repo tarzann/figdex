@@ -42,7 +42,7 @@ export default async function handler(
     // Get files from Supabase filtered by user ID
     const { data: files, error } = await supabase
       .from('index_files')
-      .select('*')
+      .select('id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count, frame_tags, custom_tags')
       .eq('user_id', userId)
       .order('uploaded_at', { ascending: false });
 
@@ -53,11 +53,9 @@ export default async function handler(
 
     // Transform the data to match the expected format
     const transformedFiles = files.map(file => {
-      // Calculate stats from index_data
-      const pages = file.index_data || [];
-      const totalFrames = pages.reduce((sum: number, page: any) => sum + (page.frames?.length || 0), 0);
-      const dataSize = JSON.stringify(file.index_data).length;
-      
+      const totalFrames = typeof file.frame_count === 'number' ? file.frame_count : 0;
+      const dataSize = typeof file.file_size === 'number' ? file.file_size : 0;
+
       return {
         filename: file.id.toString(), // Use database ID as filename
         projectId: file.project_id,
@@ -65,7 +63,7 @@ export default async function handler(
         fileName: file.file_name,
         uploadedAt: file.uploaded_at,
         size: dataSize,
-        frameCount: pages.length,
+        frameCount: totalFrames,
         thumbnailCount: totalFrames,
         frameTags: file.frame_tags || [],
         customTags: file.custom_tags || []
