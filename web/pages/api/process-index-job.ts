@@ -4,6 +4,7 @@ import { getFrameImageUrls, processFrameData, fetchFigmaFile, collectFrameNodes,
 import { deriveNamingTags, getSizeTag } from '../../lib/tag-utils';
 import { archiveExistingIndex, type ArchiveableIndexRow } from '../../lib/index-archive';
 import { sendJobNotificationEmail, sendJobNotificationToAdmin } from '../../lib/email';
+import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 
 /**
  * Merge multiple job manifests into a single index
@@ -169,6 +170,41 @@ async function mergeSplitJobs(
   }
   
   console.log(`[${requestId}] ✅ Merged index saved with ID: ${insertion.data?.id}`);
+
+  try {
+    const mergeSyncId = `process-job-merge:${parentJob.user_id}:${parentJob.file_key}:${Date.now()}`;
+    await syncNormalizedIndexChunk({
+      supabaseAdmin,
+      owner: { type: 'user', userId: parentJob.user_id },
+      fileKey: parentJob.file_key,
+      projectId: parentJob.project_id,
+      fileName: parentJob.file_name,
+      coverImageUrl: null,
+      pages: mergedManifest.map((page: any) => ({
+        id: page?.id,
+        pageId: page?.id,
+        name: page?.name,
+        pageName: page?.name,
+        frames: Array.isArray(page?.frames)
+          ? page.frames.map((frame: any) => ({
+              ...frame,
+              image: typeof frame?.image === 'string' ? frame.image : null,
+              thumb_url: typeof frame?.thumb_url === 'string' ? frame.thumb_url : null,
+              frameTags: Array.isArray(frame?.frameTags)
+                ? frame.frameTags
+                : Array.isArray(frame?.tags)
+                  ? frame.tags
+                  : [],
+              customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
+            }))
+          : [],
+      })),
+      syncId: mergeSyncId,
+      finalizePageIds: mergedManifest.map((page: any) => String(page?.id || '')).filter(Boolean),
+    });
+  } catch (normalizedSyncError) {
+    console.error(`[${requestId}] ❌ Failed to sync normalized merged process-index-job state:`, normalizedSyncError);
+  }
   
   // Update all jobs with the merged index ID and mark them as completed
   await supabaseAdmin
@@ -2008,6 +2044,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updatePayload.error = insertion.error.message;
         await supabaseAdmin.from('index_jobs').update(updatePayload).eq('id', jobId);
         return res.status(500).json({ success: false, error: 'Failed to save index', details: insertion.error.message });
+      }
+
+      try {
+        const syncId = `process-job:${job.user_id}:${job.file_key}:${Date.now()}`;
+        await syncNormalizedIndexChunk({
+          supabaseAdmin,
+          owner: { type: 'user', userId: job.user_id },
+          fileKey: job.file_key,
+          projectId: documentId,
+          fileName: job.file_name,
+          coverImageUrl: null,
+          pages: manifest.map((page: any) => ({
+            id: page?.id,
+            pageId: page?.id,
+            name: page?.name,
+            pageName: page?.name,
+            frames: Array.isArray(page?.frames)
+              ? page.frames.map((frame: any) => ({
+                  ...frame,
+                  image: typeof frame?.image === 'string' ? frame.image : null,
+                  thumb_url: typeof frame?.thumb_url === 'string' ? frame.thumb_url : null,
+                  frameTags: Array.isArray(frame?.frameTags)
+                    ? frame.frameTags
+                    : Array.isArray(frame?.tags)
+                      ? frame.tags
+                      : [],
+                  customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
+                }))
+              : [],
+          })),
+          syncId,
+          finalizePageIds: manifest.map((page: any) => String(page?.id || '')).filter(Boolean),
+        });
+      } catch (normalizedSyncError: any) {
+        console.error(`[${requestId}] ❌ Failed to sync normalized process-index-job state:`, normalizedSyncError?.message || normalizedSyncError);
+        updatePayload.status = 'failed';
+        updatePayload.error = normalizedSyncError?.message || 'Failed to sync normalized process-index-job state';
+        await supabaseAdmin.from('index_jobs').update(updatePayload).eq('id', jobId);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to sync normalized index state',
+          details: normalizedSyncError?.message || 'Unknown normalized sync error'
+        });
       }
 
       updatePayload.index_file_id = insertion.data?.id || null;
