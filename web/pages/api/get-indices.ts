@@ -32,6 +32,35 @@ export default async function handler(
 
     // Guest path: fetch by owner_anon_id (user_id IS NULL)
     if (anonId) {
+      const { data: normalizedGuestIndices, error: normalizedGuestError } = await svc
+        .from('indexed_files')
+        .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
+        .is('user_id', null)
+        .eq('owner_anon_id', anonId)
+        .order('last_indexed_at', { ascending: false })
+        .limit(500);
+
+      if (!normalizedGuestError && Array.isArray(normalizedGuestIndices) && normalizedGuestIndices.length > 0) {
+        return res.status(200).json({
+          success: true,
+          data: normalizedGuestIndices.map((idx: any) => ({
+            id: idx.id,
+            user_id: null,
+            project_id: idx.project_id,
+            figma_file_key: idx.figma_file_key,
+            file_name: idx.file_name,
+            uploaded_at: idx.last_indexed_at,
+            file_size: 0,
+            frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
+            source: 'plugin',
+            file_thumbnail_url: idx.cover_image_url || null,
+          })),
+          user: null,
+          isGuest: true,
+          plan: 'guest',
+        });
+      }
+
       const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
       const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
       let guestQuery = svc
@@ -115,6 +144,33 @@ export default async function handler(
     }
 
     console.log(`✅ User found: ${user.email} (id: ${user.id}, type: ${typeof user.id})`);
+
+    const { data: normalizedIndices, error: normalizedIndicesError } = await svc
+      .from('indexed_files')
+      .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
+      .eq('user_id', user.id)
+      .order('last_indexed_at', { ascending: false })
+      .limit(500);
+
+    if (!normalizedIndicesError && Array.isArray(normalizedIndices) && normalizedIndices.length > 0) {
+      return res.status(200).json({
+        success: true,
+        data: normalizedIndices.map((idx: any) => ({
+          id: idx.id,
+          user_id: idx.user_id,
+          project_id: idx.project_id,
+          figma_file_key: idx.figma_file_key,
+          file_name: idx.file_name,
+          uploaded_at: idx.last_indexed_at,
+          file_size: 0,
+          frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
+          source: 'Plugin',
+          file_thumbnail_url: idx.cover_image_url || null,
+        })),
+        user,
+        warning: null,
+      });
+    }
 
     let indices: any[] = [];
     let indicesQueryError: string | null = null;

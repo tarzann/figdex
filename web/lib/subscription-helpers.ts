@@ -207,6 +207,9 @@ export async function getCurrentFileCount(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   userId: string
 ): Promise<number> {
+  const normalizedUsage = await getNormalizedOwnerUsage(supabaseAdmin, { userId });
+  if (normalizedUsage) return normalizedUsage.totalFiles;
+
   const logicalFileIds = new Set<string>();
 
   const { data: savedConnections, error: connectionsError } = await supabaseAdmin
@@ -294,10 +297,42 @@ async function sumStoredFrameCount(
   return data.reduce((sum: number, row: any) => sum + (typeof row?.frame_count === 'number' ? row.frame_count : 0), 0);
 }
 
+async function getNormalizedOwnerUsage(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  filters: { userId?: string | null; anonId?: string | null }
+): Promise<{ totalFiles: number; totalFrames: number } | null> {
+  let query = supabaseAdmin
+    .from('indexed_owner_usage')
+    .select('total_files, total_frames');
+
+  if (filters.userId) {
+    query = query.eq('user_id', filters.userId);
+  } else {
+    query = query.is('user_id', null);
+  }
+
+  if (filters.anonId) {
+    query = query.eq('owner_anon_id', filters.anonId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    totalFiles: typeof (data as any).total_files === 'number' ? (data as any).total_files : 0,
+    totalFrames: typeof (data as any).total_frames === 'number' ? (data as any).total_frames : 0,
+  };
+}
+
 export async function getCurrentTotalFrames(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   userId: string
 ): Promise<number> {
+  const normalizedUsage = await getNormalizedOwnerUsage(supabaseAdmin, { userId });
+  if (normalizedUsage) return normalizedUsage.totalFrames;
+
   const summedFrameCount = await sumStoredFrameCount(supabaseAdmin, { userId });
   if (summedFrameCount !== null) return summedFrameCount;
 
@@ -333,6 +368,9 @@ export async function getGuestDistinctFileCount(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   anonId: string
 ): Promise<number> {
+  const normalizedUsage = await getNormalizedOwnerUsage(supabaseAdmin, { anonId });
+  if (normalizedUsage) return normalizedUsage.totalFiles;
+
   const { data, error } = await supabaseAdmin
     .from('index_files')
     .select('project_id, figma_file_key')
@@ -359,6 +397,9 @@ export async function getGuestTotalFrames(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   anonId: string
 ): Promise<number> {
+  const normalizedUsage = await getNormalizedOwnerUsage(supabaseAdmin, { anonId });
+  if (normalizedUsage) return normalizedUsage.totalFrames;
+
   const summedFrameCount = await sumStoredFrameCount(supabaseAdmin, { anonId });
   if (summedFrameCount !== null) return summedFrameCount;
 

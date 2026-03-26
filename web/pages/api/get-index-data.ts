@@ -51,6 +51,83 @@ export default async function handler(
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
     const svc = serviceUrl && serviceKey ? createClient(serviceUrl, serviceKey) : supabase;
 
+    const { data: normalizedIndex, error: normalizedIndexError } = await svc
+      .from('indexed_files')
+      .select('id, user_id, file_name, project_id, figma_file_key, share_token, cover_image_url, total_frames, last_indexed_at')
+      .eq('id', indexId)
+      .maybeSingle();
+
+    if (!normalizedIndexError && normalizedIndex) {
+      const { data: normalizedPages, error: normalizedPagesError } = await svc
+        .from('indexed_pages')
+        .select('id, figma_page_id, page_name, sort_order, frame_count')
+        .eq('file_id', normalizedIndex.id)
+        .order('sort_order', { ascending: true });
+
+      if (normalizedPagesError) {
+        return res.status(500).json({ success: false, error: normalizedPagesError.message });
+      }
+
+      const pageIds = Array.isArray(normalizedPages) ? normalizedPages.map((page: any) => page.id) : [];
+      let framesByPageId = new Map<string, any[]>();
+
+      if (pageIds.length > 0) {
+        const { data: normalizedFrames, error: normalizedFramesError } = await svc
+          .from('indexed_frames')
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
+          .in('page_id', pageIds)
+          .order('sort_order', { ascending: true });
+
+        if (normalizedFramesError) {
+          return res.status(500).json({ success: false, error: normalizedFramesError.message });
+        }
+
+        framesByPageId = (normalizedFrames || []).reduce((map: Map<string, any[]>, frame: any) => {
+          const framePayload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const hydratedFrame = {
+            ...framePayload,
+            id: frame.figma_frame_id,
+            name: frame.frame_name,
+            frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
+            customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
+          } as any;
+
+          if (typeof frame.image_url === 'string' && frame.image_url) hydratedFrame.image = frame.image_url;
+          if (typeof frame.thumb_url === 'string' && frame.thumb_url) hydratedFrame.thumb_url = frame.thumb_url;
+
+          if (!map.has(frame.page_id)) map.set(frame.page_id, []);
+          map.get(frame.page_id)!.push(hydratedFrame);
+          return map;
+        }, new Map<string, any[]>());
+      }
+
+      const normalizedData = {
+        coverImageUrl: normalizedIndex.cover_image_url || null,
+        pages: (normalizedPages || []).map((page: any) => ({
+          id: page.figma_page_id,
+          pageId: page.figma_page_id,
+          name: page.page_name,
+          pageName: page.page_name,
+          frames: framesByPageId.get(page.id) || [],
+        })),
+      };
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: normalizedIndex.id,
+          user_id: normalizedIndex.user_id,
+          file_name: normalizedIndex.file_name,
+          index_data: normalizedData,
+          uploaded_at: normalizedIndex.last_indexed_at,
+          project_id: normalizedIndex.project_id,
+          figma_file_key: normalizedIndex.figma_file_key,
+          share_token: normalizedIndex.share_token,
+          frame_count: normalizedIndex.total_frames,
+        },
+      });
+    }
+
     // Get specific index data
     const { data: indexData, error: indexError } = await svc
       .from('index_files')

@@ -31,6 +31,17 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(500).json({ success: false, error: `Failed to delete guest index_files: ${guestIdxErr.message}` });
       }
 
+      await supabaseAdmin
+        .from('indexed_files')
+        .delete()
+        .eq('owner_anon_id', anonId)
+        .is('user_id', null);
+
+      await supabaseAdmin
+        .from('indexed_owner_usage')
+        .delete()
+        .eq('owner_anon_id', anonId);
+
       return res.status(200).json({ success: true, deletedGuestAnonId: anonId });
     }
 
@@ -45,6 +56,8 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
     // Delete indices
     const { error: idxErr } = await supabaseAdmin.from('index_files').delete().eq('user_id', userId);
     if (idxErr) return res.status(500).json({ success: false, error: `Failed to delete index_files: ${idxErr.message}` });
+    await supabaseAdmin.from('indexed_files').delete().eq('user_id', userId);
+    await supabaseAdmin.from('indexed_owner_usage').delete().eq('user_id', userId);
     // Delete storage under userId/**
     try {
       const list = async (prefix: string) => {
@@ -79,4 +92,3 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default requireAdmin(purgeHandler);
-

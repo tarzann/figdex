@@ -79,6 +79,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    await supabase
+      .from('indexed_files')
+      .update({ user_id: userId, owner_anon_id: null, updated_at: new Date().toISOString() })
+      .is('user_id', null)
+      .eq('owner_anon_id', anonId);
+
+    await supabase
+      .from('indexed_owner_usage')
+      .delete()
+      .eq('owner_anon_id', anonId);
+
     return res.status(200).json({
       ok: true,
       claimed,

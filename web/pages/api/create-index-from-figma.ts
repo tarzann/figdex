@@ -12,6 +12,7 @@ import {
   type FrameData,
   type FigmaNode,
 } from '../../lib/figma-api';
+import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 
 // Increase body size limit
 export const config = {
@@ -261,6 +262,10 @@ export default async function handler(
   const bodyEarly = typeof req.body === 'object' ? req.body : {};
   const galleryOnly = bodyEarly.source === 'figma-plugin' && (bodyEarly.galleryOnly === true || bodyEarly.action === 'gallery_index');
   const fileKeyEarly = bodyEarly.fileKey ?? bodyEarly.file_key;
+  const syncIdEarly = typeof bodyEarly.syncId === 'string' ? bodyEarly.syncId.trim().slice(0, 120) : '';
+  const finalizePageIdsEarly = Array.isArray(bodyEarly.finalizePageIds)
+    ? bodyEarly.finalizePageIds.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)
+    : [];
   const guestAnonId = typeof bodyEarly.anonId === 'string' ? bodyEarly.anonId.trim().slice(0, 200) : '';
   const authHeader = req.headers.authorization;
   const hasValidAuth = authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20;
@@ -441,6 +446,23 @@ export default async function handler(
           }
         }
       }
+      if (syncIdEarly) {
+        try {
+          await syncNormalizedIndexChunk({
+            supabaseAdmin,
+            owner: { type: 'guest', anonId: guestAnonId },
+            fileKey: fileKeyTrim,
+            projectId: String(docId),
+            fileName,
+            coverImageUrl: existingFileCoverUrl,
+            pages: pagesArray,
+            syncId: syncIdEarly,
+            finalizePageIds: finalizePageIdsEarly,
+          });
+        } catch (normalizedError: any) {
+          console.error(`[${requestId}] guest normalized sync error:`, normalizedError?.message || normalizedError);
+        }
+      }
       return res.status(200).json({ success: true, viewToken: null });
     }
   }
@@ -570,7 +592,13 @@ export default async function handler(
       indexPayload: indexPayloadBody,
       docId: docIdBody,
       coverImageDataUrl: coverImageDataUrlBody,
+      syncId: syncIdBody,
+      finalizePageIds: finalizePageIdsBody,
     } = req.body;
+    const syncId = typeof syncIdBody === 'string' ? syncIdBody.trim().slice(0, 120) : '';
+    const finalizePageIds = Array.isArray(finalizePageIdsBody)
+      ? finalizePageIdsBody.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)
+      : [];
     const validateOnlyMode = Boolean(validateOnly);
 
     // Connected plugin pre-flight: check file/frame limits before exporting or uploading frames.
@@ -772,6 +800,23 @@ export default async function handler(
                 console.error(`[${requestId}] auth insert page error:`, insertErr);
                 return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
               }
+            }
+          }
+          if (syncId) {
+            try {
+              await syncNormalizedIndexChunk({
+                supabaseAdmin,
+                owner: { type: 'user', userId: user.id },
+                fileKey: fileKeyTrim,
+                projectId: String(docId),
+                fileName,
+                coverImageUrl: authExistingFileCoverUrl,
+                pages: pagesArray,
+                syncId,
+                finalizePageIds,
+              });
+            } catch (normalizedError: any) {
+              console.error(`[${requestId}] auth normalized sync error:`, normalizedError?.message || normalizedError);
             }
           }
           return res.status(200).json({ success: true, viewToken: null });

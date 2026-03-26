@@ -72,6 +72,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
 
           await supabase
+            .from('indexed_files')
+            .update({ user_id: userId, owner_anon_id: null, updated_at: new Date().toISOString() })
+            .is('user_id', null)
+            .eq('owner_anon_id', anonId);
+
+          await supabase
+            .from('indexed_owner_usage')
+            .delete()
+            .eq('owner_anon_id', anonId);
+
+          await supabase
             .from('claim_tokens')
             .update({ consumed_at: new Date().toISOString(), consumed_by_user_id: userId })
             .eq('id', tokenRow.id);
