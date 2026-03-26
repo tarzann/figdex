@@ -622,11 +622,11 @@ export default function Home() {
         setCurrentIndexFile(user.email);
         const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
         const data = await response.json();
-        console.log('Get indices response:', data);
+        galleryDebug('Get indices response:', data);
         
         // Check for warning message (indices with null user_id or no user found)
         if (data.warning) {
-          console.warn('⚠️', data.warning);
+          galleryWarn('⚠️', data.warning);
           setError(data.warning || 'No indices found for user');
           setFrames([]);
           setLoading(false);
@@ -757,7 +757,7 @@ export default function Home() {
                   : [];
                 const framesWithThumbs = framesArray.filter((f: any) => f.thumb_url).length;
                 if (framesArray.length > 0) {
-                  console.log(`📊 Index ${file.id}: ${framesWithThumbs}/${framesArray.length} frames have thumb_url`);
+                  galleryDebug(`📊 Index ${file.id}: ${framesWithThumbs}/${framesArray.length} frames have thumb_url`);
                 }
               }
               
@@ -1090,10 +1090,10 @@ export default function Home() {
       setLoading(true);
       const response = await fetch(`/api/get-index-data?indexId=${indexId}`);
       const data = await response.json();
-      console.log('Index data response:', data);
+      galleryDebug('Index data response:', data);
       
       if (data.success && data.data && data.data.index_data) {
-        console.log('Processing index data:', data.data.index_data);
+        galleryDebug('Processing index data');
         
         // The index_data is an array, where each item has a frames array
         const indexDataArray = data.data.index_data;
@@ -1138,10 +1138,10 @@ export default function Home() {
           });
         }
         
-        console.log('Setting frames:', allFrames);
+        galleryDebug('Setting frames:', allFrames.length);
         setFrames(allFrames);
       } else {
-        console.log('No valid data found:', data);
+        galleryDebug('No valid data found');
         setFrames([]);
       }
     } catch (err) {
@@ -1274,7 +1274,7 @@ export default function Home() {
         }
       } catch (error) {
         if (!cancelled) {
-          console.warn('Lobby search hydration failed:', error);
+          galleryWarn('Lobby search hydration failed:', error);
         }
       } finally {
         if (!cancelled) {
