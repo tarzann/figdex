@@ -23,6 +23,7 @@ export const config = {
 };
 
 const ALLOWED_FRAME_PARENTS = new Set(['PAGE', 'CANVAS', 'SECTION']);
+const INDEX_DATA_INLINE_MAX_BYTES = 700 * 1024;
 
 function normalizePageName(name?: string): string {
   const trimmed = (name || '').trim();
@@ -80,6 +81,84 @@ function countFramesInPages(pages: any[]): number {
     const frames = Array.isArray(page?.frames) ? page.frames.length : 0;
     return sum + frames;
   }, 0);
+}
+
+async function resolveIndexDataForRead(
+  supabaseAdmin: any,
+  indexData: unknown
+): Promise<any> {
+  if (!indexData || typeof indexData !== 'object' || Array.isArray(indexData)) {
+    return indexData;
+  }
+
+  const storageRef = typeof (indexData as any).storageRef === 'string'
+    ? String((indexData as any).storageRef)
+    : '';
+
+  if (!storageRef) return indexData;
+
+  try {
+    const [bucket, ...pathParts] = storageRef.split(':');
+    const storagePath = pathParts.join(':');
+    if (!bucket || !storagePath) return indexData;
+
+    const download = await supabaseAdmin.storage.from(bucket).download(storagePath);
+    if (download?.error || !download?.data) return indexData;
+
+    const text = await download.data.text();
+    return JSON.parse(text || 'null');
+  } catch (_) {
+    return indexData;
+  }
+}
+
+async function persistIndexDataForWrite(
+  supabaseAdmin: any,
+  params: {
+    indexData: unknown;
+    ownerType: 'user' | 'guest';
+    ownerId: string;
+    fileKey: string;
+    pageId?: string | null;
+    now: Date;
+  }
+): Promise<unknown> {
+  const { indexData, ownerType, ownerId, fileKey, pageId, now } = params;
+
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(indexData);
+  } catch (_) {
+    return indexData;
+  }
+
+  if (!serialized || Buffer.byteLength(serialized, 'utf8') <= INDEX_DATA_INLINE_MAX_BYTES) {
+    return indexData;
+  }
+
+  try {
+    const storageBucket = (process.env.STORAGE_BUCKET as string | undefined) || 'figdex-uploads';
+    const yyyy = String(now.getUTCFullYear());
+    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(now.getUTCDate()).padStart(2, '0');
+    const safeOwnerId = ownerId.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 80);
+    const safeFileKey = fileKey.replace(/[^a-zA-Z0-9-_.]/g, '_').slice(0, 120) || 'unknown';
+    const safePageId = (pageId || 'page').replace(/[^a-zA-Z0-9-_.]/g, '_').slice(0, 120);
+    const objectPath = `index-data/${ownerType}/${safeOwnerId}/${yyyy}/${mm}/${dd}/${safeFileKey}/${safePageId}.json`;
+
+    const upload = await supabaseAdmin.storage
+      .from(storageBucket)
+      .upload(objectPath, Buffer.from(serialized, 'utf8'), {
+        contentType: 'application/json',
+        upsert: true,
+      });
+
+    if (upload?.error) return indexData;
+
+    return { storageRef: `${storageBucket}:${objectPath}` };
+  } catch (_) {
+    return indexData;
+  }
 }
 
 function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
@@ -222,7 +301,7 @@ export default async function handler(
       let existingFileCoverUrl: string | null = null;
       if (Array.isArray(existingRows)) {
         for (const row of existingRows) {
-          const d = row.index_data as any;
+          const d = await resolveIndexDataForRead(supabaseAdmin, row.index_data);
           if (!existingFileCoverUrl) existingFileCoverUrl = getStoredCoverImageUrl(d);
           const pages = Array.isArray(d) ? d : (d?.pages ?? []);
           for (const p of pages) {
@@ -303,7 +382,7 @@ export default async function handler(
 
         // Only update if existing row has exactly one page (one-index-per-page). Else insert new to avoid overwriting other pages.
         if (existingForPage?.id && existingForPage.pageCount === 1) {
-          const existingData = existingForPage.index_data as any;
+          const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
           const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
           const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
           const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
@@ -317,19 +396,35 @@ export default async function handler(
           const mergedData = keepCover
             ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
             : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+          const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
+            indexData: mergedData,
+            ownerType: 'guest',
+            ownerId: guestAnonId,
+            fileKey: fileKeyTrim,
+            pageId,
+            now,
+          });
           const { error: updateErr } = await supabaseAdmin.from('index_files').update({
             file_name: pageFileName,
             project_id: String(docId),
             figma_file_key: fileKeyTrim,
             frame_count: countFramesInPages([mergedPage]),
             uploaded_at: nowIso,
-            index_data: mergedData,
+            index_data: persistedMergedData,
           }).eq('id', existingForPage.id);
           if (updateErr) {
             console.error(`[${requestId}] guest update page error:`, updateErr);
             return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
           }
         } else {
+          const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
+            indexData: indexDataForPage,
+            ownerType: 'guest',
+            ownerId: guestAnonId,
+            fileKey: fileKeyTrim,
+            pageId,
+            now,
+          });
           const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
             user_id: null,
             owner_anon_id: guestAnonId,
@@ -337,7 +432,7 @@ export default async function handler(
             file_name: pageFileName,
             project_id: String(docId),
             frame_count: countFramesInPages(singlePageData),
-            index_data: indexDataForPage,
+            index_data: persistedIndexData,
             uploaded_at: nowIso,
           });
           if (insertErr) {
@@ -411,40 +506,17 @@ export default async function handler(
     const now = new Date();
     const startOfMonthUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     
-    // Get user's indices from this month to check monthly limits
-    const { data: monthlyIndices, error: monthlyError } = await supabaseAdmin
-      .from('index_files')
-      .select('id, index_data, uploaded_at')
-      .eq('user_id', user.id)
-      .gte('uploaded_at', startOfMonthUtc.toISOString());
-
-    // Initialize monthly stats
-    let uploadsThisMonth = 0;
     let framesThisMonth = 0;
+    let monthlyFramesError: any = null;
 
-    if (!monthlyError && Array.isArray(monthlyIndices)) {
-      // Count uploads and frames this month
-      uploadsThisMonth = monthlyIndices.length;
-      
-      // Count frames from index_data (if available)
-      for (const index of monthlyIndices) {
-        if (index.index_data) {
-          try {
-            let indexData = index.index_data;
-            if (typeof indexData === 'string') {
-              indexData = JSON.parse(indexData);
-            }
-            if (Array.isArray(indexData)) {
-              framesThisMonth += indexData.reduce((sum: number, page: any) => {
-                return sum + (Array.isArray(page?.frames) ? page.frames.length : 0);
-              }, 0);
-            }
-          } catch (e) {
-            // Skip if can't parse
-          }
-        }
-      }
+    if (planLimits.maxUploadsPerMonth !== null) {
+      const { count: uploadsThisMonth, error: monthlyError } = await supabaseAdmin
+        .from('index_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('uploaded_at', startOfMonthUtc.toISOString());
 
+      if (!monthlyError) {
       const limitError = (code: string, message: string) => res.status(403).json({
         success: false,
         error: message,
@@ -454,10 +526,26 @@ export default async function handler(
       });
 
       // Check monthly upload limit
-      if (planLimits.maxUploadsPerMonth !== null && uploadsThisMonth >= planLimits.maxUploadsPerMonth) {
+        if ((uploadsThisMonth || 0) >= planLimits.maxUploadsPerMonth) {
         return limitError(
           'PLAN_MAX_UPLOADS_PER_MONTH',
           `Monthly upload limit reached for the ${planLimits.label} plan (${planLimits.maxUploadsPerMonth} per month). Please upgrade your plan or wait until next month.`
+        );
+      }
+      }
+    }
+
+    if (planLimits.maxFramesPerMonth !== null) {
+      const monthlyFramesQuery = await supabaseAdmin
+        .from('index_files')
+        .select('frame_count')
+        .eq('user_id', user.id)
+        .gte('uploaded_at', startOfMonthUtc.toISOString());
+      monthlyFramesError = monthlyFramesQuery.error;
+      if (Array.isArray(monthlyFramesQuery.data)) {
+        framesThisMonth = monthlyFramesQuery.data.reduce(
+          (sum: number, row: any) => sum + (typeof row?.frame_count === 'number' ? row.frame_count : 0),
+          0
         );
       }
     }
@@ -492,20 +580,21 @@ export default async function handler(
         const docId = docIdBody ?? req.body.doc_id ?? '0:0';
         const estimatedFrameCount = typeof req.body?.estimatedFrameCount === 'number' ? req.body.estimatedFrameCount : 0;
         const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
-        const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
-        const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
         const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
         const { data: authCandidateRows } = await supabaseAdmin
           .from('index_files')
           .select('project_id, figma_file_key')
           .eq('user_id', user.id)
-          .limit(1000);
+          .eq('figma_file_key', fileKeyTrim)
+          .limit(50);
         const hasExistingForFile = (authCandidateRows || []).some((row: any) => {
           const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
           return rowLogicalFileId === currentLogicalFileId;
         });
 
-        if (!hasExistingForFile && limits.maxFiles !== null && currentFiles >= limits.maxFiles) {
+        if (!hasExistingForFile && limits.maxFiles !== null) {
+          const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
+          if (currentFiles >= limits.maxFiles) {
           return res.status(403).json({
             success: false,
             error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
@@ -513,14 +602,18 @@ export default async function handler(
             upgradeUrl: 'https://www.figdex.com/pricing',
           });
         }
+        }
 
-        if (limits.maxFrames !== null && currentTotalFrames + estimatedFrameCount > limits.maxFrames) {
+        if (limits.maxFrames !== null) {
+          const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
+          if (currentTotalFrames + estimatedFrameCount > limits.maxFrames) {
           return res.status(403).json({
             success: false,
             error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
             code: 'FRAME_LIMIT_REACHED',
             upgradeUrl: 'https://www.figdex.com/pricing',
           });
+        }
         }
 
         return res.status(200).json({ success: true, allowed: true });
@@ -545,8 +638,6 @@ export default async function handler(
 
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
-          const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
-          const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
           const { data: authExistingRows } = await supabaseAdmin
             .from('index_files')
             .select('id, index_data, project_id, figma_file_key, frame_count')
@@ -557,7 +648,7 @@ export default async function handler(
           let authExistingFileCoverUrl: string | null = null;
           if (Array.isArray(authExistingRows)) {
             for (const row of authExistingRows) {
-              const d = row.index_data as any;
+              const d = await resolveIndexDataForRead(supabaseAdmin, row.index_data);
               if (!authExistingFileCoverUrl) authExistingFileCoverUrl = getStoredCoverImageUrl(d);
               const pages = Array.isArray(d) ? d : (d?.pages ?? []);
               for (const p of pages) {
@@ -569,7 +660,9 @@ export default async function handler(
           const hasAuthExistingForFile = authExistingByPageId.size > 0 || (authExistingRows && authExistingRows.length > 0);
           const isNewFile = !hasAuthExistingForFile;
 
-          if (isNewFile && currentFiles >= limits.maxFiles) {
+          if (isNewFile && limits.maxFiles !== null) {
+            const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
+            if (currentFiles >= limits.maxFiles) {
             return res.status(403).json({
               success: false,
               error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
@@ -577,13 +670,17 @@ export default async function handler(
               upgradeUrl: 'https://www.figdex.com/pricing',
             });
           }
-          if (limits.maxFrames !== null && currentTotalFrames + framesInPayload > limits.maxFrames) {
+          }
+          if (limits.maxFrames !== null) {
+            const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
+            if (currentTotalFrames + framesInPayload > limits.maxFrames) {
             return res.status(403).json({
               success: false,
               error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
               code: 'FRAME_LIMIT_REACHED',
               upgradeUrl: 'https://www.figdex.com/pricing',
             });
+          }
           }
           const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
           if (!canIndex.allowed) {
@@ -619,7 +716,7 @@ export default async function handler(
             const nowIso = now.toISOString();
 
             if (existingForPage?.id && existingForPage.pageCount === 1) {
-              const existingData = existingForPage.index_data as any;
+              const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
               const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
               const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
               const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
@@ -633,26 +730,42 @@ export default async function handler(
               const mergedData = keepCover
                 ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
                 : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+              const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
+                indexData: mergedData,
+                ownerType: 'user',
+                ownerId: user.id,
+                fileKey: fileKeyTrim,
+                pageId,
+                now,
+              });
               const { error: updateErr } = await supabaseAdmin.from('index_files').update({
                 file_name: pageFileName,
                 project_id: String(docId),
                 figma_file_key: fileKeyTrim,
                 frame_count: countFramesInPages([mergedPage]),
                 uploaded_at: nowIso,
-                index_data: mergedData,
+                index_data: persistedMergedData,
               }).eq('id', existingForPage.id);
               if (updateErr) {
                 console.error(`[${requestId}] auth update page error:`, updateErr);
                 return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
               }
             } else {
+              const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
+                indexData: indexDataForPage,
+                ownerType: 'user',
+                ownerId: user.id,
+                fileKey: fileKeyTrim,
+                pageId,
+                now,
+              });
               const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
                 user_id: user.id,
                 figma_file_key: fileKeyTrim,
                 file_name: pageFileName,
                 project_id: String(docId),
                 frame_count: countFramesInPages(singlePageData),
-                index_data: indexDataForPage,
+                index_data: persistedIndexData,
                 uploaded_at: nowIso,
               });
               if (insertErr) {
@@ -973,7 +1086,7 @@ export default async function handler(
     }
 
     // Check monthly frames limit (estimate based on totalFramesCount)
-    if (!monthlyError && Array.isArray(monthlyIndices) && planLimits.maxFramesPerMonth !== null) {
+    if (!monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
       const framesThisMonthAfter = framesThisMonth + totalFramesCount;
       if (framesThisMonthAfter > planLimits.maxFramesPerMonth) {
         return res.status(403).json({
