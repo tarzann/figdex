@@ -3,9 +3,9 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.24';
+const PLUGIN_VERSION = '1.32.25';
 const DEBUG_LOGS = false;
-const FALLBACK_UI_HTML = '<!DOCTYPE html><html><body style="margin:0;padding:16px;font:12px Inter,Arial,sans-serif;color:#222;background:#fff;"><div style="font-weight:600;margin-bottom:8px;">FigDex</div><div>The plugin UI could not be loaded. Please reload the plugin.</div></body></html>';
+const FALLBACK_UI_HTML = '<!DOCTYPE html><html><body style="margin:0;padding:16px;font:12px Inter,Arial,sans-serif;color:#222;background:#fff;"><div style="font-weight:600;margin-bottom:8px;">FigDex</div><div id="fallbackStatus">Loading plugin UI...</div><script>(function(){function showMessage(message){var el=document.getElementById(\"fallbackStatus\"); if(el) el.textContent=message;} function tryLoad(path){return fetch(path).then(function(res){ if(!res.ok) throw new Error(\"HTTP \"+res.status); return res.text(); }).then(function(html){ if(!html || html.indexOf(\"<html\") === -1) throw new Error(\"Invalid UI file\"); document.open(); document.write(html); document.close(); });} tryLoad(\"ui.html\").catch(function(){ return tryLoad(\"./ui.html\"); }).catch(function(err){ showMessage(\"The plugin UI could not be loaded. Please re-import the plugin. \" + (err && err.message ? err.message : \"\")); });})();<\/script></body></html>';
 const PLUGIN_UI_HTML = (typeof __html__ === 'string' && __html__.trim()) ? __html__ : FALLBACK_UI_HTML;
 figma.showUI(PLUGIN_UI_HTML, { width: 386, height: 800 });
 
