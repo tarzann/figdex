@@ -481,6 +481,34 @@ function extractLobbyPreviewFromIndexPayload(raw: any, coverImageUrl?: string | 
   return { thumbnail, totalFrameCount };
 }
 
+async function parseJsonResponse(response: Response, context: string) {
+  const text = await response.text();
+  if (!response.ok) {
+    const message = text ? text.slice(0, 200) : `HTTP ${response.status}`;
+    throw new Error(`${context}: ${message}`);
+  }
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const snippet = text ? text.slice(0, 200) : 'Empty response';
+    throw new Error(`${context}: ${snippet}`);
+  }
+}
+
+async function mapInBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(mapper));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 const modalStyle = {
   position: 'absolute' as const,
   top: '50%',
@@ -921,22 +949,36 @@ export default function Home() {
       setFrames([]);
       
       const indicesToLoad = fileInfo._chunks?.length ? fileInfo._chunks : [{ id: fileInfo.id }];
-      const allFrames: any[] = [];
-      
-      for (const idx of indicesToLoad) {
+      const seen = new Set<string>();
+      const results = await mapInBatches(indicesToLoad, 4, async (idx: any) => {
         const indexId = typeof idx === 'object' && idx?.id ? idx.id : idx;
         const response = await fetch(`/api/get-index-data?indexId=${indexId}`);
-        const data = await response.json();
-        
-        if (data.success && data.data && data.data.index_data) {
-          allFrames.push(...extractFramesFromIndexPayload(data.data.index_data, { id: fileInfo.id, fileName: fileInfo.fileName }));
-        } else if (indicesToLoad.length === 1) {
-          setError(data.error || 'Failed to load file frames');
-          setFrames([]);
-          setLoading(false);
-          return;
+        const data = await parseJsonResponse(response, 'Failed to load file frames');
+        if (!data?.success || !data?.data?.index_data) {
+          return { success: false, error: data?.error || 'Failed to load file frames', frames: [] };
         }
+        const fileFrames = extractFramesFromIndexPayload(data.data.index_data, { id: fileInfo.id, fileName: fileInfo.fileName })
+          .filter((frame: any, index: number) => {
+            const key = String(frame.url || frame.id || `${fileInfo.id}::${frame.pageName || ''}::${frame.name || 'frame'}::${index}`);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        return { success: true, frames: fileFrames };
+      });
+
+      const failedResult = results.find((result: any) => !result.success);
+      if (failedResult) {
+        setError(failedResult.error || 'Failed to load file frames');
+        setFrames([]);
+        setLoading(false);
+        return;
       }
+
+      const allFrames: any[] = [];
+      results.forEach((result: any) => {
+        if (Array.isArray(result.frames)) allFrames.push(...result.frames);
+      });
       
       setFrames(allFrames);
     } catch (err: any) {
@@ -953,7 +995,7 @@ export default function Home() {
     try {
       setLoading(true);
       const response = await fetch(`/api/get-index-data?indexId=${indexId}`);
-      const data = await response.json();
+      const data = await parseJsonResponse(response, 'Failed to load index frames');
       galleryDebug('Index data response:', data);
       
       if (data.success && data.data && data.data.index_data) {
@@ -1064,7 +1106,7 @@ export default function Home() {
         const loadFramesForFile = async (file: any) => {
           const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
           if (!indexResponse.ok) return [];
-          const indexData = await indexResponse.json();
+          const indexData = await parseJsonResponse(indexResponse, `Failed to hydrate lobby frames for ${file.id}`);
           if (!indexData.success || !indexData.data?.index_data) return [];
 
           const logical = physicalToLogical.get(file.id) || { id: file.id, fileName: file.file_name };
