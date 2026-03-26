@@ -1214,6 +1214,95 @@ export default function Home() {
     return null;
   };
 
+  // In lobby mode, hydrate frame search data only when the user actually starts searching.
+  useEffect(() => {
+    if (viewMode !== 'lobby') return;
+    if (!search.trim()) return;
+    if (allFramesData.length > 0) return;
+    if (indexFiles.length === 0) return;
+
+    let cancelled = false;
+
+    const loadLobbyFramesOnDemand = async () => {
+      setLobbyFramesLoading(true);
+      try {
+        const filesToLoad = indexFiles.flatMap((file: any) => (file._chunks ? file._chunks : [file]));
+        const physicalToLogical = buildLogicalFileMap(indexFiles);
+        const seenFrameIds = new Set<string>();
+        const hydratedFrames: any[] = [];
+        const batchSize = 4;
+
+        const loadFramesForFile = async (file: any) => {
+          const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
+          if (!indexResponse.ok) return [];
+          const indexData = await indexResponse.json();
+          if (!indexData.success || !indexData.data?.index_data) return [];
+
+          let content: any = indexData.data.index_data;
+          if (typeof content === 'string') {
+            try {
+              content = JSON.parse(content);
+            } catch {
+              return [];
+            }
+          }
+
+          const pagesArray = Array.isArray(content)
+            ? content
+            : (content?.pages && Array.isArray(content.pages) ? content.pages : []);
+
+          const logical = physicalToLogical.get(file.id) || { id: file.id, fileName: file.file_name };
+          return (pagesArray || []).flatMap((item: any) => {
+            if (!item?.frames?.length) return [];
+            const pageName = item.name || item.pageName || '';
+            return item.frames
+              .filter((frame: any) => {
+                const fid = frame.url || frame.id || `${file.id}::${frame.name || 'u'}::${frame.id || ''}`;
+                if (seenFrameIds.has(fid)) return false;
+                seenFrameIds.add(fid);
+                return true;
+              })
+              .map((frame: any) => ({
+                ...frame,
+                pageName,
+                frameTags: frame.frameTags || frame.tags || [],
+                customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
+                textContent: frame.textContent || null,
+                searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null,
+                _fileId: logical.id,
+                _fileName: logical.fileName
+              }));
+          });
+        };
+
+        for (let i = 0; i < filesToLoad.length; i += batchSize) {
+          if (cancelled) return;
+          const batch = filesToLoad.slice(i, i + batchSize);
+          const batchResults = await Promise.all(batch.map((file: any) => loadFramesForFile(file)));
+          batchResults.forEach((framesBatch) => hydratedFrames.push(...framesBatch));
+        }
+
+        if (!cancelled) {
+          setAllFramesData(hydratedFrames);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Lobby search hydration failed:', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setLobbyFramesLoading(false);
+        }
+      }
+    };
+
+    loadLobbyFramesOnDemand();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode, search, indexFiles, allFramesData.length]);
+
   // Handle user menu
   const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setUserMenuAnchor(event.currentTarget);
