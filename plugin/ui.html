@@ -819,7 +819,7 @@
           <div id="pagesList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px;"></div>
           <div id="pagesListSkeleton" style="display: none; max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px; padding: 8px;"></div>
           <div id="pageListHelperText" style="display: none; font-size: 0.7em; color: #666; margin-top: 6px; margin-bottom: 4px;"></div>
-          <div style="margin-top: 8px; text-align: center;">
+          <div id="openGalleryFromPagesWrap" style="display: none; margin-top: 8px; text-align: center;">
             <button type="button" id="openGalleryFromPagesBtn" style="font-size:0.75em; background: transparent; color: #1976d2; border: 1px solid #1976d2; border-radius: 6px; cursor: pointer; padding: 6px 12px;">Open FigDex Web</button>
           </div>
         </div>
@@ -1925,9 +1925,9 @@
         }
         if (accountPrimaryBtn) {
           if (connected) {
-            accountPrimaryBtn.style.display = 'none';
-            accountPrimaryBtn.textContent = '';
-            accountPrimaryBtn.dataset.action = 'none';
+            accountPrimaryBtn.style.display = '';
+            accountPrimaryBtn.textContent = 'Open FigDex Web';
+            accountPrimaryBtn.dataset.action = 'open-web';
           } else if (state.lastIndexUpgradeUrl || state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED') {
             accountPrimaryBtn.style.display = '';
             accountPrimaryBtn.textContent = 'Create free account';
@@ -2000,6 +2000,8 @@
         }
         if (connectTimeoutBlock) connectTimeoutBlock.style.display = (needsConnect && state.connectTimedOut) ? 'block' : 'none';
         if (actionCard) actionCard.style.display = (needsConnect || isIndexing || isDone) ? 'none' : 'block';
+        var openGalleryFromPagesWrap = document.getElementById('openGalleryFromPagesWrap');
+        if (openGalleryFromPagesWrap) openGalleryFromPagesWrap.style.display = 'none';
         if (indexingBlock) {
           indexingBlock.style.display = isIndexing ? 'block' : 'none';
           var indexingTextEl = document.getElementById('indexingBlockText');
