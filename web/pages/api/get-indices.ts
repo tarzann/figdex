@@ -107,36 +107,39 @@ export default async function handler(
           })))
         : [];
 
-      const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
-      const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
-      let guestQuery = svc
-        .from('index_files')
-        .select(selectWithMeta)
-        .is('user_id', null)
-        .eq('owner_anon_id', anonId)
-        .order('uploaded_at', { ascending: false })
-        .limit(500);
-      let { data: guestIndices, error: guestErr }: { data: any[] | null; error: any } = await guestQuery;
-      if (guestErr && /(file_size|frame_count)/i.test(guestErr.message || '')) {
-        const fallbackGuest = await svc
+      let legacyGuestList: any[] = [];
+      if (normalizedGuestList.length === 0) {
+        const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
+        const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
+        let guestQuery = svc
           .from('index_files')
-          .select(selectBasic)
+          .select(selectWithMeta)
           .is('user_id', null)
           .eq('owner_anon_id', anonId)
           .order('uploaded_at', { ascending: false })
           .limit(500);
-        guestIndices = fallbackGuest.data;
-        guestErr = fallbackGuest.error;
+        let { data: guestIndices, error: guestErr }: { data: any[] | null; error: any } = await guestQuery;
+        if (guestErr && /(file_size|frame_count)/i.test(guestErr.message || '')) {
+          const fallbackGuest = await svc
+            .from('index_files')
+            .select(selectBasic)
+            .is('user_id', null)
+            .eq('owner_anon_id', anonId)
+            .order('uploaded_at', { ascending: false })
+            .limit(500);
+          guestIndices = fallbackGuest.data;
+          guestErr = fallbackGuest.error;
+        }
+        if (guestErr) {
+          return res.status(500).json({ success: false, error: guestErr.message });
+        }
+        legacyGuestList = (guestIndices || []).map((idx: any) => ({
+          ...idx,
+          source: 'plugin',
+          frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
+          file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
+        }));
       }
-      if (guestErr) {
-        return res.status(500).json({ success: false, error: guestErr.message });
-      }
-      const legacyGuestList = (guestIndices || []).map((idx: any) => ({
-        ...idx,
-        source: 'plugin',
-        frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
-        file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
-      }));
       return res.status(200).json({
         success: true,
         data: mergeIndexLists(normalizedGuestList, legacyGuestList),
@@ -215,44 +218,44 @@ export default async function handler(
 
     let indices: any[] = [];
     let indicesQueryError: string | null = null;
-    // Get indices by user_id with size limit
-    // Important: DO NOT fetch heavy JSON (index_data) here – it causes timeouts.
-    // The gallery fetches full data per index via /api/get-index-data when needed.
-    console.log(`🔍 Fetching indices for user_id: ${user.id} (type: ${typeof user.id})`);
-    // Start without file_size since it may not exist in the table
-    const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
-    const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
+    if (normalizedList.length === 0) {
+      // Get indices by user_id with size limit
+      // Important: DO NOT fetch heavy JSON (index_data) here – it causes timeouts.
+      // The gallery fetches full data per index via /api/get-index-data when needed.
+      console.log(`🔍 Fetching legacy indices for user_id: ${user.id} (type: ${typeof user.id})`);
+      const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
+      const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
 
-    let { data: indicesByUserId, error: indicesByUserIdError }: { data: any[] | null; error: any } = await svc
-      .from('index_files')
-      .select(selectWithMeta)
-      .eq('user_id', user.id)
-      .order('uploaded_at', { ascending: false })
-      .limit(500); // Increased to support chunked uploads
-
-    if (indicesByUserIdError && /(file_size|frame_count)/i.test(indicesByUserIdError.message || '')) {
-      const fallbackIndices = await svc
+      let { data: indicesByUserId, error: indicesByUserIdError }: { data: any[] | null; error: any } = await svc
         .from('index_files')
-        .select(selectBasic)
+        .select(selectWithMeta)
         .eq('user_id', user.id)
         .order('uploaded_at', { ascending: false })
         .limit(500);
-      indicesByUserId = fallbackIndices.data;
-      indicesByUserIdError = fallbackIndices.error;
-    }
 
-    if (indicesByUserIdError) {
-      console.error('❌ Error fetching indices by user_id:', {
-        error: indicesByUserIdError,
-        user_id: user.id,
-        user_id_type: typeof user.id,
-        user_email: user.email
-      });
-      // Do NOT fail the request. Continue with fallback checks and return a warning.
-      indicesQueryError = indicesByUserIdError.message || 'Unknown indices query error';
-      indices = [];
+      if (indicesByUserIdError && /(file_size|frame_count)/i.test(indicesByUserIdError.message || '')) {
+        const fallbackIndices = await svc
+          .from('index_files')
+          .select(selectBasic)
+          .eq('user_id', user.id)
+          .order('uploaded_at', { ascending: false })
+          .limit(500);
+        indicesByUserId = fallbackIndices.data;
+        indicesByUserIdError = fallbackIndices.error;
+      }
+
+      if (indicesByUserIdError) {
+        console.error('❌ Error fetching indices by user_id:', {
+          error: indicesByUserIdError,
+          user_id: user.id,
+          user_id_type: typeof user.id,
+          user_email: user.email
+        });
+        indicesQueryError = indicesByUserIdError.message || 'Unknown indices query error';
+        indices = [];
+      }
+      indices = indicesByUserId || [];
     }
-    indices = (indicesByUserId || []);
 
     // Check which indices were created via API (have index_jobs entry)
     const indexIds = indices.map((idx: any) => idx.id).filter(Boolean);
