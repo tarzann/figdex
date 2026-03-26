@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.20';
+const PLUGIN_VERSION = '1.32.21';
 const DEBUG_LOGS = false;
 figma.showUI(__html__, { width: 386, height: 800 });
 

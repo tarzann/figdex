@@ -352,9 +352,9 @@
         box-sizing: border-box !important;
       }
       #fileKeyRequiredMsg {
-        width: 354px !important;
-        max-width: 354px !important;
-        min-width: 354px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
         box-sizing: border-box !important;
       }
       #marketingBoxCompact {
@@ -670,15 +670,16 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.20</div>
+        <div class="version" id="pluginVersionLabel">v1.32.21</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
       <button id="settingsIconBtn" class="settings-icon-btn" title="Settings">⚙️</button>
     </div>
 
-    <div style="margin: 8px 16px 0 16px; font-size: 0.75em; color: #555; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
-      Index this file to browse & search all its screens in FigDex Web.
+    <div style="margin: 10px 16px 0 16px; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
+      <div style="font-size: 1em; font-weight: 700; color: #1f2937; line-height: 1.25; margin-bottom: 4px;">Index This File</div>
+      <div style="font-size: 0.74em; color: #667085; line-height: 1.45;">Browse and search all its screens in FigDex Web.</div>
     </div>
 
     <div id="accountStatusCard" style="margin: 10px 16px 0 16px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box;">
@@ -1042,7 +1043,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.20</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.21</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1107,7 +1108,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.20</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.21</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
