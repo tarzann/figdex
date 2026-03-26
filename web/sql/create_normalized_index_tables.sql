@@ -38,6 +38,8 @@ CREATE INDEX IF NOT EXISTS idx_indexed_files_user_id ON indexed_files(user_id);
 CREATE INDEX IF NOT EXISTS idx_indexed_files_owner_anon_id ON indexed_files(owner_anon_id);
 CREATE INDEX IF NOT EXISTS idx_indexed_files_figma_file_key ON indexed_files(figma_file_key);
 CREATE INDEX IF NOT EXISTS idx_indexed_files_project_id ON indexed_files(project_id);
+CREATE INDEX IF NOT EXISTS idx_indexed_files_user_updated_at ON indexed_files(user_id, updated_at DESC) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_indexed_files_guest_updated_at ON indexed_files(owner_anon_id, updated_at DESC) WHERE user_id IS NULL AND owner_anon_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_indexed_files_uploaded_at ON indexed_files(last_indexed_at DESC);
 
 CREATE TABLE IF NOT EXISTS indexed_pages (
@@ -56,6 +58,7 @@ CREATE TABLE IF NOT EXISTS indexed_pages (
 
 CREATE INDEX IF NOT EXISTS idx_indexed_pages_file_id ON indexed_pages(file_id);
 CREATE INDEX IF NOT EXISTS idx_indexed_pages_file_sort ON indexed_pages(file_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_indexed_pages_file_sync ON indexed_pages(file_id, last_sync_id);
 
 CREATE TABLE IF NOT EXISTS indexed_frames (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,6 +80,7 @@ CREATE TABLE IF NOT EXISTS indexed_frames (
 
 CREATE INDEX IF NOT EXISTS idx_indexed_frames_page_id ON indexed_frames(page_id);
 CREATE INDEX IF NOT EXISTS idx_indexed_frames_page_sort ON indexed_frames(page_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_indexed_frames_page_sync ON indexed_frames(page_id, last_sync_id);
 CREATE INDEX IF NOT EXISTS idx_indexed_frames_search_text ON indexed_frames USING GIN (to_tsvector('simple', COALESCE(search_text, '')));
 CREATE INDEX IF NOT EXISTS idx_indexed_frames_frame_tags ON indexed_frames USING GIN (frame_tags);
 CREATE INDEX IF NOT EXISTS idx_indexed_frames_custom_tags ON indexed_frames USING GIN (custom_tags);

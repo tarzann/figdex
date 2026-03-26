@@ -364,6 +364,99 @@ function groupLobbyThumbnailResults(displayFiles: any[], thumbnailResults: any[]
   return Array.from(grouped.values());
 }
 
+function parseIndexPayload(raw: any): any {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getPagesFromIndexPayload(raw: any): any[] {
+  const parsed = parseIndexPayload(raw);
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pages)) return parsed.pages;
+  return [];
+}
+
+function normalizeFrameForGallery(frame: any, pageName: string, fileMeta?: { id?: string; fileName?: string }) {
+  return {
+    ...frame,
+    pageName: pageName || frame.pageName || '',
+    frameTags: Array.isArray(frame.frameTags) ? frame.frameTags : (Array.isArray(frame.tags) ? frame.tags : []),
+    customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
+    textContent: frame.textContent || null,
+    searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null,
+    _fileId: fileMeta?.id || frame._fileId,
+    _fileName: fileMeta?.fileName || frame._fileName,
+  };
+}
+
+function extractFramesFromIndexPayload(raw: any, fileMeta?: { id?: string; fileName?: string }) {
+  const parsed = parseIndexPayload(raw);
+  const pages = getPagesFromIndexPayload(raw);
+  const seen = new Set<string>();
+  const pageFrames = pages.flatMap((item: any) => {
+    if (!item?.frames?.length) return [];
+    const pageName = item.name || item.pageName || '';
+    return item.frames
+      .map((frame: any) => normalizeFrameForGallery(frame, pageName, fileMeta))
+      .filter((frame: any, index: number) => {
+        const key = String(frame.url || frame.id || `${fileMeta?.id || 'file'}::${pageName}::${frame.name || 'frame'}::${index}`);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  });
+
+  if (pageFrames.length > 0) return pageFrames;
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .filter((item: any) => item?.name && (item?.image || item?.url))
+      .map((item: any) => normalizeFrameForGallery(item, '', fileMeta))
+      .filter((frame: any, index: number) => {
+        const key = String(frame.url || frame.id || `${fileMeta?.id || 'file'}::direct::${frame.name || 'frame'}::${index}`);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  return [];
+}
+
+function extractLobbyPreviewFromIndexPayload(raw: any, coverImageUrl?: string | null) {
+  const parsed = parseIndexPayload(raw);
+  const pages = getPagesFromIndexPayload(raw);
+  let thumbnail = coverImageUrl || null;
+  let totalFrameCount = 0;
+
+  pages.forEach((page: any) => {
+    if (!Array.isArray(page?.frames) || page.frames.length === 0) return;
+    totalFrameCount += page.frames.length;
+    if (!thumbnail) {
+      const firstFrame = page.frames[0];
+      thumbnail = firstFrame?.thumb_url || firstFrame?.image || null;
+    }
+  });
+
+  if (!thumbnail && parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.coverImageUrl) {
+    thumbnail = parsed.coverImageUrl;
+  }
+
+  if (totalFrameCount === 0 && Array.isArray(parsed)) {
+    const directFrames = parsed.filter((item: any) => item?.name && (item?.image || item?.url));
+    totalFrameCount = directFrames.length;
+    if (!thumbnail && directFrames.length > 0) {
+      thumbnail = directFrames[0]?.thumb_url || directFrames[0]?.image || null;
+    }
+  }
+
+  return { thumbnail, totalFrameCount };
+}
+
 const modalStyle = {
   position: 'absolute' as const,
   top: '50%',
@@ -548,28 +641,20 @@ export default function Home() {
             setFrames([]);
             // Load file thumbnails and frames for guest (same as user path)
             const filesToLoad = displayFiles.flatMap((f: any) => (f._chunks ? f._chunks : [f]));
-            const physicalToLogicalGuest = buildLogicalFileMap(displayFiles);
             const loadFileThumbnailGuest = async (file: any) => {
               try {
                 const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
                 if (!indexResponse.ok) return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
                 const indexData = await indexResponse.json();
                 if (!indexData.success || !indexData.data) return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
-                let thumbnail: string | null = indexData.data.coverImageUrl || null;
-                let indexDataContent: any = indexData.data.index_data;
-                if (typeof indexDataContent === 'string') {
-                  try { indexDataContent = JSON.parse(indexDataContent); } catch { return { success: false, fileId: file.id, thumbnail, frameCount: 0, fileName: file.file_name }; }
-                }
-                const pagesArray = Array.isArray(indexDataContent) ? indexDataContent : (indexDataContent?.pages && Array.isArray(indexDataContent.pages) ? indexDataContent.pages : []);
-                if (!thumbnail && indexDataContent && typeof indexDataContent === 'object' && indexDataContent.coverImageUrl) thumbnail = indexDataContent.coverImageUrl;
-                let totalFrameCount = 0;
-                for (const pageItem of pagesArray || []) {
-                  if (pageItem?.frames?.length) {
-                    if (!thumbnail) thumbnail = pageItem.frames[0]?.thumb_url || pageItem.frames[0]?.image || null;
-                    totalFrameCount += pageItem.frames.length;
-                  }
-                }
-                return { success: true, fileId: file.id, thumbnail, frameCount: totalFrameCount, fileName: file.file_name };
+                const preview = extractLobbyPreviewFromIndexPayload(indexData.data.index_data, indexData.data.coverImageUrl || null);
+                return {
+                  success: true,
+                  fileId: file.id,
+                  thumbnail: preview.thumbnail,
+                  frameCount: preview.totalFrameCount,
+                  fileName: file.file_name
+                };
               } catch {
                 return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
               }
@@ -580,25 +665,7 @@ export default function Home() {
                 if (!indexResponse.ok) return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
                 const indexData = await indexResponse.json();
                 if (!indexData.success || !indexData.data?.index_data) return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
-                let content: any = indexData.data.index_data;
-                if (typeof content === 'string') {
-                  try { content = JSON.parse(content); } catch { return { success: false, fileId: file.id, frames: [], fileName: file.file_name }; }
-                }
-                const pagesArray = Array.isArray(content) ? content : (content?.pages && Array.isArray(content.pages) ? content.pages : []);
-                const fileFrames = (pagesArray || []).flatMap((item: any) => {
-                  if (!item?.frames?.length) return [];
-                  const pageName = item.name || item.pageName || '';
-                  return item.frames.map((frame: any) => ({
-                    ...frame,
-                    pageName,
-                    frameTags: frame.frameTags || frame.tags || [],
-                    customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
-                    textContent: frame.textContent || null,
-                    searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null,
-                    _fileId: file.id,
-                    _fileName: file.file_name
-                  }));
-                });
+                const fileFrames = extractFramesFromIndexPayload(indexData.data.index_data, { id: file.id, fileName: file.file_name });
                 return { success: true, fileId: file.id, frames: fileFrames, fileName: file.file_name };
               } catch {
                 return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
@@ -672,53 +739,10 @@ export default function Home() {
               }
               
               // First check if coverImageUrl is at the data level (from get-index-data.ts)
-              let thumbnail: string | null = null;
-              if (indexData.data && indexData.data.coverImageUrl) {
-                thumbnail = indexData.data.coverImageUrl;
-              }
-              
-              // Try to parse index_data
-              let indexDataContent = indexData.data.index_data;
-              if (typeof indexDataContent === 'string') {
-                try {
-                  indexDataContent = JSON.parse(indexDataContent);
-                } catch (e) {
-                  console.error(`❌ Index ${file.id} has invalid JSON:`, e);
-                  return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
-                }
-              }
-              
-              // Check if index_data has coverImageUrl at root level (from plugin) - only if not found at data level
-              let pagesArray: any[] = [];
-              
-              if (!thumbnail && indexDataContent && typeof indexDataContent === 'object' && !Array.isArray(indexDataContent)) {
-                // Object format (with coverImageUrl)
-                if (indexDataContent.coverImageUrl) {
-                  thumbnail = indexDataContent.coverImageUrl;
-                }
-                pagesArray = Array.isArray(indexDataContent.pages) ? indexDataContent.pages : [];
-              } else if (Array.isArray(indexDataContent)) {
-                // Array format (pages only)
-                pagesArray = indexDataContent;
-              }
-              
-              // Get thumbnail from first frame of first page if no coverImageUrl, and count total frames
-              let totalFrameCount = 0;
-              
-              if (Array.isArray(pagesArray)) {
-                // Find first page with frames
-                for (const pageItem of pagesArray) {
-                  if (pageItem && pageItem.frames && Array.isArray(pageItem.frames) && pageItem.frames.length > 0) {
-                    if (!thumbnail) {
-                      // Get thumbnail from first frame of first page
-                      const firstFrame = pageItem.frames[0];
-                      thumbnail = (firstFrame as any).thumb_url || firstFrame.image || null;
-                    }
-                    totalFrameCount += pageItem.frames.length;
-                  }
-                }
-              }
-              
+              const preview = extractLobbyPreviewFromIndexPayload(indexData.data.index_data, indexData.data.coverImageUrl || null);
+              let thumbnail: string | null = preview.thumbnail;
+              const totalFrameCount = preview.totalFrameCount;
+
               if (!thumbnail && file.file_thumbnail_url) {
                 thumbnail = file.file_thumbnail_url;
               }
@@ -768,74 +792,7 @@ export default function Home() {
               }
               
               // Try to parse index_data - handle both array and object formats
-              let indexDataContent = indexData.data.index_data;
-              if (typeof indexDataContent === 'string') {
-                try {
-                  indexDataContent = JSON.parse(indexDataContent);
-                } catch (e) {
-                  console.error(`❌ Index ${file.id} has invalid JSON:`, e);
-                  return { success: false, fileId: file.id, frames: [] };
-                }
-              }
-              
-              // Handle both array format (pages) and object format (with coverImageUrl)
-              let pagesArray: any[] = [];
-              if (Array.isArray(indexDataContent)) {
-                pagesArray = indexDataContent;
-              } else if (indexDataContent && typeof indexDataContent === 'object' && indexDataContent.pages) {
-                pagesArray = Array.isArray(indexDataContent.pages) ? indexDataContent.pages : [];
-              }
-              
-              const fileFrames = pagesArray.flatMap((item: any) => {
-                if (!item) return [];
-                // Handle different structures
-                if (item.frames && Array.isArray(item.frames)) {
-                  const pageName = item.name || item.pageName || '';
-                  return item.frames.map((frame: any, frameIndex: number) => {
-                    const frameWithPage = {
-                      ...frame,
-                      pageName: pageName || frame.pageName || '',
-                      frameTags: frame.frameTags || frame.tags || [],
-                      customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
-                      // CRITICAL: Preserve textContent and searchTokens for search
-                      textContent: frame.textContent || null,
-                      searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null
-                    };
-                    // Debug: log first frame to verify data structure
-                    if (frameIndex === 0) {
-                      console.log('📄 [LoadFrames] First frame from page:', {
-                        pageName: frameWithPage.pageName,
-                        frameName: frame.name,
-                        hasTextContent: !!(frame.textContent),
-                        textContentLength: frame.textContent ? frame.textContent.length : 0,
-                        textContentPreview: frame.textContent ? frame.textContent.substring(0, 100) : null,
-                        hasSearchTokens: Array.isArray(frame.searchTokens),
-                        searchTokensCount: Array.isArray(frame.searchTokens) ? frame.searchTokens.length : 0,
-                        searchTokensPreview: Array.isArray(frame.searchTokens) ? frame.searchTokens.slice(0, 10) : null,
-                        hasImageUrl: !!(frame.image_url),
-                        hasStoragePath: !!(frame.storage_path),
-                        // Check all text-related fields
-                        hasTexts: !!(frame.texts),
-                        hasVisibleTexts: !!(frame.visibleTexts),
-                        frameKeys: Object.keys(frame).filter(k => k.toLowerCase().includes('text') || k.toLowerCase().includes('search'))
-                      });
-                    }
-                    return frameWithPage;
-                  });
-                }
-                // If item itself is a frame
-                if (item.name && (item.image || item.url)) {
-                  return [{
-                    ...item,
-                    frameTags: item.frameTags || item.tags || [],
-                    customTags: Array.isArray(item.customTags) ? item.customTags : (item.customTags ? [item.customTags] : []),
-                    // CRITICAL: Preserve textContent and searchTokens for search
-                    textContent: item.textContent || null,
-                    searchTokens: Array.isArray(item.searchTokens) ? item.searchTokens : null
-                  }];
-                }
-                return [];
-              });
+              const fileFrames = extractFramesFromIndexPayload(indexData.data.index_data, { id: file.id, fileName: file.file_name });
               
               return { success: true, fileId: file.id, frames: fileFrames, fileName: file.file_name };
             } catch (error) {
@@ -1037,35 +994,7 @@ export default function Home() {
         const data = await response.json();
         
         if (data.success && data.data && data.data.index_data) {
-          let indexDataContent = data.data.index_data;
-          if (typeof indexDataContent === 'string') {
-            try {
-              indexDataContent = JSON.parse(indexDataContent);
-            } catch (e) {
-              console.error('Error parsing index_data:', e);
-              setError('Failed to parse index data');
-              setLoading(false);
-              return;
-            }
-          }
-          
-          let pagesArray: any[] = [];
-          if (Array.isArray(indexDataContent)) {
-            pagesArray = indexDataContent;
-          } else if (indexDataContent && typeof indexDataContent === 'object' && Array.isArray(indexDataContent.pages)) {
-            pagesArray = indexDataContent.pages;
-          }
-          pagesArray.forEach((pageItem: any) => {
-            if (pageItem && pageItem.frames && Array.isArray(pageItem.frames)) {
-              const pageFrames = pageItem.frames.map((frame: any) => ({
-                ...frame,
-                pageName: pageItem.name || pageItem.pageName || frame.pageName || '',
-                frameTags: frame.frameTags || frame.tags || [],
-                customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : [])
-              }));
-              allFrames.push(...pageFrames);
-            }
-          });
+          allFrames.push(...extractFramesFromIndexPayload(data.data.index_data, { id: fileInfo.id, fileName: fileInfo.fileName }));
         } else if (indicesToLoad.length === 1) {
           setError(data.error || 'Failed to load file frames');
           setFrames([]);
@@ -1095,48 +1024,26 @@ export default function Home() {
       if (data.success && data.data && data.data.index_data) {
         galleryDebug('Processing index data');
         
-        // The index_data is an array, where each item has a frames array
-        const indexDataArray = data.data.index_data;
-         let allFrames: any[] = [];
-        
-        if (Array.isArray(indexDataArray)) {
-          // Extract all frames from all items in the array
-          indexDataArray.forEach(item => {
-            if (item.frames && Array.isArray(item.frames)) {
-              // Add frame_tags and custom_tags to each frame
-               const framesWithTags = item.frames.map((frame: any) => {
-                // Ensure customTags is always an array
-                const frameCustomTags = Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []);
-                
-                // If frame already has customTags from plugin, use them directly
-                // Otherwise, derive them from frameTags for backward compatibility
-                const hasCustomTagsFromPlugin = frameCustomTags.length > 0;
-                const namingTags = deriveNamingTags(frame.name || '');
-                const sizeTag = getSizeTag(frame.width, frame.height);
-                
-                let customTags = frameCustomTags;
-                
-                // Only derive custom tags from frameTags if they weren't provided by the plugin
-                if (!hasCustomTagsFromPlugin) {
-                  const baseFrameTags = frame.frameTags || frame.tags || [];
-                  // Custom = all incoming tags minus naming and size
-                  const custom = (Array.isArray(baseFrameTags) ? baseFrameTags : [])
-                    .filter((t: string) => t && !namingTags.includes(t) && !/^\d+x\d+$/i.test(t));
-                  customTags = custom;
-                }
-                
-                return {
-                  ...frame,
-                  frameTags: frame.frameTags || frame.tags || [],
-                  namingTags,
-                  sizeTags: sizeTag ? [sizeTag] : [],
-                  customTags: Array.isArray(customTags) ? customTags : []
-                };
-              });
-              allFrames = allFrames.concat(framesWithTags);
-            }
-          });
-        }
+        const allFrames = extractFramesFromIndexPayload(data.data.index_data).map((frame: any) => {
+          const frameCustomTags = Array.isArray(frame.customTags) ? frame.customTags : [];
+          const hasCustomTagsFromPlugin = frameCustomTags.length > 0;
+          const namingTags = deriveNamingTags(frame.name || '');
+          const sizeTag = getSizeTag(frame.width, frame.height);
+          let customTags = frameCustomTags;
+
+          if (!hasCustomTagsFromPlugin) {
+            const baseFrameTags = frame.frameTags || frame.tags || [];
+            customTags = (Array.isArray(baseFrameTags) ? baseFrameTags : [])
+              .filter((t: string) => t && !namingTags.includes(t) && !/^\d+x\d+$/i.test(t));
+          }
+
+          return {
+            ...frame,
+            namingTags,
+            sizeTags: sizeTag ? [sizeTag] : [],
+            customTags: Array.isArray(customTags) ? customTags : []
+          };
+        });
         
         galleryDebug('Setting frames:', allFrames.length);
         setFrames(allFrames);
@@ -1225,41 +1132,14 @@ export default function Home() {
           const indexData = await indexResponse.json();
           if (!indexData.success || !indexData.data?.index_data) return [];
 
-          let content: any = indexData.data.index_data;
-          if (typeof content === 'string') {
-            try {
-              content = JSON.parse(content);
-            } catch {
-              return [];
-            }
-          }
-
-          const pagesArray = Array.isArray(content)
-            ? content
-            : (content?.pages && Array.isArray(content.pages) ? content.pages : []);
-
           const logical = physicalToLogical.get(file.id) || { id: file.id, fileName: file.file_name };
-          return (pagesArray || []).flatMap((item: any) => {
-            if (!item?.frames?.length) return [];
-            const pageName = item.name || item.pageName || '';
-            return item.frames
-              .filter((frame: any) => {
-                const fid = frame.url || frame.id || `${file.id}::${frame.name || 'u'}::${frame.id || ''}`;
-                if (seenFrameIds.has(fid)) return false;
-                seenFrameIds.add(fid);
-                return true;
-              })
-              .map((frame: any) => ({
-                ...frame,
-                pageName,
-                frameTags: frame.frameTags || frame.tags || [],
-                customTags: Array.isArray(frame.customTags) ? frame.customTags : (frame.customTags ? [frame.customTags] : []),
-                textContent: frame.textContent || null,
-                searchTokens: Array.isArray(frame.searchTokens) ? frame.searchTokens : null,
-                _fileId: logical.id,
-                _fileName: logical.fileName
-              }));
-          });
+          return extractFramesFromIndexPayload(indexData.data.index_data, { id: logical.id, fileName: logical.fileName })
+            .filter((frame: any) => {
+              const fid = frame.url || frame.id || `${logical.id}::${frame.name || 'u'}::${frame.pageName || ''}`;
+              if (seenFrameIds.has(fid)) return false;
+              seenFrameIds.add(fid);
+              return true;
+            });
         };
 
         for (let i = 0; i < filesToLoad.length; i += batchSize) {

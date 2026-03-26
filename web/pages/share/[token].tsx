@@ -121,6 +121,62 @@ async function mapInBatches<T, R>(
   return results;
 }
 
+function parseSharedIndexPayload(raw: any): any {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getSharedPages(raw: any): any[] {
+  const parsed = parseSharedIndexPayload(raw);
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed?.data?.pages && Array.isArray(parsed.data.pages)) return parsed.data.pages;
+  if (parsed?.pages && Array.isArray(parsed.pages)) return parsed.pages;
+  return [];
+}
+
+function normalizeSharedFrame(frame: any) {
+  return {
+    ...frame,
+    frameTags: Array.isArray(frame.frameTags) ? frame.frameTags : (Array.isArray(frame.tags) ? frame.tags : []),
+    customTags: Array.isArray(frame.customTags) ? frame.customTags : [],
+    namingTags: deriveNamingTags(frame.name || ''),
+    sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
+  };
+}
+
+function extractSharedFrames(raw: any): any[] {
+  const parsed = parseSharedIndexPayload(raw);
+  const pages = getSharedPages(raw);
+  const seen = new Set<string>();
+  const pageFrames = pages.flatMap((page: any) => {
+    if (!Array.isArray(page?.frames)) return [];
+    return page.frames
+      .map((frame: any) => normalizeSharedFrame(frame))
+      .filter((frame: any, index: number) => {
+        const key = String(frame.url || frame.id || `${page?.pageId || page?.id || page?.name || 'page'}::${frame.name || 'frame'}::${index}`);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  });
+
+  if (pageFrames.length > 0) return pageFrames;
+
+  const directFrames = Array.isArray(parsed?.data?.frames) ? parsed.data.frames : [];
+  return directFrames
+    .map((frame: any) => normalizeSharedFrame(frame))
+    .filter((frame: any, index: number) => {
+      const key = String(frame.url || frame.id || `direct::${frame.name || 'frame'}::${index}`);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export default function SharedIndex() {
   const router = useRouter();
   const { token } = router.query;
@@ -207,77 +263,7 @@ export default function SharedIndex() {
           if (oldData.success) {
             // Old system: single index
             setIndexData(oldData.data);
-            
-            // Process frames - handle different data structures
-            let processedFrames: any[] = [];
-            const indexDataField = oldData.data?.index_data;
-            
-            if (indexDataField) {
-              if (Array.isArray(indexDataField)) {
-                processedFrames = indexDataField.flatMap((item: any) => {
-                  if (item.frames && Array.isArray(item.frames)) {
-                    return item.frames.map((frame: any) => ({
-                      ...frame,
-                      frameTags: frame.frameTags || frame.tags || [],
-                      customTags: frame.customTags || [],
-                      thumbnails: frame.thumbnails || [],
-                      namingTags: deriveNamingTags(frame.name || ''),
-                      sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
-                    }));
-                  }
-                  if (item.name && (item.image || item.url)) {
-                    return [{
-                      ...item,
-                      frameTags: item.frameTags || item.tags || [],
-                      customTags: item.customTags || [],
-                      thumbnails: item.thumbnails || [],
-                      namingTags: deriveNamingTags(item.name || ''),
-                      sizeTags: getSizeTag(item.width, item.height) ? [getSizeTag(item.width, item.height)] : []
-                    }];
-                  }
-                  return [];
-                });
-              } else if (indexDataField.data) {
-                if (Array.isArray(indexDataField.data.pages)) {
-                  processedFrames = indexDataField.data.pages.flatMap((page: any) =>
-                    page.frames && Array.isArray(page.frames)
-                      ? page.frames.map((frame: any) => ({
-                          ...frame,
-                          frameTags: frame.frameTags || frame.tags || [],
-                          customTags: frame.customTags || [],
-                          thumbnails: frame.thumbnails || [],
-                          namingTags: deriveNamingTags(frame.name || ''),
-                          sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
-                        }))
-                      : []
-                  );
-                } else if (Array.isArray(indexDataField.data.frames)) {
-                  processedFrames = indexDataField.data.frames.map((frame: any) => ({
-                    ...frame,
-                    frameTags: frame.frameTags || frame.tags || [],
-                    customTags: frame.customTags || [],
-                    thumbnails: frame.thumbnails || [],
-                    namingTags: deriveNamingTags(frame.name || ''),
-                    sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
-                  }));
-                }
-              } else if (indexDataField.pages && Array.isArray(indexDataField.pages)) {
-                processedFrames = indexDataField.pages.flatMap((page: any) =>
-                  page.frames && Array.isArray(page.frames)
-                    ? page.frames.map((frame: any) => ({
-                        ...frame,
-                        frameTags: frame.frameTags || frame.tags || [],
-                        customTags: frame.customTags || [],
-                        thumbnails: frame.thumbnails || [],
-                        namingTags: deriveNamingTags(frame.name || ''),
-                        sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
-                      }))
-                    : []
-                );
-              }
-            }
-            
-            setFrames(processedFrames);
+            setFrames(extractSharedFrames(oldData.data?.index_data));
             setShareType('index'); // Mark as old index-level sharing
             return;
           }
@@ -325,42 +311,7 @@ export default function SharedIndex() {
             return { success: false, frames: [] };
           }
 
-          // Process index_data
-          let indexDataContent = indexData.data.index_data;
-          if (typeof indexDataContent === 'string') {
-            try {
-              indexDataContent = JSON.parse(indexDataContent);
-            } catch (e) {
-              return { success: false, frames: [] };
-            }
-          }
-
-          const fileFrames = Array.isArray(indexDataContent)
-            ? indexDataContent.flatMap((item: any) => {
-                if (!item) return [];
-                if (item.frames && Array.isArray(item.frames)) {
-                  return item.frames.map((frame: any) => ({
-                    ...frame,
-                    frameTags: frame.frameTags || frame.tags || [],
-                    customTags: frame.customTags || [],
-                    namingTags: deriveNamingTags(frame.name || ''),
-                    sizeTags: getSizeTag(frame.width, frame.height) ? [getSizeTag(frame.width, frame.height)] : []
-                  }));
-                }
-                if (item.name && (item.image || item.url)) {
-                  return [{
-                    ...item,
-                    frameTags: item.frameTags || item.tags || [],
-                    customTags: item.customTags || [],
-                    namingTags: deriveNamingTags(item.name || ''),
-                    sizeTags: getSizeTag(item.width, item.height) ? [getSizeTag(item.width, item.height)] : []
-                  }];
-                }
-                return [];
-              })
-            : [];
-
-          return { success: true, frames: fileFrames };
+          return { success: true, frames: extractSharedFrames(indexData.data.index_data) };
         } catch (error) {
           console.error(`Error loading index ${indexFile.id}:`, error);
           return { success: false, frames: [] };
@@ -370,9 +321,15 @@ export default function SharedIndex() {
       const results = await mapInBatches(indicesData.data, 4, loadIndexFrames);
 
       const allFrames: any[] = [];
+      const seen = new Set<string>();
       results.forEach(result => {
         if (result.success && result.frames.length > 0) {
-          allFrames.push(...result.frames);
+          result.frames.forEach((frame: any, index: number) => {
+            const key = String(frame.url || frame.id || `${frame.name || 'frame'}::${index}`);
+            if (seen.has(key)) return;
+            seen.add(key);
+            allFrames.push(frame);
+          });
         }
       });
 

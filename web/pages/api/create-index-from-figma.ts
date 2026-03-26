@@ -49,6 +49,36 @@ function getLogicalFileId(projectId: unknown, fileKey: unknown): string {
   return normalizedFileKey || stableProjectId || '';
 }
 
+function normalizePageIdForSync(page: any, pageIndex: number): string {
+  const rawId = typeof page?.pageId === 'string'
+    ? page.pageId
+    : typeof page?.id === 'string'
+      ? page.id
+      : '';
+  const trimmed = rawId.trim();
+  return trimmed || `page-${pageIndex}`;
+}
+
+function buildNormalizedSyncContext(
+  requestId: string,
+  pages: any[],
+  providedSyncId?: string,
+  providedFinalizePageIds?: string[]
+): { syncId: string; finalizePageIds: string[] } {
+  const syncId = providedSyncId && providedSyncId.trim()
+    ? providedSyncId.trim()
+    : `${requestId}_normalized`;
+
+  const finalizePageIds = Array.isArray(providedFinalizePageIds) && providedFinalizePageIds.length > 0
+    ? providedFinalizePageIds.filter((id) => typeof id === 'string').map((id) => id.trim()).filter(Boolean)
+    : pages.map((page, pageIndex) => normalizePageIdForSync(page, pageIndex)).filter(Boolean);
+
+  return {
+    syncId,
+    finalizePageIds: Array.from(new Set(finalizePageIds)),
+  };
+}
+
 /** Upload cover image from data URL to storage. Returns bucket:path or null. */
 async function uploadCoverFromDataUrl(
   supabaseAdmin: any,
@@ -446,22 +476,21 @@ export default async function handler(
           }
         }
       }
-      if (syncIdEarly) {
-        try {
-          await syncNormalizedIndexChunk({
-            supabaseAdmin,
-            owner: { type: 'guest', anonId: guestAnonId },
-            fileKey: fileKeyTrim,
-            projectId: String(docId),
-            fileName,
-            coverImageUrl: existingFileCoverUrl,
-            pages: pagesArray,
-            syncId: syncIdEarly,
-            finalizePageIds: finalizePageIdsEarly,
-          });
-        } catch (normalizedError: any) {
-          console.error(`[${requestId}] guest normalized sync error:`, normalizedError?.message || normalizedError);
-        }
+      try {
+        const normalizedSync = buildNormalizedSyncContext(requestId, pagesArray, syncIdEarly, finalizePageIdsEarly);
+        await syncNormalizedIndexChunk({
+          supabaseAdmin,
+          owner: { type: 'guest', anonId: guestAnonId },
+          fileKey: fileKeyTrim,
+          projectId: String(docId),
+          fileName,
+          coverImageUrl: existingFileCoverUrl,
+          pages: pagesArray,
+          syncId: normalizedSync.syncId,
+          finalizePageIds: normalizedSync.finalizePageIds,
+        });
+      } catch (normalizedError: any) {
+        console.error(`[${requestId}] guest normalized sync error:`, normalizedError?.message || normalizedError);
       }
       return res.status(200).json({ success: true, viewToken: null });
     }
@@ -802,22 +831,21 @@ export default async function handler(
               }
             }
           }
-          if (syncId) {
-            try {
-              await syncNormalizedIndexChunk({
-                supabaseAdmin,
-                owner: { type: 'user', userId: user.id },
-                fileKey: fileKeyTrim,
-                projectId: String(docId),
-                fileName,
-                coverImageUrl: authExistingFileCoverUrl,
-                pages: pagesArray,
-                syncId,
-                finalizePageIds,
-              });
-            } catch (normalizedError: any) {
-              console.error(`[${requestId}] auth normalized sync error:`, normalizedError?.message || normalizedError);
-            }
+          try {
+            const normalizedSync = buildNormalizedSyncContext(requestId, pagesArray, syncId, finalizePageIds);
+            await syncNormalizedIndexChunk({
+              supabaseAdmin,
+              owner: { type: 'user', userId: user.id },
+              fileKey: fileKeyTrim,
+              projectId: String(docId),
+              fileName,
+              coverImageUrl: authExistingFileCoverUrl,
+              pages: pagesArray,
+              syncId: normalizedSync.syncId,
+              finalizePageIds: normalizedSync.finalizePageIds,
+            });
+          } catch (normalizedError: any) {
+            console.error(`[${requestId}] auth normalized sync error:`, normalizedError?.message || normalizedError);
           }
           return res.status(200).json({ success: true, viewToken: null });
         }

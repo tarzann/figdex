@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { clearNormalizedOwnerUsage, refreshNormalizedOwnerUsage } from '../../../lib/normalized-index-store';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -77,10 +78,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .is('user_id', null)
             .eq('owner_anon_id', anonId);
 
-          await supabase
-            .from('indexed_owner_usage')
-            .delete()
-            .eq('owner_anon_id', anonId);
+          await clearNormalizedOwnerUsage(supabase, { type: 'guest', anonId });
+          await refreshNormalizedOwnerUsage(supabase, { type: 'user', userId });
 
           await supabase
             .from('claim_tokens')

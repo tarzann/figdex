@@ -12,6 +12,21 @@ const indexWarn = (...args: any[]) => {
   if (DEBUG_GET_INDEX_DATA) console.warn(...args);
 };
 
+const dedupeFrames = (frames: any[]) => {
+  const seen = new Set<string>();
+  return frames.filter((frame: any, index: number) => {
+    const key = String(frame?.url || frame?.id || frame?.figma_frame_id || `${frame?.name || 'frame'}::${index}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const hasRenderablePages = (data: any) => {
+  const pages = Array.isArray(data?.pages) ? data.pages : [];
+  return pages.some((page: any) => Array.isArray(page?.frames) && page.frames.length > 0);
+};
+
 export const config = {
   api: {
     bodyParser: {
@@ -51,13 +66,7 @@ export default async function handler(
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
     const svc = serviceUrl && serviceKey ? createClient(serviceUrl, serviceKey) : supabase;
 
-    const { data: normalizedIndex, error: normalizedIndexError } = await svc
-      .from('indexed_files')
-      .select('id, user_id, file_name, project_id, figma_file_key, share_token, cover_image_url, total_frames, last_indexed_at')
-      .eq('id', indexId)
-      .maybeSingle();
-
-    if (!normalizedIndexError && normalizedIndex) {
+    const buildNormalizedPayload = async (normalizedIndex: any) => {
       const { data: normalizedPages, error: normalizedPagesError } = await svc
         .from('indexed_pages')
         .select('id, figma_page_id, page_name, sort_order, frame_count')
@@ -65,7 +74,7 @@ export default async function handler(
         .order('sort_order', { ascending: true });
 
       if (normalizedPagesError) {
-        return res.status(500).json({ success: false, error: normalizedPagesError.message });
+        throw new Error(normalizedPagesError.message);
       }
 
       const pageIds = Array.isArray(normalizedPages) ? normalizedPages.map((page: any) => page.id) : [];
@@ -79,7 +88,7 @@ export default async function handler(
           .order('sort_order', { ascending: true });
 
         if (normalizedFramesError) {
-          return res.status(500).json({ success: false, error: normalizedFramesError.message });
+          throw new Error(normalizedFramesError.message);
         }
 
         framesByPageId = (normalizedFrames || []).reduce((map: Map<string, any[]>, frame: any) => {
@@ -88,6 +97,8 @@ export default async function handler(
             ...framePayload,
             id: frame.figma_frame_id,
             name: frame.frame_name,
+            texts: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : framePayload.texts,
+            textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : framePayload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
           } as any;
@@ -101,39 +112,70 @@ export default async function handler(
         }, new Map<string, any[]>());
       }
 
-      const normalizedData = {
+      return {
         coverImageUrl: normalizedIndex.cover_image_url || null,
         pages: (normalizedPages || []).map((page: any) => ({
           id: page.figma_page_id,
           pageId: page.figma_page_id,
           name: page.page_name,
           pageName: page.page_name,
-          frames: framesByPageId.get(page.id) || [],
+          frames: dedupeFrames(framesByPageId.get(page.id) || []),
         })),
       };
+    };
 
-      return res.status(200).json({
-        success: true,
-        data: {
-          id: normalizedIndex.id,
-          user_id: normalizedIndex.user_id,
-          file_name: normalizedIndex.file_name,
-          index_data: normalizedData,
-          uploaded_at: normalizedIndex.last_indexed_at,
-          project_id: normalizedIndex.project_id,
-          figma_file_key: normalizedIndex.figma_file_key,
-          share_token: normalizedIndex.share_token,
-          frame_count: normalizedIndex.total_frames,
-        },
-      });
+    const { data: normalizedIndex, error: normalizedIndexError } = await svc
+      .from('indexed_files')
+      .select('id, user_id, file_name, project_id, figma_file_key, share_token, cover_image_url, total_frames, last_indexed_at')
+      .eq('id', indexId)
+      .maybeSingle();
+
+    if (!normalizedIndexError && normalizedIndex) {
+      try {
+        const normalizedData = await buildNormalizedPayload(normalizedIndex);
+        if (hasRenderablePages(normalizedData) || normalizedData.coverImageUrl) {
+          return res.status(200).json({
+            success: true,
+            data: {
+              id: normalizedIndex.id,
+              user_id: normalizedIndex.user_id,
+              file_name: normalizedIndex.file_name,
+              index_data: normalizedData,
+              uploaded_at: normalizedIndex.last_indexed_at,
+              project_id: normalizedIndex.project_id,
+              figma_file_key: normalizedIndex.figma_file_key,
+              share_token: normalizedIndex.share_token,
+              frame_count: normalizedIndex.total_frames,
+              coverImageUrl: normalizedData.coverImageUrl,
+            },
+          });
+        }
+      } catch (normalizedBuildError: any) {
+        console.warn(`[get-index-data] Normalized lookup incomplete for ${indexId}, falling back to legacy:`, normalizedBuildError?.message || normalizedBuildError);
+      }
     }
 
-    // Get specific index data
-    const { data: indexData, error: indexError } = await svc
+    let legacyQuery = svc
       .from('index_files')
       .select('id, user_id, file_name, index_data, uploaded_at, project_id, figma_file_key, share_token, frame_tags, custom_tags, naming_tags, size_tags, file_size, frame_count')
       .eq('id', indexId)
-      .single();
+      .limit(1);
+    let { data: legacyRows, error: indexError } = await legacyQuery;
+
+    if ((!legacyRows || legacyRows.length === 0) && normalizedIndex && (normalizedIndex.figma_file_key || normalizedIndex.project_id)) {
+      const fallbackField = normalizedIndex.figma_file_key ? 'figma_file_key' : 'project_id';
+      const fallbackValue = normalizedIndex.figma_file_key || normalizedIndex.project_id;
+      const fallbackLegacy = await svc
+        .from('index_files')
+        .select('id, user_id, file_name, index_data, uploaded_at, project_id, figma_file_key, share_token, frame_tags, custom_tags, naming_tags, size_tags, file_size, frame_count')
+        .eq(fallbackField, fallbackValue)
+        .order('uploaded_at', { ascending: false })
+        .limit(1);
+      legacyRows = fallbackLegacy.data;
+      indexError = fallbackLegacy.error;
+    }
+
+    const indexData = Array.isArray(legacyRows) ? legacyRows[0] : null;
 
     if (indexError) {
       console.error(`[get-index-data] Error fetching index ${indexId}:`, {

@@ -4,6 +4,33 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
+const dedupeFrames = (frames: any[]) => {
+  const seen = new Set<string>();
+  return frames.filter((frame: any, index: number) => {
+    const key = String(frame?.url || frame?.id || frame?.figma_frame_id || `${frame?.name || 'frame'}::${index}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const dedupePages = (pages: any[]) => {
+  const merged = new Map<string, any>();
+  pages.forEach((page: any, index: number) => {
+    const key = String(page?.pageId || page?.id || page?.name || `page-${index}`);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, {
+        ...page,
+        frames: dedupeFrames(Array.isArray(page?.frames) ? page.frames : []),
+      });
+      return;
+    }
+    existing.frames = dedupeFrames([...(existing.frames || []), ...(Array.isArray(page?.frames) ? page.frames : [])]);
+  });
+  return Array.from(merged.values());
+};
+
 // Parse image URL to extract bucket and path
 const parseImageUrl = (imageUrl: string): { bucket: string; path: string } | null => {
   try {
@@ -172,7 +199,95 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Get public index by share token
+    const { data: normalizedIndex, error: normalizedError } = await supabase
+      .from('indexed_files')
+      .select('id, file_name, last_indexed_at, share_token, project_id, figma_file_key, cover_image_url, total_frames')
+      .eq('share_token', token)
+      .eq('is_public', true)
+      .maybeSingle();
+
+    if (!normalizedError && normalizedIndex) {
+      const { data: normalizedPages, error: normalizedPagesError } = await supabase
+        .from('indexed_pages')
+        .select('id, figma_page_id, page_name, sort_order')
+        .eq('file_id', normalizedIndex.id)
+        .order('sort_order', { ascending: true });
+
+      if (normalizedPagesError) {
+        return res.status(500).json({ success: false, error: normalizedPagesError.message });
+      }
+
+      const pageIds = (normalizedPages || []).map((page: any) => page.id);
+      let framesByPageId = new Map<string, any[]>();
+
+      if (pageIds.length > 0) {
+        const { data: normalizedFrames, error: normalizedFramesError } = await supabase
+          .from('indexed_frames')
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
+          .in('page_id', pageIds)
+          .order('sort_order', { ascending: true });
+
+        if (normalizedFramesError) {
+          return res.status(500).json({ success: false, error: normalizedFramesError.message });
+        }
+
+        framesByPageId = (normalizedFrames || []).reduce((map: Map<string, any[]>, frame: any) => {
+          const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const hydrated = {
+            ...payload,
+            id: frame.figma_frame_id,
+            name: frame.frame_name,
+            texts: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.texts,
+            textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
+            frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
+            customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
+          } as any;
+          if (frame.image_url) hydrated.image = frame.image_url;
+          if (frame.thumb_url) hydrated.thumb_url = frame.thumb_url;
+          if (!map.has(frame.page_id)) map.set(frame.page_id, []);
+          map.get(frame.page_id)!.push(hydrated);
+          return map;
+        }, new Map<string, any[]>());
+      }
+
+      const processedIndexData = {
+        coverImageUrl: normalizedIndex.cover_image_url || null,
+        pages: dedupePages((normalizedPages || []).map((page: any) => ({
+          id: page.figma_page_id,
+          pageId: page.figma_page_id,
+          name: page.page_name,
+          pageName: page.page_name,
+          frames: framesByPageId.get(page.id) || [],
+        }))),
+      };
+
+      if (processedIndexData.coverImageUrl || processedIndexData.pages.some((page: any) => page.frames.length > 0)) {
+        if (Array.isArray(processedIndexData.pages)) {
+          for (const page of processedIndexData.pages) {
+            if (Array.isArray(page?.frames)) {
+              await normalizeFrameImagesBatch(page.frames, supabase);
+            }
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            id: normalizedIndex.id,
+            file_name: normalizedIndex.file_name,
+            index_data: processedIndexData,
+            uploaded_at: normalizedIndex.last_indexed_at,
+            share_token: normalizedIndex.share_token,
+            project_id: normalizedIndex.project_id,
+            figma_file_key: normalizedIndex.figma_file_key,
+            frame_count: normalizedIndex.total_frames,
+            coverImageUrl: processedIndexData.coverImageUrl,
+          }
+        });
+      }
+    }
+
+    // Get public index by share token from the legacy model
     const { data: indexData, error } = await supabase
       .from('index_files')
       .select('id, file_name, index_data, uploaded_at, share_token, project_id, figma_file_key')
@@ -237,7 +352,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             mergedData.push(...chunkData);
           }
         }
-        processedIndexData = mergedData;
+        processedIndexData = dedupePages(mergedData);
       }
     } else {
       // Single file - handle storage pointer or JSON string
@@ -271,12 +386,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Normalize image URLs in frames (resolve storage refs to public URLs)
-    if (Array.isArray(processedIndexData)) {
-      for (const page of processedIndexData) {
+    const pageCollection = Array.isArray(processedIndexData)
+      ? dedupePages(processedIndexData)
+      : (processedIndexData && typeof processedIndexData === 'object' && Array.isArray((processedIndexData as any).pages)
+          ? dedupePages((processedIndexData as any).pages)
+          : []);
+
+    if (Array.isArray(pageCollection)) {
+      for (const page of pageCollection) {
         if (Array.isArray(page?.frames)) {
           await normalizeFrameImagesBatch(page.frames, supabase);
         }
       }
+    }
+
+    if (Array.isArray(processedIndexData)) {
+      processedIndexData = pageCollection;
+    } else if (processedIndexData && typeof processedIndexData === 'object' && Array.isArray((processedIndexData as any).pages)) {
+      (processedIndexData as any).pages = pageCollection;
     }
 
     return res.status(200).json({

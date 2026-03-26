@@ -24,6 +24,11 @@ type SyncChunkParams = {
   finalizePageIds?: string[];
 };
 
+type OwnerUsage = {
+  totalFiles: number;
+  totalFrames: number;
+};
+
 function normalizeText(value?: string | null, fallback = ''): string {
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed || fallback;
@@ -64,10 +69,22 @@ function buildFrameSearchText(frame: any): string {
   return Array.from(new Set(parts)).join(' ');
 }
 
-async function upsertOwnerUsage(
+function normalizePageId(page: SyncPage, pageIndex: number): string {
+  return normalizeText(page.pageId || page.id, `page-${pageIndex}`);
+}
+
+function normalizePageDisplayName(page: SyncPage): string {
+  return normalizeText(page.pageName || page.name, 'Untitled Page');
+}
+
+function uniquePageIds(pages: SyncPage[]): string[] {
+  return Array.from(new Set(pages.map((page, index) => normalizePageId(page, index)).filter(Boolean)));
+}
+
+async function computeOwnerUsage(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   owner: Owner
-) {
+) : Promise<OwnerUsage> {
   let query = supabaseAdmin
     .from('indexed_files')
     .select('total_frames');
@@ -79,17 +96,43 @@ async function upsertOwnerUsage(
   }
 
   const { data: files, error } = await query;
-  if (error || !Array.isArray(files)) return;
+  if (error || !Array.isArray(files)) {
+    return { totalFiles: 0, totalFrames: 0 };
+  }
 
   const totalFiles = files.length;
   const totalFrames = files.reduce((sum: number, row: any) => sum + (typeof row?.total_frames === 'number' ? row.total_frames : 0), 0);
 
+  return { totalFiles, totalFrames };
+}
+
+export async function refreshNormalizedOwnerUsage(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  owner: Owner
+): Promise<OwnerUsage> {
+  const usage = await computeOwnerUsage(supabaseAdmin, owner);
+
   const payload = owner.type === 'user'
-    ? { user_id: owner.userId, owner_anon_id: null, total_files: totalFiles, total_frames: totalFrames, updated_at: new Date().toISOString() }
-    : { user_id: null, owner_anon_id: owner.anonId, total_files: totalFiles, total_frames: totalFrames, updated_at: new Date().toISOString() };
+    ? { user_id: owner.userId, owner_anon_id: null, total_files: usage.totalFiles, total_frames: usage.totalFrames, updated_at: new Date().toISOString() }
+    : { user_id: null, owner_anon_id: owner.anonId, total_files: usage.totalFiles, total_frames: usage.totalFrames, updated_at: new Date().toISOString() };
 
   const conflictColumn = owner.type === 'user' ? 'user_id' : 'owner_anon_id';
   await supabaseAdmin.from('indexed_owner_usage').upsert(payload, { onConflict: conflictColumn });
+
+  return usage;
+}
+
+export async function clearNormalizedOwnerUsage(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  owner: Owner
+): Promise<void> {
+  let query = supabaseAdmin.from('indexed_owner_usage').delete();
+  if (owner.type === 'user') {
+    query = query.eq('user_id', owner.userId);
+  } else {
+    query = query.eq('owner_anon_id', owner.anonId);
+  }
+  await query;
 }
 
 export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise<void> {
@@ -153,33 +196,62 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
   }
 
   const finalizeSet = new Set(finalizePageIds.filter(Boolean));
+  const normalizedPages = pages.map((page) => ({
+    ...page,
+    frames: Array.isArray(page.frames) ? page.frames : [],
+  }));
+  const normalizedPageIds = uniquePageIds(normalizedPages);
 
-  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-    const page = pages[pageIndex];
-    const figmaPageId = normalizeText(page.pageId || page.id, `page-${pageIndex}`);
-    const pageName = normalizeText(page.pageName || page.name, 'Untitled Page');
+  const { data: existingPagesRows, error: existingPagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .select('id, figma_page_id')
+    .eq('file_id', fileId);
+  if (existingPagesError) throw existingPagesError;
 
-    const pageUpsertPayload = {
-      file_id: fileId,
-      figma_page_id: figmaPageId,
-      page_name: pageName,
-      normalized_page_name: pageName.toLowerCase(),
-      sort_order: pageIndex,
-      last_sync_id: syncId,
-      updated_at: nowIso,
-    };
+  const existingPageIdByFigmaPageId = new Map<string, string>(
+    (existingPagesRows || []).map((row: any) => [String(row.figma_page_id), String(row.id)])
+  );
 
-    const { data: pageRow, error: pageError } = await supabaseAdmin
+  const pageUpsertRows = normalizedPages.map((page, pageIndex) => ({
+    file_id: fileId,
+    figma_page_id: normalizePageId(page, pageIndex),
+    page_name: normalizePageDisplayName(page),
+    normalized_page_name: normalizePageDisplayName(page).toLowerCase(),
+    sort_order: pageIndex,
+    last_sync_id: syncId,
+    updated_at: nowIso,
+    created_at: nowIso,
+  }));
+
+  if (pageUpsertRows.length > 0) {
+    const { error: pageUpsertError } = await supabaseAdmin
       .from('indexed_pages')
-      .upsert({ ...pageUpsertPayload, created_at: nowIso }, { onConflict: 'file_id,figma_page_id' })
-      .select('id')
-      .single();
-    if (pageError) throw pageError;
+      .upsert(pageUpsertRows, { onConflict: 'file_id,figma_page_id' });
+    if (pageUpsertError) throw pageUpsertError;
+  }
 
-    const frames = Array.isArray(page.frames) ? page.frames : [];
+  const { data: currentPagesRows, error: currentPagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .select('id, figma_page_id')
+    .eq('file_id', fileId);
+  if (currentPagesError) throw currentPagesError;
+
+  const currentPageIdByFigmaPageId = new Map<string, string>(
+    (currentPagesRows || []).map((row: any) => [String(row.figma_page_id), String(row.id)])
+  );
+
+  const finalizedCounts = new Map<string, number>();
+
+  for (let pageIndex = 0; pageIndex < normalizedPages.length; pageIndex++) {
+    const page = normalizedPages[pageIndex];
+    const figmaPageId = normalizePageId(page, pageIndex);
+    const pageId = currentPageIdByFigmaPageId.get(figmaPageId) || existingPageIdByFigmaPageId.get(figmaPageId);
+    if (!pageId) continue;
+
+    const frames = page.frames;
     if (frames.length > 0) {
       const frameRows = frames.map((frame: any, frameIndex: number) => ({
-        page_id: pageRow.id,
+        page_id: pageId,
         figma_frame_id: normalizeText(frame?.id, `frame-${frameIndex}`),
         frame_name: normalizeText(frame?.name, 'Untitled Frame'),
         search_text: buildFrameSearchText(frame),
@@ -204,21 +276,41 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
       const staleDelete = await supabaseAdmin
         .from('indexed_frames')
         .delete()
-        .eq('page_id', pageRow.id)
+        .eq('page_id', pageId)
         .or(`last_sync_id.is.null,last_sync_id.neq.${syncId}`);
       if (staleDelete.error) throw staleDelete.error;
+
+      const { count: pageFrameCount, error: pageFrameCountError } = await supabaseAdmin
+        .from('indexed_frames')
+        .select('id', { count: 'exact', head: true })
+        .eq('page_id', pageId);
+      if (pageFrameCountError) throw pageFrameCountError;
+      finalizedCounts.set(pageId, pageFrameCount || 0);
+    } else {
+      finalizedCounts.set(pageId, frames.length);
     }
+  }
 
-    const { count: pageFrameCount } = await supabaseAdmin
-      .from('indexed_frames')
-      .select('id', { count: 'exact', head: true })
-      .eq('page_id', pageRow.id);
-
+  for (const [pageId, frameCount] of finalizedCounts.entries()) {
     const { error: pageCountError } = await supabaseAdmin
       .from('indexed_pages')
-      .update({ frame_count: pageFrameCount || 0, updated_at: nowIso })
-      .eq('id', pageRow.id);
+      .update({ frame_count: frameCount, updated_at: nowIso })
+      .eq('id', pageId);
     if (pageCountError) throw pageCountError;
+  }
+
+  if (finalizeSet.size > 0 && normalizedPageIds.length > 0 && normalizedPageIds.every((pageId) => finalizeSet.has(pageId))) {
+    const stalePages = (currentPagesRows || [])
+      .filter((row: any) => !normalizedPageIds.includes(String(row.figma_page_id)))
+      .map((row: any) => String(row.id));
+
+    if (stalePages.length > 0) {
+      const { error: stalePagesDeleteError } = await supabaseAdmin
+        .from('indexed_pages')
+        .delete()
+        .in('id', stalePages);
+      if (stalePagesDeleteError) throw stalePagesDeleteError;
+    }
   }
 
   const { data: filePages, error: filePagesError } = await supabaseAdmin
@@ -244,5 +336,5 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
     .eq('id', fileId);
   if (fileStatsError) throw fileStatsError;
 
-  await upsertOwnerUsage(supabaseAdmin, owner);
+  await refreshNormalizedOwnerUsage(supabaseAdmin, owner);
 }

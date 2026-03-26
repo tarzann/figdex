@@ -317,7 +317,32 @@ async function getNormalizedOwnerUsage(
 
   const { data, error } = await query.maybeSingle();
   if (error || !data) {
-    return null;
+    let filesQuery = supabaseAdmin
+      .from('indexed_files')
+      .select('id, total_frames');
+
+    if (filters.userId) {
+      filesQuery = filesQuery.eq('user_id', filters.userId);
+    } else {
+      filesQuery = filesQuery.is('user_id', null);
+    }
+
+    if (filters.anonId) {
+      filesQuery = filesQuery.eq('owner_anon_id', filters.anonId);
+    }
+
+    const { data: indexedFiles, error: indexedFilesError } = await filesQuery;
+    if (indexedFilesError || !Array.isArray(indexedFiles) || indexedFiles.length === 0) {
+      return null;
+    }
+
+    return {
+      totalFiles: indexedFiles.length,
+      totalFrames: indexedFiles.reduce(
+        (sum: number, row: any) => sum + (typeof row?.total_frames === 'number' ? row.total_frames : 0),
+        0
+      ),
+    };
   }
 
   return {

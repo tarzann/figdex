@@ -2,6 +2,35 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '../../../../../lib/admin-middleware';
 
+async function removeStoragePrefix(
+  supabaseAdmin: any,
+  storageBucket: string,
+  prefix: string
+): Promise<void> {
+  const list = async (path: string) => {
+    const { data } = await supabaseAdmin.storage.from(storageBucket).list(path, { limit: 1000 });
+    return data || [];
+  };
+
+  const walk = async (path: string) => {
+    const entries = await list(path);
+    const files = entries.filter((entry: any) => entry && entry.metadata);
+    const dirs = entries.filter((entry: any) => entry && !entry.metadata);
+
+    if (files.length > 0) {
+      await supabaseAdmin.storage.from(storageBucket).remove(
+        files.map((file: any) => `${path}/${file.name}`)
+      );
+    }
+
+    for (const dir of dirs) {
+      await walk(`${path}/${dir.name}`);
+    }
+  };
+
+  await walk(prefix.replace(/\/+$/, ''));
+}
+
 async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -42,6 +71,11 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
         .delete()
         .eq('owner_anon_id', anonId);
 
+      try {
+        await removeStoragePrefix(supabaseAdmin, storageBucket, `guest/${anonId}`);
+        await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`);
+      } catch {}
+
       return res.status(200).json({ success: true, deletedGuestAnonId: anonId });
     }
 
@@ -58,29 +92,11 @@ async function purgeHandler(req: NextApiRequest, res: NextApiResponse) {
     if (idxErr) return res.status(500).json({ success: false, error: `Failed to delete index_files: ${idxErr.message}` });
     await supabaseAdmin.from('indexed_files').delete().eq('user_id', userId);
     await supabaseAdmin.from('indexed_owner_usage').delete().eq('user_id', userId);
-    // Delete storage under userId/**
+    // Delete storage created by both the legacy and normalized index flows.
     try {
-      const list = async (prefix: string) => {
-        const { data } = await (supabaseAdmin as any).storage.from(storageBucket).list(prefix, { limit: 1000 });
-        return data || [];
-      };
-      const removeAllUnder = async (prefix: string) => {
-        const years = await list(prefix);
-        for (const y of years) {
-          const months = await list(`${prefix}/${y.name}`);
-          for (const m of months) {
-            const days = await list(`${prefix}/${y.name}/${m.name}`);
-            for (const d of days) {
-              const files = await list(`${prefix}/${y.name}/${m.name}/${d.name}`);
-              if (files.length > 0) {
-                const paths = files.map((f: any) => `${prefix}/${y.name}/${m.name}/${d.name}/${f.name}`);
-                await (supabaseAdmin as any).storage.from(storageBucket).remove(paths);
-              }
-            }
-          }
-        }
-      };
-      await removeAllUnder(`${userId}`);
+      await removeStoragePrefix(supabaseAdmin, storageBucket, `${userId}`);
+      await removeStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`);
+      await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`);
     } catch {}
     // Delete user row
     const { error: delUserErr } = await supabaseAdmin.from('users').delete().eq('id', userId);

@@ -2,6 +2,37 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 
+const getStableLogicalFileId = (file: any): string => {
+  const fileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+  const projectId = typeof file?.project_id === 'string' ? file.project_id.trim() : '';
+  return fileKey || (projectId && projectId !== '0:0' ? projectId : '') || String(file?.id || '');
+};
+
+const mergeIndexLists = (preferred: any[], fallback: any[]) => {
+  const merged = new Map<string, any>();
+
+  fallback.forEach((item: any) => {
+    merged.set(getStableLogicalFileId(item), item);
+  });
+
+  preferred.forEach((item: any) => {
+    const key = getStableLogicalFileId(item);
+    const existing = merged.get(key);
+    merged.set(key, {
+      ...(existing || {}),
+      ...item,
+      file_thumbnail_url: item.file_thumbnail_url || existing?.file_thumbnail_url || null,
+      frame_count: typeof item.frame_count === 'number' ? item.frame_count : (existing?.frame_count ?? null),
+      file_size: typeof item.file_size === 'number' ? item.file_size : (existing?.file_size ?? 0),
+      uploaded_at: item.uploaded_at || existing?.uploaded_at || null,
+    });
+  });
+
+  return Array.from(merged.values()).sort(
+    (a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime()
+  );
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -40,10 +71,8 @@ export default async function handler(
         .order('last_indexed_at', { ascending: false })
         .limit(500);
 
-      if (!normalizedGuestError && Array.isArray(normalizedGuestIndices) && normalizedGuestIndices.length > 0) {
-        return res.status(200).json({
-          success: true,
-          data: normalizedGuestIndices.map((idx: any) => ({
+      const normalizedGuestList = !normalizedGuestError && Array.isArray(normalizedGuestIndices)
+        ? normalizedGuestIndices.map((idx: any) => ({
             id: idx.id,
             user_id: null,
             project_id: idx.project_id,
@@ -54,12 +83,8 @@ export default async function handler(
             frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
             source: 'plugin',
             file_thumbnail_url: idx.cover_image_url || null,
-          })),
-          user: null,
-          isGuest: true,
-          plan: 'guest',
-        });
-      }
+          }))
+        : [];
 
       const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
       const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
@@ -85,7 +110,7 @@ export default async function handler(
       if (guestErr) {
         return res.status(500).json({ success: false, error: guestErr.message });
       }
-      const indices = (guestIndices || []).map((idx: any) => ({
+      const legacyGuestList = (guestIndices || []).map((idx: any) => ({
         ...idx,
         source: 'plugin',
         frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
@@ -93,7 +118,7 @@ export default async function handler(
       }));
       return res.status(200).json({
         success: true,
-        data: indices,
+        data: mergeIndexLists(normalizedGuestList, legacyGuestList),
         user: null,
         isGuest: true,
         plan: 'guest',
@@ -152,10 +177,8 @@ export default async function handler(
       .order('last_indexed_at', { ascending: false })
       .limit(500);
 
-    if (!normalizedIndicesError && Array.isArray(normalizedIndices) && normalizedIndices.length > 0) {
-      return res.status(200).json({
-        success: true,
-        data: normalizedIndices.map((idx: any) => ({
+    const normalizedList = !normalizedIndicesError && Array.isArray(normalizedIndices)
+      ? normalizedIndices.map((idx: any) => ({
           id: idx.id,
           user_id: idx.user_id,
           project_id: idx.project_id,
@@ -166,11 +189,8 @@ export default async function handler(
           frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
           source: 'Plugin',
           file_thumbnail_url: idx.cover_image_url || null,
-        })),
-        user,
-        warning: null,
-      });
-    }
+        }))
+      : [];
 
     let indices: any[] = [];
     let indicesQueryError: string | null = null;
@@ -264,7 +284,7 @@ export default async function handler(
     }
 
     // Final normalized list with computed fields when available
-    indices = indices.map((idx: any) => ({
+    const legacyList = indices.map((idx: any) => ({
       id: idx.id,
       user_id: idx.user_id,
       project_id: idx.project_id,
@@ -276,6 +296,7 @@ export default async function handler(
       source: apiIndexIds.has(idx.id) ? 'API' : 'Plugin', // Indicate if created via API or Plugin
       file_thumbnail_url: fileKeyToThumbnail.get(idx.figma_file_key) || null
     }));
+    indices = mergeIndexLists(normalizedList, legacyList);
 
     // Debug logging
     console.log(`📊 Found ${indices.length} total indices for user ${user.email} (${user.id})`);
