@@ -3,7 +3,7 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.16';
+const PLUGIN_VERSION = '1.32.17';
 const DEBUG_LOGS = false;
 figma.showUI(__html__, { width: 386, height: 800 });
 
@@ -617,7 +617,12 @@ async function refreshStoredWebUser(webToken) {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
-    if (!validateRes.ok) return null;
+    if (!validateRes.ok) {
+      if (validateRes.status === 401 || validateRes.status === 404) {
+        await clearStoredWebIdentity();
+      }
+      return null;
+    }
     var validateData = await validateRes.json();
     if (!validateData || !validateData.user || typeof validateData.user !== 'object') return null;
     await setStored(STORAGE_KEYS.WEB_USER, validateData.user);
@@ -638,6 +643,9 @@ async function loadUserLimitsToUI(webToken) {
       headers: { 'Authorization': 'Bearer ' + webToken }
     });
     if (!limitsRes.ok) {
+      if (limitsRes.status === 401 || limitsRes.status === 404) {
+        await clearStoredWebIdentity();
+      }
       return null;
     }
     var limitsJson = await limitsRes.json();
@@ -678,9 +686,11 @@ async function loadUserLimitsToUI(webToken) {
       }
     } catch (e) { /* ignore */ }
   }
-  if (webToken && (!webUser || !webUser.email || !webUser.plan)) {
+  if (webToken) {
     var refreshedWebUser = await refreshStoredWebUser(webToken);
     if (refreshedWebUser) webUser = refreshedWebUser;
+    webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+    webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
   }
   sendStoredIdentityToUI(webToken, webUser);
   await loadUserLimitsToUI(webToken);
