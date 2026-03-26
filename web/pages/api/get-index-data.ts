@@ -27,6 +27,27 @@ const hasRenderablePages = (data: any) => {
   return pages.some((page: any) => Array.isArray(page?.frames) && page.frames.length > 0);
 };
 
+const signStorageRef = async (svc: any, value: string | null | undefined): Promise<string | null> => {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (!trimmed.includes(':')) return trimmed;
+
+  const firstColon = trimmed.indexOf(':');
+  const bucket = trimmed.slice(0, firstColon).trim();
+  const objectPath = trimmed.slice(firstColon + 1).trim();
+  if (!bucket || !objectPath) return null;
+
+  try {
+    const { data, error } = await svc.storage.from(bucket).createSignedUrl(objectPath, 60 * 60 * 6);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+};
+
 export const config = {
   api: {
     bodyParser: {
@@ -133,6 +154,10 @@ export default async function handler(
     if (!normalizedIndexError && normalizedIndex) {
       try {
         const normalizedData = await buildNormalizedPayload(normalizedIndex);
+        const signedNormalizedCover = await signStorageRef(svc, normalizedData.coverImageUrl);
+        if (signedNormalizedCover) {
+          normalizedData.coverImageUrl = signedNormalizedCover;
+        }
         if (hasRenderablePages(normalizedData) || normalizedData.coverImageUrl) {
           return res.status(200).json({
             success: true,

@@ -2,6 +2,27 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 
+const signStorageLikeUrl = async (svc: any, value: string | null | undefined): Promise<string | null> => {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (!trimmed.includes(':')) return trimmed;
+
+  const firstColon = trimmed.indexOf(':');
+  const bucket = trimmed.slice(0, firstColon).trim();
+  const objectPath = trimmed.slice(firstColon + 1).trim();
+  if (!bucket || !objectPath) return null;
+
+  try {
+    const { data, error } = await svc.storage.from(bucket).createSignedUrl(objectPath, 60 * 60 * 6);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+};
+
 const getStableLogicalFileId = (file: any): string => {
   const fileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
   const projectId = typeof file?.project_id === 'string' ? file.project_id.trim() : '';
@@ -72,7 +93,7 @@ export default async function handler(
         .limit(500);
 
       const normalizedGuestList = !normalizedGuestError && Array.isArray(normalizedGuestIndices)
-        ? normalizedGuestIndices.map((idx: any) => ({
+        ? await Promise.all(normalizedGuestIndices.map(async (idx: any) => ({
             id: idx.id,
             user_id: null,
             project_id: idx.project_id,
@@ -82,8 +103,8 @@ export default async function handler(
             file_size: 0,
             frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
             source: 'plugin',
-            file_thumbnail_url: idx.cover_image_url || null,
-          }))
+            file_thumbnail_url: await signStorageLikeUrl(svc, idx.cover_image_url) || idx.cover_image_url || null,
+          })))
         : [];
 
       const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
@@ -178,7 +199,7 @@ export default async function handler(
       .limit(500);
 
     const normalizedList = !normalizedIndicesError && Array.isArray(normalizedIndices)
-      ? normalizedIndices.map((idx: any) => ({
+      ? await Promise.all(normalizedIndices.map(async (idx: any) => ({
           id: idx.id,
           user_id: idx.user_id,
           project_id: idx.project_id,
@@ -188,8 +209,8 @@ export default async function handler(
           file_size: 0,
           frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
           source: 'Plugin',
-          file_thumbnail_url: idx.cover_image_url || null,
-        }))
+          file_thumbnail_url: await signStorageLikeUrl(svc, idx.cover_image_url) || idx.cover_image_url || null,
+        })))
       : [];
 
     let indices: any[] = [];
