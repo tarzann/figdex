@@ -24,13 +24,14 @@ import {
   Alert,
   CircularProgress,
   MenuItem,
-  Stack
+  Stack,
+  Tooltip
 } from '@mui/material';
-import { Edit, Delete, Add, ArrowBack, DeleteForever } from '@mui/icons-material';
+import { Edit, Delete, Add, ArrowBack, DeleteForever, RestartAlt } from '@mui/icons-material';
 import type { PlanLimits } from '../../lib/plans';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.32.03'; // Faster admin users load by removing heavy computed stats
+const PAGE_VERSION = 'v1.32.04'; // Added reset indices action while preserving user plan
 const PROTECTED_ADMIN_EMAILS = ['ranmor01@gmail.com', 'ranmor@gmail.com'];
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
@@ -356,6 +357,33 @@ export default function AdminUsers() {
     }
   };
 
+  const handleResetIndices = async (userId: string, email: string, isGuest = false) => {
+    const entityLabel = isGuest ? `guest ${email}` : `user ${email}`;
+    const impactLabel = isGuest
+      ? 'This will remove all guest indices and reset guest usage stats.'
+      : 'This will remove all indices and usage stats, but keep the account, plan and credits.';
+    const confirmed = confirm(`Reset indices for ${entityLabel}? ${impactLabel}`);
+    if (!confirmed) return;
+
+    try {
+      const userData = localStorage.getItem('figma_web_user');
+      const apiKey = userData ? JSON.parse(userData).api_key : null;
+      const headers: Record<string, string> = {};
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const response = await fetch(`/api/admin/users/${userId}/reset-indices`, { method: 'POST', headers });
+      const data = await response.json();
+      if (data.success) {
+        await loadUsers();
+        alert(isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully');
+      } else {
+        setError(data.error || 'Failed to reset user indices');
+      }
+    } catch (error) {
+      console.error('Failed to reset user indices:', error);
+      setError('Failed to reset user indices');
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -462,27 +490,50 @@ export default function AdminUsers() {
                 </TableCell>
                 <TableCell align="right">
                   {user.is_guest ? (
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => handlePurge(user.id, user.email, true)}
-                      title="Delete guest permanently"
-                    >
-                      <DeleteForever />
-                    </IconButton>
+                    <>
+                      <Tooltip title="Reset guest indices">
+                        <IconButton
+                          size="small"
+                          color="warning"
+                          onClick={() => handleResetIndices(user.id, user.email, true)}
+                        >
+                          <RestartAlt />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete guest permanently">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handlePurge(user.id, user.email, true)}
+                        >
+                          <DeleteForever />
+                        </IconButton>
+                      </Tooltip>
+                    </>
                   ) : PROTECTED_ADMIN_EMAILS.includes(user.email) ? (
                     <Typography variant="caption" color="text.secondary">Protected</Typography>
                   ) : (
                     <>
-                      <IconButton size="small" onClick={() => handleEdit(user)}>
-                        <Edit />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(user.id)}>
-                        <Delete />
-                      </IconButton>
-                      <IconButton size="small" color="error" onClick={() => handlePurge(user.id, user.email)} title="Delete permanently">
-                        <DeleteForever />
-                      </IconButton>
+                      <Tooltip title="Edit user">
+                        <IconButton size="small" onClick={() => handleEdit(user)}>
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Reset user indices">
+                        <IconButton size="small" color="warning" onClick={() => handleResetIndices(user.id, user.email)}>
+                          <RestartAlt />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Deactivate user">
+                        <IconButton size="small" onClick={() => handleDelete(user.id)}>
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete permanently">
+                        <IconButton size="small" color="error" onClick={() => handlePurge(user.id, user.email)}>
+                          <DeleteForever />
+                        </IconButton>
+                      </Tooltip>
                     </>
                   )}
                 </TableCell>
