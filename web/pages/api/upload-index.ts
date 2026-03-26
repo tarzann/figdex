@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
+import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 // Local helpers mirroring plugin logic
 function deriveNamingTags(rawName: string): string[] {
   try {
@@ -259,6 +260,41 @@ async function mergeChunksIfComplete(userId: string, fileKey: string, validFileK
 
     console.log(`✅ Successfully merged ${expectedTotal} chunks into single index: ${mergedData.id}`);
     console.log(`✅ Merged index contains ${mergedPages.length} pages`);
+
+    try {
+      const mergeSyncId = `upload-legacy-merge:${userId}:${preferredKey}:${Date.now()}`;
+      await syncNormalizedIndexChunk({
+        supabaseAdmin: svc,
+        owner: { type: 'user', userId },
+        fileKey: preferredKey,
+        projectId: baseDocumentId,
+        fileName: baseFileName,
+        coverImageUrl: null,
+        pages: mergedPages.map((page: any) => ({
+          id: page?.id,
+          pageId: page?.id,
+          name: page?.name,
+          pageName: page?.name,
+          frames: Array.isArray(page?.frames)
+            ? page.frames.map((frame: any) => ({
+                ...frame,
+                image: typeof frame?.image === 'string' ? frame.image : null,
+                thumb_url: typeof frame?.thumb_url === 'string' ? frame.thumb_url : null,
+                frameTags: Array.isArray(frame?.frameTags)
+                  ? frame.frameTags
+                  : Array.isArray(frame?.tags)
+                    ? frame.tags
+                    : [],
+                customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
+              }))
+            : [],
+        })),
+        syncId: mergeSyncId,
+        finalizePageIds: mergedPages.map((page: any) => String(page?.id || '')).filter(Boolean),
+      });
+    } catch (normalizedSyncError) {
+      console.error('❌ Error syncing normalized merged upload-index state:', normalizedSyncError);
+    }
 
   } catch (error) {
     console.error('❌ Error in mergeChunksIfComplete:', error);
@@ -835,6 +871,46 @@ export default async function handler(
       console.log('📦 Chunked upload detected, skipping delete (chunks will be merged after all parts are uploaded)');
       console.log('📦 Checking for merge...');
       await mergeChunksIfComplete(user.id, validFileKey, validFileKey, documentId);
+    } else {
+      try {
+        const syncId = `upload-legacy:${user.id}:${validFileKey}:${Date.now()}`;
+        await syncNormalizedIndexChunk({
+          supabaseAdmin,
+          owner: { type: 'user', userId: user.id },
+          fileKey: validFileKey,
+          projectId: documentId,
+          fileName: finalFileName,
+          coverImageUrl: null,
+          pages: pages.map((page: any) => ({
+            id: page?.id,
+            pageId: page?.id,
+            name: page?.name,
+            pageName: page?.name,
+            frames: Array.isArray(page?.frames)
+              ? page.frames.map((frame: any) => ({
+                  ...frame,
+                  image: typeof frame?.image === 'string' ? frame.image : null,
+                  thumb_url: typeof frame?.thumb_url === 'string' ? frame.thumb_url : null,
+                  frameTags: Array.isArray(frame?.frameTags)
+                    ? frame.frameTags
+                    : Array.isArray(frame?.tags)
+                      ? frame.tags
+                      : [],
+                  customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
+                }))
+              : [],
+          })),
+          syncId,
+          finalizePageIds: pages.map((page: any) => String(page?.id || '')).filter(Boolean),
+        });
+      } catch (normalizedSyncError: any) {
+        console.error('❌ Failed to sync normalized legacy upload state:', normalizedSyncError?.message || normalizedSyncError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to sync normalized index state',
+          details: normalizedSyncError?.message || 'Unknown normalized sync error'
+        });
+      }
     }
 
     // Calculate total frames count from pages for response
