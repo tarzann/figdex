@@ -1925,15 +1925,19 @@
         }
         if (accountPrimaryBtn) {
           if (connected) {
-            accountPrimaryBtn.textContent = 'Open FigDex Web';
-            accountPrimaryBtn.dataset.action = 'open-web';
+            accountPrimaryBtn.style.display = 'none';
+            accountPrimaryBtn.textContent = '';
+            accountPrimaryBtn.dataset.action = 'none';
           } else if (state.lastIndexUpgradeUrl || state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED') {
+            accountPrimaryBtn.style.display = '';
             accountPrimaryBtn.textContent = 'Create free account';
             accountPrimaryBtn.dataset.action = 'upgrade';
           } else if (state.authExpiredMessage) {
+            accountPrimaryBtn.style.display = '';
             accountPrimaryBtn.textContent = 'Reconnect';
             accountPrimaryBtn.dataset.action = 'connect';
           } else {
+            accountPrimaryBtn.style.display = '';
             accountPrimaryBtn.textContent = 'Connect to FigDex';
             accountPrimaryBtn.dataset.action = 'connect';
           }
