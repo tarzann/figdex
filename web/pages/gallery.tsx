@@ -100,6 +100,13 @@ import DevicesIcon from '@mui/icons-material/Devices';
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.32.03'; // Faster lobby load with deferred frame hydration
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
+const DEBUG_GALLERY = false;
+const galleryDebug = (...args: any[]) => {
+  if (DEBUG_GALLERY) console.log(...args);
+};
+const galleryWarn = (...args: any[]) => {
+  if (DEBUG_GALLERY) console.warn(...args);
+};
 
 type Thumbnail = {
   thumbName: string;
@@ -639,12 +646,9 @@ export default function Home() {
           setIndexFiles(displayFiles);
           
           // Load file thumbnails from all indices (for Gallery Lobby)
-          console.log('Loading file thumbnails from', data.data.length, 'indices in parallel...');
+          galleryDebug('Loading file thumbnails from', data.data.length, 'indices in parallel...');
           const loadFileThumbnail = async (file: any) => {
             try {
-              console.log(`📸 [loadFileThumbnail] Starting for file ${file.id} (${file.file_name})`);
-              console.log(`📸 [loadFileThumbnail] file.file_thumbnail_url:`, file.file_thumbnail_url ? `${file.file_thumbnail_url.substring(0, 60)}...` : 'null/undefined');
-
               // Always trust the cover that belongs to the index itself first.
               // saved_connections.file_thumbnail_url is only a last-resort fallback.
               const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
@@ -669,24 +673,15 @@ export default function Home() {
               
               // First check if coverImageUrl is at the data level (from get-index-data.ts)
               let thumbnail: string | null = null;
-              console.log(`📸 [loadFileThumbnail] Checking cover for file ${file.id} (${file.file_name})`);
-              console.log(`📸 [loadFileThumbnail] indexData.data keys:`, indexData.data ? Object.keys(indexData.data) : 'no data');
               if (indexData.data && indexData.data.coverImageUrl) {
                 thumbnail = indexData.data.coverImageUrl;
-                if (thumbnail) {
-                  console.log(`✅ [loadFileThumbnail] Found coverImageUrl at data level for file ${file.id}:`, thumbnail.substring(0, 60) + '...');
-                }
-              } else {
-                console.log(`⚠️ [loadFileThumbnail] No coverImageUrl at data level for file ${file.id}`);
               }
               
               // Try to parse index_data
               let indexDataContent = indexData.data.index_data;
-              console.log(`📸 [loadFileThumbnail] index_data type:`, typeof indexDataContent, Array.isArray(indexDataContent) ? 'array' : (indexDataContent && typeof indexDataContent === 'object' ? 'object' : 'other'));
               if (typeof indexDataContent === 'string') {
                 try {
                   indexDataContent = JSON.parse(indexDataContent);
-                  console.log(`📸 [loadFileThumbnail] Parsed index_data, type:`, typeof indexDataContent, Array.isArray(indexDataContent) ? 'array' : (indexDataContent && typeof indexDataContent === 'object' ? 'object' : 'other'));
                 } catch (e) {
                   console.error(`❌ Index ${file.id} has invalid JSON:`, e);
                   return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
@@ -698,19 +693,12 @@ export default function Home() {
               
               if (!thumbnail && indexDataContent && typeof indexDataContent === 'object' && !Array.isArray(indexDataContent)) {
                 // Object format (with coverImageUrl)
-                console.log(`📸 [loadFileThumbnail] index_data is object, keys:`, Object.keys(indexDataContent));
                 if (indexDataContent.coverImageUrl) {
                   thumbnail = indexDataContent.coverImageUrl;
-                  if (thumbnail) {
-                    console.log(`✅ [loadFileThumbnail] Found coverImageUrl in index_data object for file ${file.id}:`, thumbnail.substring(0, 60) + '...');
-                  }
-                } else {
-                  console.log(`⚠️ [loadFileThumbnail] index_data is object but no coverImageUrl found`);
                 }
                 pagesArray = Array.isArray(indexDataContent.pages) ? indexDataContent.pages : [];
               } else if (Array.isArray(indexDataContent)) {
                 // Array format (pages only)
-                console.log(`📸 [loadFileThumbnail] index_data is array (no coverImageUrl in this format)`);
                 pagesArray = indexDataContent;
               }
               
@@ -733,10 +721,9 @@ export default function Home() {
               
               if (!thumbnail && file.file_thumbnail_url) {
                 thumbnail = file.file_thumbnail_url;
-                console.log(`⚠️ [loadFileThumbnail] Falling back to saved connection thumbnail for file ${file.id}`);
               }
 
-              console.log(`📸 [loadFileThumbnail] Final thumbnail for file ${file.id} (${file.file_name}):`, thumbnail ? `${thumbnail.substring(0, 60)}...` : 'null/empty');
+              galleryDebug(`📸 [loadFileThumbnail] Final thumbnail ready for file ${file.id}`);
               return { success: true, fileId: file.id, thumbnail: thumbnail || null, frameCount: totalFrameCount, fileName: file.file_name };
             } catch (error) {
               console.error(`❌ Error loading index ${file.id} (${file.file_name}):`, error);
@@ -745,7 +732,7 @@ export default function Home() {
           };
           
           // Load all frames from all indices in parallel (much faster!)
-          console.log('Loading all frames from', data.data.length, 'indices in parallel...');
+          galleryDebug('Loading all frames from', data.data.length, 'indices in parallel...');
           const loadIndexFrames = async (file: any) => {
             try {
               const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
@@ -1786,25 +1773,9 @@ export default function Home() {
     // Use allFramesData if available (for lobby/allFrames view), otherwise use frames (for file view)
     const sourceFrames = allFramesData.length > 0 ? allFramesData : frames;
 
-    console.log('🔍 [getFilterOptions] Processing frames:', {
-      allFramesDataLength: allFramesData.length,
-      framesLength: frames.length,
-      sourceFramesLength: sourceFrames.length
-    });
-
     sourceFrames.forEach((frame, idx) => {
        const sTag = ((frame as any).sizeTags && (frame as any).sizeTags[0]) || getSizeTag((frame as any).width, (frame as any).height);
       if (sTag) sizeTags.add(sTag);
-      
-      // Debug: log customTags for first few frames
-      if (idx < 3) {
-        console.log(`🔍 [getFilterOptions] Frame ${idx}:`, {
-          name: frame.name,
-          customTags: (frame as any).customTags,
-          customTagsType: typeof (frame as any).customTags,
-          isArray: Array.isArray((frame as any).customTags)
-        });
-      }
       
       if ((frame as any).customTags && Array.isArray((frame as any).customTags)) {
         (frame as any).customTags.forEach((tag: string) => {
@@ -1815,28 +1786,6 @@ export default function Home() {
       }
     });
 
-    console.log('🔍 [getFilterOptions] Collected tags:', {
-      sizeTags: Array.from(sizeTags).length,
-      customTags: Array.from(customTags),
-      customTagsCount: Array.from(customTags).length
-    });
-    
-    // Debug: Log collected custom tags
-    if (customTags.size > 0) {
-      console.log('🔍 [getFilterOptions] Collected custom tags:', Array.from(customTags));
-    } else {
-      console.log('⚠️ [getFilterOptions] No custom tags found in', sourceFrames.length, 'frames');
-      // Debug: Check first few frames for customTags
-      if (sourceFrames.length > 0) {
-        console.log('🔍 [getFilterOptions] Sample frames:', sourceFrames.slice(0, 3).map((f: any) => ({
-          name: f.name,
-          customTags: f.customTags,
-          customTagsType: typeof f.customTags,
-          customTagsIsArray: Array.isArray(f.customTags)
-        })));
-      }
-    }
-
     return {
       sizeTags: Array.from(sizeTags).sort(),
       customTags: Array.from(customTags).sort()
@@ -1846,7 +1795,6 @@ export default function Home() {
   // 1. Create flat array of all thumbnails from all pages
   // Create file thumbnails for lobby view
   const allFileThumbs = useMemo(() => {
-    console.log('Processing file thumbnails for lobby:', fileThumbnails.length, 'files');
     // Fallback: when loadFileThumbnail returns 0 frames but allFramesData has frames, count from there
     const countByFileId = new Map<string, number>();
     for (const f of allFramesData) {
@@ -1890,7 +1838,6 @@ export default function Home() {
   // Also store fileId mapping for filtering files by matching frames
   const allFramesGalleryThumbs = useMemo(() => {
     let idx = 0;
-    console.log('Processing all frames for search in lobby:', allFramesData.length, 'frames');
     
     return allFramesData.map((frame) => {
       const fileId = (frame as any)._fileId;
@@ -1908,19 +1855,6 @@ export default function Home() {
       const namingTags = (frame as any).namingTags || deriveNamingTags(frame.name || '');
       const sizeTag = getSizeTag((frame as any).width, (frame as any).height);
       const sizeTags = (frame as any).sizeTags || (sizeTag ? [sizeTag] : []);
-      
-      // Debug: Log first frame to verify textContent and searchTokens are preserved
-      if (currentIdx === 0) {
-        console.log('🔍 [allFramesGalleryThumbs] First frame structure:', {
-          name: frame.name,
-          hasTextContent: !!(frame as any).textContent,
-          textContentLength: (frame as any).textContent ? (frame as any).textContent.length : 0,
-          textContentPreview: (frame as any).textContent ? (frame as any).textContent.substring(0, 100) : null,
-          hasSearchTokens: Array.isArray((frame as any).searchTokens),
-          searchTokensCount: Array.isArray((frame as any).searchTokens) ? (frame as any).searchTokens.length : 0,
-          searchTokensPreview: Array.isArray((frame as any).searchTokens) ? (frame as any).searchTokens.slice(0, 10) : null
-        });
-      }
       
       const fileName = (frame as any)._fileName || null;
       const pageName = (frame as any).pageName || null;
@@ -1989,7 +1923,7 @@ export default function Home() {
         matchingFrames.map((item: any) => item._fileId).filter(Boolean)
       );
       
-      console.log(`🔍 Search "${search}": Found ${matchingFrames.length} matching frames in ${matchingFileIds.size} files`);
+      galleryDebug(`🔍 Search "${search}": Found ${matchingFrames.length} matching frames in ${matchingFileIds.size} files`);
       
       // Return only files that have matching frames
       return allFileThumbs.filter(({ file }) => matchingFileIds.has(file.id));
@@ -2005,7 +1939,6 @@ export default function Home() {
 
   const allGalleryThumbs = useMemo(() => {
     let idx = 0;
-    console.log('Processing frames for gallery:', frames.length, 'frames');
     
     return frames.map((frame) => {
       // Use cached textBundle if available, otherwise compute it (optimization)
@@ -2042,18 +1975,7 @@ export default function Home() {
           thumbName: uniqueId,
           label: frame.name || 'Untitled Frame',
           image: frame.image || '',
-          thumbnail: (() => {
-            const thumbUrl = (frame as any).thumb_url || frame.image || '';
-            if ((frame as any).thumb_url) {
-              console.log(`📸 Using thumbnail for "${frame.name || 'Untitled'}": ${(frame as any).thumb_url.substring(0, 60)}...`);
-            } else {
-              // Log when thumbnail is NOT available (for debugging)
-              if (frame.image && frame.image.includes('supabase')) {
-                console.log(`⚠️ No thumb_url for "${frame.name || 'Untitled'}", using full image: ${frame.image.substring(0, 60)}...`);
-              }
-            }
-            return thumbUrl;
-          })(), // Use thumb_url if available, fallback to image
+          thumbnail: (frame as any).thumb_url || frame.image || '', // Use thumb_url if available, fallback to image
           texts: textBundle,
           url: frame.url || ''
         },

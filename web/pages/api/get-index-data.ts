@@ -4,6 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 
 // Version tracking - Update this number for each fix/change
 const API_VERSION = 'v1.30.23'; // Cover image: robust signing (alt paths) + logging
+const DEBUG_GET_INDEX_DATA = false;
+const indexDebug = (...args: any[]) => {
+  if (DEBUG_GET_INDEX_DATA) console.log(...args);
+};
+const indexWarn = (...args: any[]) => {
+  if (DEBUG_GET_INDEX_DATA) console.warn(...args);
+};
 
 export const config = {
   api: {
@@ -67,7 +74,7 @@ export default async function handler(
     }
 
     if (!indexData) {
-      console.log(`[get-index-data] Index ${indexId} not found`);
+      indexDebug(`[get-index-data] Index ${indexId} not found`);
       return res.status(404).json({ success: false, error: 'Index not found' });
     }
 
@@ -78,13 +85,13 @@ export default async function handler(
         // Only handle URLs from our Supabase project
         const supaBase = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
         if (!supaBase) {
-          console.log(`[get-index-data] parseImageUrl: No NEXT_PUBLIC_SUPABASE_URL env var`);
+          indexDebug(`[get-index-data] parseImageUrl: No NEXT_PUBLIC_SUPABASE_URL env var`);
           return null;
         }
         const base = new URL(supaBase).host;
         const host = new URL(imageUrl).host;
         if (host !== base) {
-          console.log(`[get-index-data] parseImageUrl: Host mismatch: ${host} !== ${base}`);
+          indexDebug(`[get-index-data] parseImageUrl: Host mismatch: ${host} !== ${base}`);
           return null;
         }
         // Expect formats like:
@@ -95,7 +102,7 @@ export default async function handler(
         const parts = pathname.split('/').filter(Boolean); // e.g., ['storage','v1','object','public', '<bucket>', ...path]
         const idxObject = parts.findIndex(p => p === 'object');
         if (idxObject === -1 || idxObject + 1 >= parts.length) {
-          console.log(`[get-index-data] parseImageUrl: No 'object' found in pathname: ${pathname}`);
+          indexDebug(`[get-index-data] parseImageUrl: No 'object' found in pathname: ${pathname}`);
           return null;
         }
         let next = parts[idxObject + 1]; // could be 'public' or a bucket name
@@ -104,7 +111,7 @@ export default async function handler(
         if (next === 'public' || next === 'download' || next === 'sign') {
           // next segment is a mode; bucket follows
           if (idxObject + 2 >= parts.length) {
-            console.log(`[get-index-data] parseImageUrl: Missing bucket after mode '${next}' in pathname: ${pathname}`);
+            indexDebug(`[get-index-data] parseImageUrl: Missing bucket after mode '${next}' in pathname: ${pathname}`);
             return null;
           }
           bucket = parts[idxObject + 2];
@@ -116,7 +123,7 @@ export default async function handler(
         }
         const objectPath = pathParts.join('/');
         if (!bucket || !objectPath) {
-          console.log(`[get-index-data] parseImageUrl: Missing bucket or path: bucket=${bucket}, path=${objectPath}, pathname=${pathname}`);
+          indexDebug(`[get-index-data] parseImageUrl: Missing bucket or path: bucket=${bucket}, path=${objectPath}, pathname=${pathname}`);
           return null;
         }
         return { bucket, path: objectPath };
@@ -128,31 +135,29 @@ export default async function handler(
     const signFromImageUrl = async (svc: any, imageUrl: string): Promise<string | null> => {
       try {
         if (!imageUrl || typeof imageUrl !== 'string') {
-          console.log(`⚠️ [get-index-data] signFromImageUrl: invalid imageUrl:`, imageUrl);
+          indexDebug(`⚠️ [get-index-data] signFromImageUrl: invalid imageUrl:`, imageUrl);
           return null;
         }
-        console.log(`📸 [get-index-data] signFromImageUrl: Input URL: ${imageUrl}`);
+        indexDebug(`📸 [get-index-data] signFromImageUrl: Input URL: ${imageUrl}`);
         
         // If it already contains a token, keep it
         if (/[?&]token=/.test(imageUrl)) {
-          console.log(`✅ [get-index-data] signFromImageUrl: URL already has token, using as-is: ${imageUrl.substring(0, 60)}...`);
+          indexDebug(`✅ [get-index-data] signFromImageUrl: URL already has token, using as-is`);
           return imageUrl;
         }
         const parsed = parseImageUrl(imageUrl);
         if (!parsed) {
-          console.warn(`⚠️ [get-index-data] signFromImageUrl: failed to parse URL: ${imageUrl}`);
+          indexWarn(`⚠️ [get-index-data] signFromImageUrl: failed to parse URL: ${imageUrl}`);
           return null;
         }
         const { bucket, path: objectPath } = parsed;
-        console.log(`📸 [get-index-data] signFromImageUrl: Parsed - bucket=${bucket}, path=${objectPath}`);
-        console.log(`📸 [get-index-data] signFromImageUrl: Creating signed URL (6 hours)...`);
+        indexDebug(`📸 [get-index-data] signFromImageUrl: Parsed - bucket=${bucket}, path=${objectPath}`);
         const signed = await (svc as any).storage.from(bucket).createSignedUrl(objectPath, 60 * 60 * 6);
-        console.log(`📸 [get-index-data] signFromImageUrl: Signed response:`, signed ? { hasData: !!signed.data, hasSignedUrl: !!signed.data?.signedUrl } : 'null');
         if (signed?.data?.signedUrl) {
-          console.log(`✅ [get-index-data] signFromImageUrl: Created signed URL: ${signed.data.signedUrl.substring(0, 60)}...`);
+          indexDebug(`✅ [get-index-data] signFromImageUrl: Created signed URL`);
           return signed.data.signedUrl;
         } else {
-          console.warn(`⚠️ [get-index-data] signFromImageUrl: No signedUrl in response. Full response:`, JSON.stringify(signed, null, 2));
+          indexWarn(`⚠️ [get-index-data] signFromImageUrl: No signedUrl in response`);
           return null;
         }
       } catch (error: any) {
@@ -199,7 +204,7 @@ export default async function handler(
         if (existingThumbUrl && typeof existingThumbUrl === 'string' && existingThumbUrl.length > 0) {
           // Check if it's a valid URL (not the broken /object/p path)
           if (existingThumbUrl.includes('supabase.co/storage') && !existingThumbUrl.includes('/object/p')) {
-            console.log(`[get-index-data] Frame "${frame.name || 'unknown'}" already has valid thumb_url, skipping generation`);
+            indexDebug(`[get-index-data] Frame already has valid thumb_url`);
             // Still process the full image, but skip thumbnail
           }
         }
@@ -272,7 +277,7 @@ export default async function handler(
         if (frame && frame.image && typeof frame.image === 'string' && frame.image.length > 0 && frame.image.includes('supabase.co/storage')) {
           const parsed = parseImageUrl(frame.image);
           if (parsed) {
-            console.log(`[get-index-data] Parsed frame.image URL: bucket=${parsed.bucket}, path=${parsed.path.substring(0, 50)}...`);
+            indexDebug(`[get-index-data] Parsed frame.image URL`);
             candidates.push({ frame, bucket: parsed.bucket, path: parsed.path });
             add(fullByBucket, parsed.bucket, parsed.path);
             // Only add to thumbByBucket if thumb_url doesn't exist or is invalid
@@ -282,7 +287,7 @@ export default async function handler(
               add(thumbByBucket, parsed.bucket, thumbPath);
             }
           } else {
-            console.log(`[get-index-data] Failed to parse frame.image URL: ${frame.image.substring(0, 80)}...`);
+            indexDebug(`[get-index-data] Failed to parse frame.image URL`);
           }
         }
       }
@@ -303,7 +308,7 @@ export default async function handler(
       }
       for (const [bucket, paths] of thumbByBucket.entries()) {
         try {
-          console.log(`[get-index-data] Fetching thumbnails for bucket=${bucket}, paths=${paths.length}`);
+          indexDebug(`[get-index-data] Fetching thumbnails for bucket=${bucket}, paths=${paths.length}`);
           // Try to get signed URLs for existing thumbnail files (not transformations)
           const result = await (svc as any).storage.from(bucket).createSignedUrls(paths, 60 * 60 * 6);
           if (result?.data && Array.isArray(result.data)) {
@@ -316,9 +321,9 @@ export default async function handler(
                 successCount++;
               }
             }
-            console.log(`[get-index-data] Fetched ${successCount}/${paths.length} thumbnails for bucket=${bucket}`);
+            indexDebug(`[get-index-data] Fetched ${successCount}/${paths.length} thumbnails for bucket=${bucket}`);
           } else {
-            console.log(`[get-index-data] No thumbnail data returned for bucket=${bucket}`);
+            indexDebug(`[get-index-data] No thumbnail data returned for bucket=${bucket}`);
           }
         } catch (error) {
           console.error(`[get-index-data] Error fetching thumbnails for bucket=${bucket}:`, error);
@@ -354,7 +359,7 @@ export default async function handler(
           (frame as any).thumb_url = thumb;
           thumbCount++;
         } else {
-          console.log(`[get-index-data] No thumbnail found for ${frame.name || 'unknown'}: bucket=${bucket}, thumbPath=${thumbPath.substring(0, 50)}...`);
+          indexDebug(`[get-index-data] No thumbnail found for frame`);
         }
       }
       // For frames with data URL in frame.image (e.g. guest base64), ensure thumb_url is set for display
@@ -363,7 +368,7 @@ export default async function handler(
           (frame as any).thumb_url = frame.image;
         }
       }
-      console.log(`[get-index-data] Populated ${thumbCount}/${candidates.length} frames with thumbnails`);
+      indexDebug(`[get-index-data] Populated ${thumbCount}/${candidates.length} frames with thumbnails`);
     };
 
     // If index_data is a storage pointer, load from Supabase Storage
@@ -630,4 +635,3 @@ export default async function handler(
     });
   }
 }
-
