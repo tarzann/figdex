@@ -242,11 +242,11 @@ export default function SharedIndex() {
           
           if (data.shareType === 'all_indices') {
             // Load all indices for this user
-            await loadAllIndicesForUser(data.user.id, data.user.email);
+            await loadAllIndicesForUser(data.user.id, data.user.email, Array.isArray(data.indices) ? data.indices : []);
           } else if (data.shareType === 'search_results') {
             // Load search results
             setSearchParams(data.searchParams || {});
-            await loadSearchResults(data.user.id, data.user.email, data.searchParams || {});
+            await loadSearchResults(data.user.id, data.user.email, data.searchParams || {}, Array.isArray(data.indices) ? data.indices : []);
           }
           return;
         }
@@ -283,19 +283,27 @@ export default function SharedIndex() {
   };
 
   // Load all indices for a user (for all_indices share type)
-  const loadAllIndicesForUser = async (userId: string, userEmail: string) => {
+  const loadAllIndicesForUser = async (userId: string, userEmail: string, providedIndices?: any[]) => {
     try {
-      if (!userEmail) {
-        console.error('User email not provided');
-        setFrames([]);
-        return;
-      }
-      
-      // Get all indices for this user
-      const indicesResponse = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(userEmail)}`);
-      const indicesData = await indicesResponse.json();
+      let indices: any[] = Array.isArray(providedIndices) ? providedIndices : [];
 
-      if (!indicesData.success || !Array.isArray(indicesData.data) || indicesData.data.length === 0) {
+      if (indices.length === 0) {
+        if (!userEmail) {
+          console.error('User email not provided');
+          setFrames([]);
+          return;
+        }
+
+        const indicesResponse = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(userEmail)}`);
+        const indicesData = await indicesResponse.json();
+        if (!indicesData.success || !Array.isArray(indicesData.data) || indicesData.data.length === 0) {
+          setFrames([]);
+          return;
+        }
+        indices = indicesData.data;
+      }
+
+      if (indices.length === 0) {
         setFrames([]);
         return;
       }
@@ -318,7 +326,7 @@ export default function SharedIndex() {
         }
       };
 
-      const results = await mapInBatches(indicesData.data, 4, loadIndexFrames);
+      const results = await mapInBatches(indices, 4, loadIndexFrames);
 
       const allFrames: any[] = [];
       const seen = new Set<string>();
@@ -341,10 +349,10 @@ export default function SharedIndex() {
   };
 
   // Load search results (for search_results share type)
-  const loadSearchResults = async (userId: string, userEmail: string, params: any) => {
+  const loadSearchResults = async (userId: string, userEmail: string, params: any, providedIndices?: any[]) => {
     try {
       // First load all indices
-      await loadAllIndicesForUser(userId, userEmail);
+      await loadAllIndicesForUser(userId, userEmail, providedIndices);
 
       // Then apply search filters
       // The filtering will be done in the filteredThumbs useMemo based on searchParams

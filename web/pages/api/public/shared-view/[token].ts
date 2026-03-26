@@ -4,6 +4,12 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
+const getLogicalFileKey = (file: any) => {
+  const figmaFileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+  const projectId = typeof file?.project_id === 'string' ? file.project_id.trim() : '';
+  return figmaFileKey || (projectId && projectId !== '0:0' ? projectId : '') || String(file?.id || '');
+};
+
 // Helper function to normalize frame images (copied from public/index/[token].ts)
 const normalizeFrameImagesBatch = async (
   framesArr: any[],
@@ -209,20 +215,65 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Load indices based on share type
     if (sharedView.share_type === 'all_indices') {
-      // Get all indices for this user
-      const { data: indices, error: indicesError } = await supabase
-        .from('index_files')
-        .select('id, file_name, uploaded_at')
+      const { data: normalizedIndices, error: normalizedError } = await supabase
+        .from('indexed_files')
+        .select('id, file_name, last_indexed_at, figma_file_key, project_id, total_frames')
         .eq('user_id', sharedView.user_id)
-        .order('uploaded_at', { ascending: false });
+        .eq('is_public', true)
+        .order('last_indexed_at', { ascending: false });
 
-      if (indicesError) {
-        console.error('Error fetching indices:', indicesError);
+      if (normalizedError) {
+        console.error('Error fetching normalized shared indices:', normalizedError);
         return res.status(500).json({
           success: false,
-          error: 'Failed to fetch indices'
+          error: 'Failed to fetch shared indices'
         });
       }
+
+      const normalizedList = Array.isArray(normalizedIndices) ? normalizedIndices : [];
+      const normalizedLogicalKeys = new Set<string>(
+        normalizedList.map((item: any) => getLogicalFileKey(item)).filter(Boolean)
+      );
+
+      let legacyList: any[] = [];
+      if (normalizedList.length === 0) {
+        const { data: legacyIndices, error: legacyError } = await supabase
+          .from('index_files')
+          .select('id, file_name, uploaded_at, figma_file_key, project_id')
+          .eq('user_id', sharedView.user_id)
+          .eq('is_public', true)
+          .order('uploaded_at', { ascending: false });
+
+        if (legacyError) {
+          console.error('Error fetching legacy shared indices:', legacyError);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch shared indices'
+          });
+        }
+
+        legacyList = Array.isArray(legacyIndices)
+          ? legacyIndices.filter((item: any) => !normalizedLogicalKeys.has(getLogicalFileKey(item)))
+          : [];
+      }
+
+      const indices = [
+        ...normalizedList.map((item: any) => ({
+          id: item.id,
+          file_name: item.file_name,
+          uploaded_at: item.last_indexed_at,
+          frame_count: item.total_frames,
+          figma_file_key: item.figma_file_key,
+          project_id: item.project_id,
+        })),
+        ...legacyList.map((item: any) => ({
+          id: item.id,
+          file_name: item.file_name,
+          uploaded_at: item.uploaded_at,
+          figma_file_key: item.figma_file_key,
+          project_id: item.project_id,
+        })),
+      ];
 
       return res.status(200).json({
         success: true,
@@ -232,7 +283,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           email: user.email,
           full_name: user.full_name
         },
-        indices: indices || []
+        indices
       });
 
     } else if (sharedView.share_type === 'search_results') {
