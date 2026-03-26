@@ -657,6 +657,31 @@ async function refreshStoredWebUser(webToken) {
   }
 }
 
+async function getServerIndexStatus(fileKey, webToken, anonId) {
+  if (!fileKey || typeof fileKey !== 'string') return null;
+  try {
+    var url = 'https://www.figdex.com/api/file-index-status?fileKey=' + encodeURIComponent(fileKey);
+    var headers = {};
+    if (webToken && typeof webToken === 'string' && webToken.length >= 10) {
+      headers['Authorization'] = 'Bearer ' + webToken;
+    } else if (anonId && typeof anonId === 'string') {
+      url += '&anonId=' + encodeURIComponent(anonId);
+    } else {
+      return null;
+    }
+
+    var response = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: headers
+    });
+    if (!response || !response.ok) return null;
+    var payload = await response.json();
+    return payload && payload.success ? !!payload.exists : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function loadUserLimitsToUI(webToken) {
   if (!webToken || typeof webToken !== 'string' || webToken.length < 10) {
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
@@ -802,6 +827,17 @@ figma.ui.onmessage = async (msg) => {
     // Use stored indexed pages metadata (per document) to mark pages that were already indexed
     let indexedMeta = [];
     try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
+    if (globalFileKey) {
+      try {
+        var tokenForIndexState = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+        var anonIdForIndexState = await getStored(STORAGE_KEYS.ANON_ID, null);
+        var hasServerIndex = await getServerIndexStatus(globalFileKey, tokenForIndexState, anonIdForIndexState);
+        if (hasServerIndex === false) {
+          indexedMeta = [];
+          await setStored(STORAGE_KEYS.INDEXED_PAGES, []);
+        }
+      } catch (e) {}
+    }
     const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
     const pages = [];
     for (var pi = 0; pi < allPages.length; pi++) {
