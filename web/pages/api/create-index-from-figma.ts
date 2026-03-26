@@ -192,6 +192,106 @@ async function persistIndexDataForWrite(
   }
 }
 
+async function loadNormalizedExistingFile(
+  supabaseAdmin: any,
+  owner: { type: 'user'; userId: string } | { type: 'guest'; anonId: string },
+  fileKey: string
+): Promise<{
+  hasExistingForFile: boolean;
+  coverImageUrl: string | null;
+  existingByPageId: Map<string, { id?: string; index_data: any; pageCount: number }>;
+}> {
+  let fileQuery = supabaseAdmin
+    .from('indexed_files')
+    .select('id, cover_image_url')
+    .eq('figma_file_key', fileKey)
+    .limit(1);
+
+  if (owner.type === 'user') {
+    fileQuery = fileQuery.eq('user_id', owner.userId);
+  } else {
+    fileQuery = fileQuery.is('user_id', null).eq('owner_anon_id', owner.anonId);
+  }
+
+  const { data: normalizedFile, error: normalizedFileError } = await fileQuery.maybeSingle();
+  if (normalizedFileError || !normalizedFile?.id) {
+    return {
+      hasExistingForFile: false,
+      coverImageUrl: null,
+      existingByPageId: new Map(),
+    };
+  }
+
+  const { data: normalizedPages, error: normalizedPagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .select('id, figma_page_id, page_name, frame_count, sort_order')
+    .eq('file_id', normalizedFile.id);
+
+  if (normalizedPagesError || !Array.isArray(normalizedPages) || normalizedPages.length === 0) {
+    return {
+      hasExistingForFile: true,
+      coverImageUrl: typeof normalizedFile.cover_image_url === 'string' ? normalizedFile.cover_image_url : null,
+      existingByPageId: new Map(),
+    };
+  }
+
+  const pageIds = normalizedPages.map((page: any) => page.id).filter(Boolean);
+  const framesByPageId = new Map<string, any[]>();
+
+  if (pageIds.length > 0) {
+    const { data: normalizedFrames, error: normalizedFramesError } = await supabaseAdmin
+      .from('indexed_frames')
+      .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
+      .in('page_id', pageIds)
+      .order('sort_order', { ascending: true });
+
+    if (!normalizedFramesError && Array.isArray(normalizedFrames)) {
+      normalizedFrames.forEach((frame: any) => {
+        const framePayload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+        const hydratedFrame = {
+          ...framePayload,
+          id: frame.figma_frame_id,
+          name: frame.frame_name,
+          texts: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : framePayload.texts,
+          textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : framePayload.textContent,
+          frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
+          customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
+          image: typeof frame.image_url === 'string' ? frame.image_url : framePayload.image,
+          thumb_url: typeof frame.thumb_url === 'string' ? frame.thumb_url : framePayload.thumb_url,
+        };
+        if (!framesByPageId.has(frame.page_id)) framesByPageId.set(frame.page_id, []);
+        framesByPageId.get(frame.page_id)!.push(hydratedFrame);
+      });
+    }
+  }
+
+  const existingByPageId = new Map<string, { id?: string; index_data: any; pageCount: number }>();
+  normalizedPages.forEach((page: any) => {
+    const pageData = {
+      coverImageUrl: typeof normalizedFile.cover_image_url === 'string' ? normalizedFile.cover_image_url : null,
+      pages: [
+        {
+          id: page.figma_page_id,
+          pageId: page.figma_page_id,
+          name: page.page_name,
+          pageName: page.page_name,
+          frames: framesByPageId.get(page.id) || [],
+        },
+      ],
+    };
+    existingByPageId.set(String(page.figma_page_id), {
+      index_data: pageData,
+      pageCount: 1,
+    });
+  });
+
+  return {
+    hasExistingForFile: true,
+    coverImageUrl: typeof normalizedFile.cover_image_url === 'string' ? normalizedFile.cover_image_url : null,
+    existingByPageId,
+  };
+}
+
 function countEligibleFrames(node: FigmaNode, parentType: string = 'PAGE'): number {
   let count = 0;
   const stack: Array<{ node: FigmaNode; parentType: string }> = [{ node, parentType }];
@@ -325,16 +425,26 @@ export default async function handler(
       const guestDistinctFileCount = await getGuestDistinctFileCount(supabaseAdmin, guestAnonId);
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);
 
-      const { data: existingRows } = await supabaseAdmin
-        .from('index_files')
-        .select('id, index_data, project_id, figma_file_key, frame_count')
-        .is('user_id', null)
-        .eq('owner_anon_id', guestAnonId)
-        .eq('figma_file_key', fileKeyTrim)
-        .limit(500);
-      const existingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
-      let existingFileCoverUrl: string | null = null;
-      if (Array.isArray(existingRows)) {
+      const existingByPageId = new Map<string, { id?: string; index_data: any; pageCount: number }>();
+      const normalizedExisting = await loadNormalizedExistingFile(
+        supabaseAdmin,
+        { type: 'guest', anonId: guestAnonId },
+        fileKeyTrim
+      );
+      normalizedExisting.existingByPageId.forEach((value, key) => {
+        existingByPageId.set(key, value);
+      });
+      let existingFileCoverUrl: string | null = normalizedExisting.coverImageUrl;
+      let existingRows: any[] = [];
+      if (!normalizedExisting.hasExistingForFile) {
+        const { data: legacyRows } = await supabaseAdmin
+          .from('index_files')
+          .select('id, index_data, project_id, figma_file_key, frame_count')
+          .is('user_id', null)
+          .eq('owner_anon_id', guestAnonId)
+          .eq('figma_file_key', fileKeyTrim)
+          .limit(500);
+        existingRows = Array.isArray(legacyRows) ? legacyRows : [];
         for (const row of existingRows) {
           const d = await resolveIndexDataForRead(supabaseAdmin, row.index_data);
           if (!existingFileCoverUrl) existingFileCoverUrl = getStoredCoverImageUrl(d);
@@ -345,7 +455,7 @@ export default async function handler(
           }
         }
       }
-      const hasExistingForFile = existingByPageId.size > 0 || (existingRows?.length ?? 0) > 0;
+      const hasExistingForFile = normalizedExisting.hasExistingForFile || existingByPageId.size > 0 || existingRows.length > 0;
       const isAddingNewFile = !hasExistingForFile;
       const wouldExceedFileLimit = isAddingNewFile && guestDistinctFileCount >= maxFilesGuest;
       const estimatedFrameCount = typeof bodyEarly.estimatedFrameCount === 'number' ? bodyEarly.estimatedFrameCount : framesInPayload;
@@ -638,16 +748,24 @@ export default async function handler(
         const estimatedFrameCount = typeof req.body?.estimatedFrameCount === 'number' ? req.body.estimatedFrameCount : 0;
         const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
         const currentLogicalFileId = getLogicalFileId(docId, fileKeyTrim);
-        const { data: authCandidateRows } = await supabaseAdmin
-          .from('index_files')
-          .select('project_id, figma_file_key')
-          .eq('user_id', user.id)
-          .eq('figma_file_key', fileKeyTrim)
-          .limit(50);
-        const hasExistingForFile = (authCandidateRows || []).some((row: any) => {
-          const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
-          return rowLogicalFileId === currentLogicalFileId;
-        });
+        const normalizedExisting = await loadNormalizedExistingFile(
+          supabaseAdmin,
+          { type: 'user', userId: user.id },
+          fileKeyTrim
+        );
+        let hasExistingForFile = normalizedExisting.hasExistingForFile;
+        if (!hasExistingForFile) {
+          const { data: authCandidateRows } = await supabaseAdmin
+            .from('index_files')
+            .select('project_id, figma_file_key')
+            .eq('user_id', user.id)
+            .eq('figma_file_key', fileKeyTrim)
+            .limit(50);
+          hasExistingForFile = (authCandidateRows || []).some((row: any) => {
+            const rowLogicalFileId = getLogicalFileId(row.project_id, row.figma_file_key);
+            return rowLogicalFileId === currentLogicalFileId;
+          });
+        }
 
         if (!hasExistingForFile && limits.maxFiles !== null) {
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
@@ -695,15 +813,25 @@ export default async function handler(
 
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
-          const { data: authExistingRows } = await supabaseAdmin
-            .from('index_files')
-            .select('id, index_data, project_id, figma_file_key, frame_count')
-            .eq('user_id', user.id)
-            .eq('figma_file_key', fileKeyTrim)
-            .limit(500);
-          const authExistingByPageId = new Map<string, { id: string; index_data: any; pageCount: number }>();
-          let authExistingFileCoverUrl: string | null = null;
-          if (Array.isArray(authExistingRows)) {
+          const authExistingByPageId = new Map<string, { id?: string; index_data: any; pageCount: number }>();
+          const normalizedExisting = await loadNormalizedExistingFile(
+            supabaseAdmin,
+            { type: 'user', userId: user.id },
+            fileKeyTrim
+          );
+          normalizedExisting.existingByPageId.forEach((value, key) => {
+            authExistingByPageId.set(key, value);
+          });
+          let authExistingFileCoverUrl: string | null = normalizedExisting.coverImageUrl;
+          let authExistingRows: any[] = [];
+          if (!normalizedExisting.hasExistingForFile) {
+            const { data: legacyAuthRows } = await supabaseAdmin
+              .from('index_files')
+              .select('id, index_data, project_id, figma_file_key, frame_count')
+              .eq('user_id', user.id)
+              .eq('figma_file_key', fileKeyTrim)
+              .limit(500);
+            authExistingRows = Array.isArray(legacyAuthRows) ? legacyAuthRows : [];
             for (const row of authExistingRows) {
               const d = await resolveIndexDataForRead(supabaseAdmin, row.index_data);
               if (!authExistingFileCoverUrl) authExistingFileCoverUrl = getStoredCoverImageUrl(d);
@@ -714,7 +842,7 @@ export default async function handler(
               }
             }
           }
-          const hasAuthExistingForFile = authExistingByPageId.size > 0 || (authExistingRows && authExistingRows.length > 0);
+          const hasAuthExistingForFile = normalizedExisting.hasExistingForFile || authExistingByPageId.size > 0 || authExistingRows.length > 0;
           const isNewFile = !hasAuthExistingForFile;
 
           if (isNewFile && limits.maxFiles !== null) {
