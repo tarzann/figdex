@@ -116,8 +116,32 @@ export async function refreshNormalizedOwnerUsage(
     ? { user_id: owner.userId, owner_anon_id: null, total_files: usage.totalFiles, total_frames: usage.totalFrames, updated_at: new Date().toISOString() }
     : { user_id: null, owner_anon_id: owner.anonId, total_files: usage.totalFiles, total_frames: usage.totalFrames, updated_at: new Date().toISOString() };
 
-  const conflictColumn = owner.type === 'user' ? 'user_id' : 'owner_anon_id';
-  await supabaseAdmin.from('indexed_owner_usage').upsert(payload, { onConflict: conflictColumn });
+  let existingQuery = supabaseAdmin
+    .from('indexed_owner_usage')
+    .select('id')
+    .limit(1);
+
+  if (owner.type === 'user') {
+    existingQuery = existingQuery.eq('user_id', owner.userId);
+  } else {
+    existingQuery = existingQuery.eq('owner_anon_id', owner.anonId);
+  }
+
+  const { data: existingRow, error: existingError } = await existingQuery.maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existingRow?.id) {
+    const { error: updateError } = await supabaseAdmin
+      .from('indexed_owner_usage')
+      .update(payload)
+      .eq('id', existingRow.id);
+    if (updateError) throw updateError;
+  } else {
+    const { error: insertError } = await supabaseAdmin
+      .from('indexed_owner_usage')
+      .insert(payload);
+    if (insertError) throw insertError;
+  }
 
   return usage;
 }
