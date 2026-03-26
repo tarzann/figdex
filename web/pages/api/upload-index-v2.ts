@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getPlanLimitsFromDb, formatBytes } from '../../lib/plans';
 import { archiveExistingIndex } from '../../lib/index-archive';
+import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 
 // Version tracking - Update this number for each fix/change
 const API_VERSION = 'v1.30.24'; // Cover image signing
@@ -639,6 +640,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } catch (cleanupErr) {
         console.warn('Retention cleanup failed:', cleanupErr);
       }
+    }
+
+    try {
+      const syncId = `upload-v2:${user.id}:${fileKey}:${Date.now()}`;
+      await syncNormalizedIndexChunk({
+        supabaseAdmin,
+        owner: { type: 'user', userId: user.id },
+        fileKey,
+        projectId: documentId,
+        fileName: finalFileName,
+        coverImageUrl: hasValidCoverImage ? coverImageUrl : null,
+        pages: sanitizedPages.map((page: any) => ({
+          id: page?.id,
+          pageId: page?.id,
+          name: page?.name,
+          pageName: page?.name,
+          frames: Array.isArray(page?.frames) ? page.frames.map((frame: any) => ({
+            ...frame,
+            image: typeof frame?.image_url === 'string' && frame.image_url ? frame.image_url : frame?.image,
+            thumb_url: typeof frame?.thumb_url === 'string' ? frame.thumb_url : null,
+            frameTags: Array.isArray(frame?.tags)
+              ? frame.tags
+              : Array.isArray(frame?.frameTags)
+                ? frame.frameTags
+                : [],
+            customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
+          })) : [],
+        })),
+        syncId,
+        finalizePageIds: sanitizedPages.map((page: any) => String(page?.id || '')).filter(Boolean),
+      });
+    } catch (normalizedSyncError: any) {
+      console.error('❌ [upload-index-v2] Failed to sync normalized index store:', normalizedSyncError?.message || normalizedSyncError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to sync normalized index state',
+        details: normalizedSyncError?.message || 'Unknown normalized sync error'
+      });
     }
 
     return res.status(200).json({
