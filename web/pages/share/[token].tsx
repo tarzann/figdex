@@ -107,6 +107,20 @@ const FigmaIcon = () => (
   </svg>
 );
 
+async function mapInBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(mapper));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 export default function SharedIndex() {
   const router = useRouter();
   const { token } = router.query;
@@ -300,7 +314,7 @@ export default function SharedIndex() {
         return;
       }
 
-      // Load all frames from all indices in parallel
+      // Load all frames from all indices in controlled batches to avoid request bursts
       const loadIndexFrames = async (indexFile: any) => {
         try {
           const indexResponse = await fetch(`/api/get-index-data?indexId=${indexFile.id}`);
@@ -353,8 +367,7 @@ export default function SharedIndex() {
         }
       };
 
-      const loadPromises = indicesData.data.map((file: any) => loadIndexFrames(file));
-      const results = await Promise.all(loadPromises);
+      const results = await mapInBatches(indicesData.data, 4, loadIndexFrames);
 
       const allFrames: any[] = [];
       results.forEach(result => {

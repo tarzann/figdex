@@ -143,6 +143,8 @@ const parseImageUrl = (imageUrl: string): { bucket: string; path: string } | nul
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+
   if (!supabaseUrl || !supabaseServiceKey) {
     return res.status(500).json({
       success: false,
@@ -263,4 +265,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-
