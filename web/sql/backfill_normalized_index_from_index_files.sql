@@ -4,51 +4,51 @@
 
 BEGIN;
 
-WITH legacy_rows AS (
+CREATE TEMP TABLE tmp_legacy_rows ON COMMIT DROP AS
+SELECT
+  i.id AS legacy_index_id,
+  i.user_id,
+  i.owner_anon_id,
+  CASE
+    WHEN COALESCE(NULLIF(BTRIM(i.figma_file_key), ''), '') <> '' THEN BTRIM(i.figma_file_key)
+    WHEN COALESCE(NULLIF(BTRIM(i.project_id), ''), '') <> '' AND BTRIM(i.project_id) <> '0:0' THEN BTRIM(i.project_id)
+    ELSE 'unknown'
+  END AS logical_file_id,
+  NULLIF(BTRIM(i.project_id), '') AS project_id,
+  NULLIF(BTRIM(i.figma_file_key), '') AS figma_file_key,
+  COALESCE(NULLIF(BTRIM(i.file_name), ''), 'Untitled') AS file_name,
+  CASE
+    WHEN jsonb_typeof(i.index_data) = 'object' THEN NULLIF(BTRIM(i.index_data->>'coverImageUrl'), '')
+    ELSE NULL
+  END AS cover_image_url,
+  COALESCE(i.uploaded_at, NOW()) AS uploaded_at,
+  COALESCE(i.frame_count, 0) AS frame_count,
+  i.index_data
+FROM index_files i
+WHERE (i.user_id IS NOT NULL OR i.owner_anon_id IS NOT NULL);
+
+CREATE TEMP TABLE tmp_latest_user_rows ON COMMIT DROP AS
+SELECT *
+FROM (
   SELECT
-    i.id AS legacy_index_id,
-    i.user_id,
-    i.owner_anon_id,
-    CASE
-      WHEN COALESCE(NULLIF(BTRIM(i.figma_file_key), ''), '') <> '' THEN BTRIM(i.figma_file_key)
-      WHEN COALESCE(NULLIF(BTRIM(i.project_id), ''), '') <> '' AND BTRIM(i.project_id) <> '0:0' THEN BTRIM(i.project_id)
-      ELSE 'unknown'
-    END AS logical_file_id,
-    NULLIF(BTRIM(i.project_id), '') AS project_id,
-    NULLIF(BTRIM(i.figma_file_key), '') AS figma_file_key,
-    COALESCE(NULLIF(BTRIM(i.file_name), ''), 'Untitled') AS file_name,
-    CASE
-      WHEN jsonb_typeof(i.index_data) = 'object' THEN NULLIF(BTRIM(i.index_data->>'coverImageUrl'), '')
-      ELSE NULL
-    END AS cover_image_url,
-    COALESCE(i.uploaded_at, NOW()) AS uploaded_at,
-    COALESCE(i.frame_count, 0) AS frame_count,
-    i.index_data
-  FROM index_files i
-  WHERE (i.user_id IS NOT NULL OR i.owner_anon_id IS NOT NULL)
-),
-latest_user_rows AS (
-  SELECT *
-  FROM (
-    SELECT
-      legacy_rows.*,
-      ROW_NUMBER() OVER (PARTITION BY user_id, logical_file_id ORDER BY uploaded_at DESC, legacy_index_id DESC) AS row_num
-    FROM legacy_rows
-    WHERE user_id IS NOT NULL
-  ) ranked
-  WHERE row_num = 1
-),
-latest_guest_rows AS (
-  SELECT *
-  FROM (
-    SELECT
-      legacy_rows.*,
-      ROW_NUMBER() OVER (PARTITION BY owner_anon_id, logical_file_id ORDER BY uploaded_at DESC, legacy_index_id DESC) AS row_num
-    FROM legacy_rows
-    WHERE user_id IS NULL AND owner_anon_id IS NOT NULL
-  ) ranked
-  WHERE row_num = 1
-)
+    l.*,
+    ROW_NUMBER() OVER (PARTITION BY l.user_id, l.logical_file_id ORDER BY l.uploaded_at DESC, l.legacy_index_id DESC) AS row_num
+  FROM tmp_legacy_rows l
+  WHERE l.user_id IS NOT NULL
+) ranked
+WHERE row_num = 1;
+
+CREATE TEMP TABLE tmp_latest_guest_rows ON COMMIT DROP AS
+SELECT *
+FROM (
+  SELECT
+    l.*,
+    ROW_NUMBER() OVER (PARTITION BY l.owner_anon_id, l.logical_file_id ORDER BY l.uploaded_at DESC, l.legacy_index_id DESC) AS row_num
+  FROM tmp_legacy_rows l
+  WHERE l.user_id IS NULL AND l.owner_anon_id IS NOT NULL
+) ranked
+WHERE row_num = 1;
+
 INSERT INTO indexed_files (
   user_id,
   owner_anon_id,
@@ -76,7 +76,7 @@ SELECT
   uploaded_at,
   uploaded_at,
   uploaded_at
-FROM latest_user_rows
+FROM tmp_latest_user_rows
 WHERE user_id IS NOT NULL
 ON CONFLICT (user_id, logical_file_id) WHERE user_id IS NOT NULL
 DO UPDATE SET
@@ -115,7 +115,8 @@ SELECT
   uploaded_at,
   uploaded_at,
   uploaded_at
-FROM latest_guest_rows
+FROM tmp_latest_guest_rows
+WHERE owner_anon_id IS NOT NULL
 ON CONFLICT (owner_anon_id, logical_file_id) WHERE user_id IS NULL AND owner_anon_id IS NOT NULL
 DO UPDATE SET
   project_id = EXCLUDED.project_id,
@@ -128,26 +129,21 @@ DO UPDATE SET
 
 WITH legacy_pages AS (
   SELECT
-    i.user_id,
-    i.owner_anon_id,
-    CASE
-      WHEN COALESCE(NULLIF(BTRIM(i.figma_file_key), ''), '') <> '' THEN BTRIM(i.figma_file_key)
-      WHEN COALESCE(NULLIF(BTRIM(i.project_id), ''), '') <> '' AND BTRIM(i.project_id) <> '0:0' THEN BTRIM(i.project_id)
-      ELSE 'unknown'
-    END AS logical_file_id,
-    COALESCE(NULLIF(BTRIM(page_elem->>'id'), ''), NULLIF(BTRIM(page_elem->>'pageId'), ''), CONCAT('legacy-page-', i.id, '-', page_ord::TEXT)) AS figma_page_id,
+    l.user_id,
+    l.owner_anon_id,
+    l.logical_file_id,
+    COALESCE(NULLIF(BTRIM(page_elem->>'id'), ''), NULLIF(BTRIM(page_elem->>'pageId'), ''), CONCAT('legacy-page-', l.legacy_index_id, '-', page_ord::TEXT)) AS figma_page_id,
     COALESCE(NULLIF(BTRIM(page_elem->>'name'), ''), NULLIF(BTRIM(page_elem->>'pageName'), ''), 'Untitled Page') AS page_name,
     page_ord - 1 AS sort_order,
     page_elem
-  FROM index_files i
+  FROM tmp_legacy_rows l
   CROSS JOIN LATERAL jsonb_array_elements(
     CASE
-      WHEN jsonb_typeof(i.index_data) = 'array' THEN i.index_data
-      WHEN jsonb_typeof(i.index_data) = 'object' AND jsonb_typeof(i.index_data->'pages') = 'array' THEN i.index_data->'pages'
+      WHEN jsonb_typeof(l.index_data) = 'array' THEN l.index_data
+      WHEN jsonb_typeof(l.index_data) = 'object' AND jsonb_typeof(l.index_data->'pages') = 'array' THEN l.index_data->'pages'
       ELSE '[]'::jsonb
     END
   ) WITH ORDINALITY AS pages(page_elem, page_ord)
-  WHERE (i.user_id IS NOT NULL OR i.owner_anon_id IS NOT NULL)
 ),
 resolved_pages AS (
   SELECT DISTINCT ON (f.id, p.figma_page_id)
@@ -193,23 +189,19 @@ DO UPDATE SET
 
 WITH legacy_frames AS (
   SELECT
-    i.user_id,
-    i.owner_anon_id,
-    CASE
-      WHEN COALESCE(NULLIF(BTRIM(i.figma_file_key), ''), '') <> '' THEN BTRIM(i.figma_file_key)
-      WHEN COALESCE(NULLIF(BTRIM(i.project_id), ''), '') <> '' AND BTRIM(i.project_id) <> '0:0' THEN BTRIM(i.project_id)
-      ELSE 'unknown'
-    END AS logical_file_id,
-    COALESCE(NULLIF(BTRIM(page_elem->>'id'), ''), NULLIF(BTRIM(page_elem->>'pageId'), ''), CONCAT('legacy-page-', i.id, '-', page_ord::TEXT)) AS figma_page_id,
-    COALESCE(NULLIF(BTRIM(frame_elem->>'id'), ''), CONCAT('legacy-frame-', i.id, '-', page_ord::TEXT, '-', frame_ord::TEXT)) AS figma_frame_id,
+    l.user_id,
+    l.owner_anon_id,
+    l.logical_file_id,
+    COALESCE(NULLIF(BTRIM(page_elem->>'id'), ''), NULLIF(BTRIM(page_elem->>'pageId'), ''), CONCAT('legacy-page-', l.legacy_index_id, '-', page_ord::TEXT)) AS figma_page_id,
+    COALESCE(NULLIF(BTRIM(frame_elem->>'id'), ''), CONCAT('legacy-frame-', l.legacy_index_id, '-', page_ord::TEXT, '-', frame_ord::TEXT)) AS figma_frame_id,
     COALESCE(NULLIF(BTRIM(frame_elem->>'name'), ''), 'Untitled Frame') AS frame_name,
     frame_elem,
     frame_ord - 1 AS sort_order
-  FROM index_files i
+  FROM tmp_legacy_rows l
   CROSS JOIN LATERAL jsonb_array_elements(
     CASE
-      WHEN jsonb_typeof(i.index_data) = 'array' THEN i.index_data
-      WHEN jsonb_typeof(i.index_data) = 'object' AND jsonb_typeof(i.index_data->'pages') = 'array' THEN i.index_data->'pages'
+      WHEN jsonb_typeof(l.index_data) = 'array' THEN l.index_data
+      WHEN jsonb_typeof(l.index_data) = 'object' AND jsonb_typeof(l.index_data->'pages') = 'array' THEN l.index_data->'pages'
       ELSE '[]'::jsonb
     END
   ) WITH ORDINALITY AS pages(page_elem, page_ord)
@@ -219,7 +211,6 @@ WITH legacy_frames AS (
       ELSE '[]'::jsonb
     END
   ) WITH ORDINALITY AS frames(frame_elem, frame_ord)
-  WHERE (i.user_id IS NOT NULL OR i.owner_anon_id IS NOT NULL)
 ),
 resolved_frames AS (
   SELECT DISTINCT ON (p.id, lf.figma_frame_id)

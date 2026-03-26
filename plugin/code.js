@@ -545,6 +545,29 @@ function frameSignaturesEqual(a, b) {
   return true;
 }
 
+function getAdaptiveCoverExportScales(frame) {
+  var maxDim = Math.max(frame && frame.width ? frame.width : 0, frame && frame.height ? frame.height : 0);
+  var area = (frame && frame.width ? frame.width : 0) * (frame && frame.height ? frame.height : 0);
+  var scales = [0.75, 0.5, 0.35, 0.25, 0.18];
+  if (maxDim >= 12000 || area >= 90000000) return [0.18, 0.14, 0.1];
+  if (maxDim >= 9000 || area >= 45000000) return [0.25, 0.18, 0.14];
+  if (maxDim >= 7000 || area >= 24000000) return [0.35, 0.25, 0.18];
+  if (maxDim >= 5000 || area >= 12000000) return [0.5, 0.35, 0.25, 0.18];
+  return scales;
+}
+
+async function exportFrameAsDataUrl(frame) {
+  var scales = getAdaptiveCoverExportScales(frame);
+  for (var i = 0; i < scales.length; i++) {
+    try {
+      var bytes = await frame.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: scales[i] } });
+      var dataUrl = 'data:image/png;base64,' + figma.base64Encode(bytes);
+      if (dataUrl && dataUrl.length <= 4 * 1024 * 1024) return dataUrl;
+    } catch (e) {}
+  }
+  return null;
+}
+
 // Same cover as plugin UI (Cover page/frame or current page, largest frame). Used for get-file-thumbnail and create-index cover.
 async function getCoverImageDataUrl() {
   await figma.loadAllPagesAsync();
@@ -565,26 +588,27 @@ async function getCoverImageDataUrl() {
   }
   if (framesToTry.length === 0) return null;
   framesToTry = framesToTry.filter(function (f) { return (f.width || 0) >= 10 && (f.height || 0) >= 10 && f.visible !== false; });
+  var explicitCover = !!coverPage;
   var frameToExport = framesToTry.find(function (f) { return (f.name || '').trim().toLowerCase() === 'cover'; });
+  if (frameToExport) explicitCover = true;
   if (!frameToExport) {
     framesToTry.sort(function (a, b) { return (b.width * b.height) - (a.width * a.height); });
     frameToExport = framesToTry[0];
   }
   try { if (typeof frameToExport.loadAsync === 'function') await frameToExport.loadAsync(); } catch (e) {}
-  // Export at 0.75 scale to keep payload size reasonable (cover + frames in first chunk)
-  var bytes = await frameToExport.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.75 } });
-  var dataUrl = 'data:image/png;base64,' + figma.base64Encode(bytes);
-  if (dataUrl.length < 2000) {
+  var dataUrl = await exportFrameAsDataUrl(frameToExport);
+  if (dataUrl) return dataUrl;
+  if (!explicitCover) {
     try {
       var pageNode = coverPage || figma.currentPage;
       if (pageNode) {
-        var pageBytes = await pageNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.5 } });
+        var pageBytes = await pageNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.25 } });
         var pageDataUrl = 'data:image/png;base64,' + figma.base64Encode(pageBytes);
-        if (pageDataUrl.length > dataUrl.length) dataUrl = pageDataUrl;
+        if (pageDataUrl && pageDataUrl.length <= 4 * 1024 * 1024) return pageDataUrl;
       }
     } catch (e) {}
   }
-  return dataUrl;
+  return null;
 }
 
 // --- Bootstrap: load storage and send to UI ---
@@ -1195,7 +1219,7 @@ figma.ui.onmessage = async (msg) => {
 
       var mergePages = dirtyPageIds.length < selectedIds.length;
 
-      // Same cover as plugin UI (only for first chunk). Fallback: first frame image if no Cover page/frame.
+      // Same cover as plugin UI (only for first chunk). Fallback to first frame only if no explicit cover can be exported.
       var coverImageDataUrl = null;
       try {
         coverImageDataUrl = await getCoverImageDataUrl();
@@ -1204,12 +1228,6 @@ figma.ui.onmessage = async (msg) => {
       }
       if (!coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
         coverImageDataUrl = allPageFrames[0].frameItem.image;
-      }
-      if (coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
-        var firstFrameImage = allPageFrames[0].frameItem.image;
-        if (firstFrameImage && coverImageDataUrl.length > firstFrameImage.length * 1.5) {
-          coverImageDataUrl = firstFrameImage;
-        }
       }
       if (coverImageDataUrl && coverImageDataUrl.length > 4 * 1024 * 1024) {
         console.warn('[code.js] cover image too large, omitting cover upload for this run');

@@ -364,6 +364,30 @@ function groupLobbyThumbnailResults(displayFiles: any[], thumbnailResults: any[]
   return Array.from(grouped.values());
 }
 
+function buildLobbyThumbnailsFromMetadata(displayFiles: any[]) {
+  return displayFiles.map((file: any) => {
+    const chunks = file._chunks ? file._chunks : [file];
+    var thumbnail = file.file_thumbnail_url || null;
+    var frameCount = 0;
+
+    chunks.forEach((chunk: any) => {
+      if (!thumbnail && chunk?.file_thumbnail_url) thumbnail = chunk.file_thumbnail_url;
+      if (typeof chunk?.frame_count === 'number') frameCount += chunk.frame_count;
+    });
+
+    if (frameCount === 0 && typeof file?.frame_count === 'number') {
+      frameCount = file.frame_count;
+    }
+
+    return {
+      id: file.id,
+      fileName: file.file_name,
+      thumbnail: thumbnail || undefined,
+      frameCount: frameCount || 0
+    };
+  });
+}
+
 function parseIndexPayload(raw: any): any {
   if (typeof raw !== 'string') return raw;
   try {
@@ -641,38 +665,7 @@ export default function Home() {
             setFrames([]);
             // Load file thumbnails and frames for guest (same as user path)
             const filesToLoad = displayFiles.flatMap((f: any) => (f._chunks ? f._chunks : [f]));
-            const loadFileThumbnailGuest = async (file: any) => {
-              try {
-                const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
-                if (!indexResponse.ok) return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
-                const indexData = await indexResponse.json();
-                if (!indexData.success || !indexData.data) return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
-                const preview = extractLobbyPreviewFromIndexPayload(indexData.data.index_data, indexData.data.coverImageUrl || null);
-                return {
-                  success: true,
-                  fileId: file.id,
-                  thumbnail: preview.thumbnail,
-                  frameCount: preview.totalFrameCount,
-                  fileName: file.file_name
-                };
-              } catch {
-                return { success: false, fileId: file.id, thumbnail: null, frameCount: 0, fileName: file.file_name };
-              }
-            };
-            const loadIndexFramesGuest = async (file: any) => {
-              try {
-                const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
-                if (!indexResponse.ok) return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
-                const indexData = await indexResponse.json();
-                if (!indexData.success || !indexData.data?.index_data) return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
-                const fileFrames = extractFramesFromIndexPayload(indexData.data.index_data, { id: file.id, fileName: file.file_name });
-                return { success: true, fileId: file.id, frames: fileFrames, fileName: file.file_name };
-              } catch {
-                return { success: false, fileId: file.id, frames: [], fileName: file.file_name };
-              }
-            };
-            const thumbResults = await Promise.all(filesToLoad.map((f: any) => loadFileThumbnailGuest(f)));
-            const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = groupLobbyThumbnailResults(displayFiles, thumbResults);
+            const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = buildLobbyThumbnailsFromMetadata(displayFiles);
             setFileThumbnails(allFileThumbnails);
             setAllFramesData([]);
             setLoading(false);
@@ -711,49 +704,6 @@ export default function Home() {
         if (data.success && Array.isArray(data.data)) {
           const displayFiles = groupLogicalFiles(data.data);
           setIndexFiles(displayFiles);
-          
-          // Load file thumbnails from all indices (for Gallery Lobby)
-          galleryDebug('Loading file thumbnails from', data.data.length, 'indices in parallel...');
-          const loadFileThumbnail = async (file: any) => {
-            try {
-              // Always trust the cover that belongs to the index itself first.
-              // saved_connections.file_thumbnail_url is only a last-resort fallback.
-              const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
-              
-              if (!indexResponse.ok) {
-                console.error(`❌ Failed to load index ${file.id}: HTTP ${indexResponse.status}`);
-                return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
-              }
-              
-              const indexData = await indexResponse.json();
-              
-              if (!indexData.success) {
-                console.error(`❌ Index ${file.id} returned error:`, indexData.error);
-                return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
-              }
-              
-              // Validate index_data structure
-              if (!indexData.data || !indexData.data.index_data) {
-                console.error(`❌ Index ${file.id} has invalid structure: missing index_data`);
-                return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
-              }
-              
-              // First check if coverImageUrl is at the data level (from get-index-data.ts)
-              const preview = extractLobbyPreviewFromIndexPayload(indexData.data.index_data, indexData.data.coverImageUrl || null);
-              let thumbnail: string | null = preview.thumbnail;
-              const totalFrameCount = preview.totalFrameCount;
-
-              if (!thumbnail && file.file_thumbnail_url) {
-                thumbnail = file.file_thumbnail_url;
-              }
-
-              galleryDebug(`📸 [loadFileThumbnail] Final thumbnail ready for file ${file.id}`);
-              return { success: true, fileId: file.id, thumbnail: thumbnail || null, frameCount: totalFrameCount, fileName: file.file_name };
-            } catch (error) {
-              console.error(`❌ Error loading index ${file.id} (${file.file_name}):`, error);
-              return { success: false, fileId: file.id, thumbnail: null, frameCount: 0 };
-            }
-          };
           
           // Load all frames from all indices in parallel (much faster!)
           galleryDebug('Loading all frames from', data.data.length, 'indices in parallel...');
@@ -806,12 +756,15 @@ export default function Home() {
 
           // Load file thumbnails or frames based on view mode
           let loadPromises: Promise<any>[];
-          let thumbnailResults: any[] = [];
           let frameResults: any[] = [];
           
           if (viewMode === 'lobby') {
-            // Load lobby thumbnails first so the page becomes interactive quickly.
-            thumbnailResults = await Promise.all(filesToLoad.map((file: any) => loadFileThumbnail(file)));
+            const allFileThumbnails = buildLobbyThumbnailsFromMetadata(displayFiles);
+            setFileThumbnails(allFileThumbnails);
+            setAllFramesData([]);
+            setLoading(false);
+            setLobbyFramesLoading(false);
+            return;
           } else if (viewMode === 'allFrames') {
             // Load all frames from all files
             loadPromises = filesToLoad.map((file: any) => loadIndexFrames(file));
@@ -823,17 +776,8 @@ export default function Home() {
           }
           
           // Collect file thumbnails/frames and corrupted indices
-          const allFileThumbnails: Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }> = [];
           const allFrames: any[] = [];
           const corruptedIndices: string[] = [];
-          
-          // Process thumbnail results (lobby mode only)
-          if (viewMode === 'lobby') {
-            allFileThumbnails.push(...groupLobbyThumbnailResults(displayFiles, thumbnailResults));
-            thumbnailResults.forEach(result => {
-              if (!result.success) corruptedIndices.push(result.fileId);
-            });
-          }
           
           // Process frame results – deduplicate by frame.id to avoid same frame from multiple indices
           const seenFrameIds = new Set<string>();
@@ -927,16 +871,7 @@ export default function Home() {
           }
           
           // Debug logging and set state
-          if (viewMode === 'lobby') {
-            if (allFileThumbnails.length > 0) {
-              console.log(`✅ Successfully loaded ${allFileThumbnails.length} file thumbnails from ${data.data.length - corruptedIndices.length} valid indices`);
-            }
-            setFileThumbnails(allFileThumbnails);
-            setAllFramesData([]);
-            setLoading(false);
-            setLobbyFramesLoading(false);
-            return;
-          } else if (viewMode === 'allFrames') {
+          if (viewMode === 'allFrames') {
             if (allFrames.length > 0) {
               console.log(`✅ Successfully loaded ${allFrames.length} total frames from ${data.data.length - corruptedIndices.length} valid indices`);
             }
