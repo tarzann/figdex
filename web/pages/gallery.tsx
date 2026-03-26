@@ -602,24 +602,7 @@ export default function Home() {
             setFileThumbnails(allFileThumbnails);
             setAllFramesData([]);
             setLoading(false);
-            setLobbyFramesLoading(true);
-            Promise.all(filesToLoad.map((f: any) => loadIndexFramesGuest(f))).then((frameRes) => {
-              const allFrames: any[] = [];
-              frameRes.forEach((r: any) => {
-                if (!r.success || !r.frames?.length) return;
-                const logical = physicalToLogicalGuest.get(r.fileId) || { id: r.fileId, fileName: r.fileName || `Index ${r.fileId}` };
-                allFrames.push(...r.frames.map((frame: any) => ({
-                  ...frame,
-                  _fileId: logical.id,
-                  _fileName: logical.fileName
-                })));
-              });
-              setAllFramesData(allFrames);
-            }).catch(() => {
-              // Keep lobby usable even if background frame loading fails.
-            }).finally(() => {
-              setLobbyFramesLoading(false);
-            });
+            setLobbyFramesLoading(false);
             return;
           }
         }
@@ -1007,36 +990,7 @@ export default function Home() {
             setFileThumbnails(allFileThumbnails);
             setAllFramesData([]);
             setLoading(false);
-            setLobbyFramesLoading(true);
-            Promise.all(filesToLoad.map((file: any) => loadIndexFrames(file)))
-              .then((deferredFrameResults) => {
-                const deferredFrames: any[] = [];
-                const seenDeferredFrameIds = new Set<string>();
-                deferredFrameResults.forEach((result) => {
-                  if (!result.success || !result.frames?.length) return;
-                  const logical = physicalToLogical.get(result.fileId) || { id: result.fileId, fileName: result.fileName };
-                  const framesWithFileId = result.frames
-                    .filter((frame: any) => {
-                      const fid = frame.url || frame.id || `${result.fileId}::${frame.name || 'u'}::${frame.id || ''}`;
-                      if (seenDeferredFrameIds.has(fid)) return false;
-                      seenDeferredFrameIds.add(fid);
-                      return true;
-                    })
-                    .map((frame: any) => ({
-                      ...frame,
-                      _fileId: logical.id,
-                      _fileName: logical.fileName
-                    }));
-                  deferredFrames.push(...framesWithFileId);
-                });
-                setAllFramesData(deferredFrames);
-              })
-              .catch((backgroundError) => {
-                console.warn('Background lobby frame loading failed:', backgroundError);
-              })
-              .finally(() => {
-                setLobbyFramesLoading(false);
-              });
+            setLobbyFramesLoading(false);
             return;
           } else if (viewMode === 'allFrames') {
             if (allFrames.length > 0) {

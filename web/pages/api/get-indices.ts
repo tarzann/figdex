@@ -32,21 +32,35 @@ export default async function handler(
 
     // Guest path: fetch by owner_anon_id (user_id IS NULL)
     if (anonId) {
-      const selectNoSize = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
-      const { data: guestIndices, error: guestErr } = await svc
+      const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
+      const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
+      let guestQuery = svc
         .from('index_files')
-        .select(selectNoSize)
+        .select(selectWithMeta)
         .is('user_id', null)
         .eq('owner_anon_id', anonId)
         .order('uploaded_at', { ascending: false })
         .limit(500);
+      let { data: guestIndices, error: guestErr }: { data: any[] | null; error: any } = await guestQuery;
+      if (guestErr && /(file_size|frame_count)/i.test(guestErr.message || '')) {
+        const fallbackGuest = await svc
+          .from('index_files')
+          .select(selectBasic)
+          .is('user_id', null)
+          .eq('owner_anon_id', anonId)
+          .order('uploaded_at', { ascending: false })
+          .limit(500);
+        guestIndices = fallbackGuest.data;
+        guestErr = fallbackGuest.error;
+      }
       if (guestErr) {
         return res.status(500).json({ success: false, error: guestErr.message });
       }
       const indices = (guestIndices || []).map((idx: any) => ({
         ...idx,
         source: 'plugin',
-        frame_count: null,
+        frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
+        file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
       }));
       return res.status(200).json({
         success: true,
@@ -109,14 +123,26 @@ export default async function handler(
     // The gallery fetches full data per index via /api/get-index-data when needed.
     console.log(`🔍 Fetching indices for user_id: ${user.id} (type: ${typeof user.id})`);
     // Start without file_size since it may not exist in the table
-    const selectNoSize = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
+    const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
+    const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
 
-    let { data: indicesByUserId, error: indicesByUserIdError } = await svc
+    let { data: indicesByUserId, error: indicesByUserIdError }: { data: any[] | null; error: any } = await svc
       .from('index_files')
-      .select(selectNoSize)
+      .select(selectWithMeta)
       .eq('user_id', user.id)
       .order('uploaded_at', { ascending: false })
       .limit(500); // Increased to support chunked uploads
+
+    if (indicesByUserIdError && /(file_size|frame_count)/i.test(indicesByUserIdError.message || '')) {
+      const fallbackIndices = await svc
+        .from('index_files')
+        .select(selectBasic)
+        .eq('user_id', user.id)
+        .order('uploaded_at', { ascending: false })
+        .limit(500);
+      indicesByUserId = fallbackIndices.data;
+      indicesByUserIdError = fallbackIndices.error;
+    }
 
     if (indicesByUserIdError) {
       console.error('❌ Error fetching indices by user_id:', {
@@ -209,22 +235,6 @@ export default async function handler(
       file_size: idx.file_size || 'not set',
       frame_count: idx.frame_count
     })));
-    } else {
-      // Check if there are any indices in the database at all
-      const { data: allIndices, error: allIndicesError } = await svc
-        .from('index_files')
-        .select('id, user_id, file_name, uploaded_at')
-        .order('uploaded_at', { ascending: false })
-        .limit(5);
-      
-      if (!allIndicesError && allIndices && allIndices.length > 0) {
-        console.log(`⚠️ Found ${allIndices.length} indices in database but none for this user. Sample indices:`, allIndices.map((idx: any) => ({
-          id: idx.id,
-          user_id: idx.user_id,
-          user_id_type: typeof idx.user_id,
-          file_name: idx.file_name
-        })));
-      }
     }
 
     // If no indices found, check if there are indices with null user_id that might belong to this user
