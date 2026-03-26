@@ -21,6 +21,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  const extractFrames = (data: any): any[] => {
+    if (Array.isArray(data)) {
+      return data.flatMap((item: any) => Array.isArray(item?.frames) ? item.frames : []);
+    }
+    if (data?.data?.pages) {
+      return data.data.pages.flatMap((p: any) => Array.isArray(p?.frames) ? p.frames : []);
+    }
+    if (data?.data?.frames) {
+      return Array.isArray(data.data.frames) ? data.data.frames : [];
+    }
+    if (data?.pages) {
+      return data.pages.flatMap((p: any) => Array.isArray(p?.frames) ? p.frames : []);
+    }
+    return [];
+  };
+
   try {
     // Find user by slug and ensure public enabled
     const { data: user, error: userErr } = await supabase
@@ -42,20 +58,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Flatten frames from all indices
     const frames: any[] = [];
-    const pages: any[] = [];
+    const indexSummaries = (indices || []).map((idx: any) => ({
+      id: idx.id,
+      file_name: idx.file_name,
+      uploaded_at: idx.uploaded_at
+    }));
 
     (indices || []).forEach((idx) => {
-      const data = idx.index_data;
-      let extractedFrames: any[] = [];
-      if (Array.isArray(data)) {
-        extractedFrames = data.flatMap((item: any) => Array.isArray(item.frames) ? item.frames : []);
-      } else if (data?.data?.pages) {
-        extractedFrames = data.data.pages.flatMap((p: any) => Array.isArray(p.frames) ? p.frames : []);
-      } else if (data?.data?.frames) {
-        extractedFrames = Array.isArray(data.data.frames) ? data.data.frames : [];
-      } else if (data?.pages) {
-        extractedFrames = data.pages.flatMap((p: any) => Array.isArray(p.frames) ? p.frames : []);
-      }
+      const extractedFrames = extractFrames(idx.index_data);
 
       // Tag with origin file and uploaded time
       extractedFrames.forEach((f) => {
@@ -71,11 +81,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       success: true,
       user: { full_name: user.full_name, email: user.email, slug: user.public_slug },
       frames,
-      indices: indices || []
+      indices: indexSummaries
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' });
   }
 }
-
 
