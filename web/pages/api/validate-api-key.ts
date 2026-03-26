@@ -43,20 +43,33 @@ export default async function handler(
       return res.status(400).json({ error: 'API key is required' });
     }
 
-    // Validate API key format
-    if (!apiKey.startsWith('figdex_') || apiKey.length < 20) {
-      return res.status(400).json({ error: 'Invalid API key format' });
+    let user: any = null;
+    let userError: any = null;
+
+    if (apiKey.startsWith('figdex_') && apiKey.length >= 20) {
+      const result = await supabase
+        .from('users')
+        .select('id, email, full_name, plan, is_admin, is_active')
+        .eq('api_key', apiKey)
+        .single();
+      user = result.data;
+      userError = result.error;
+    } else {
+      const { data: authData, error: authError } = await supabase.auth.getUser(apiKey);
+      if (authError || !authData?.user?.id) {
+        return res.status(401).json({ error: 'Invalid account token' });
+      }
+      const result = await supabase
+        .from('users')
+        .select('id, email, full_name, plan, is_admin, is_active')
+        .eq('id', authData.user.id)
+        .single();
+      user = result.data;
+      userError = result.error;
     }
 
-    // Find user by API key
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, email, full_name, plan, is_admin, is_active')
-      .eq('api_key', apiKey)
-      .single();
-
     if (userError || !user) {
-      return res.status(401).json({ error: 'Invalid API key' });
+      return res.status(401).json({ error: 'Invalid account token' });
     }
 
     // Check if user is active

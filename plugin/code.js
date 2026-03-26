@@ -3,9 +3,11 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.23';
+const PLUGIN_VERSION = '1.32.24';
 const DEBUG_LOGS = false;
-figma.showUI(__html__, { width: 386, height: 800 });
+const FALLBACK_UI_HTML = '<!DOCTYPE html><html><body style="margin:0;padding:16px;font:12px Inter,Arial,sans-serif;color:#222;background:#fff;"><div style="font-weight:600;margin-bottom:8px;">FigDex</div><div>The plugin UI could not be loaded. Please reload the plugin.</div></body></html>';
+const PLUGIN_UI_HTML = (typeof __html__ === 'string' && __html__.trim()) ? __html__ : FALLBACK_UI_HTML;
+figma.showUI(PLUGIN_UI_HTML, { width: 386, height: 800 });
 
 function debugLog() {
   if (!DEBUG_LOGS) return;
