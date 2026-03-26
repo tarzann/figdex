@@ -3,9 +3,14 @@
  * Single postMessage pipeline: UI -> code -> UI.
  * No legacy handlers. mockConnectedIdentity for dev only (no UI flag).
  */
-const PLUGIN_VERSION = '1.32.15';
+const PLUGIN_VERSION = '1.32.16';
+const DEBUG_LOGS = false;
 figma.showUI(__html__, { width: 386, height: 800 });
-console.log('FigDex v' + PLUGIN_VERSION);
+
+function debugLog() {
+  if (!DEBUG_LOGS) return;
+  try { console.log.apply(console, arguments); } catch (e) {}
+}
 
 try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {}
 setTimeout(() => { try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {} }, 500);
@@ -692,7 +697,7 @@ async function loadUserLimitsToUI(webToken) {
       });
       var bd = br.ok ? await br.json() : {};
       if (bd.claimed > 0) {
-        try { console.log('[FigDex] bootstrap claim_by_anon_id claimed=' + bd.claimed); } catch (_) {}
+        debugLog('[FigDex] bootstrap claim_by_anon_id claimed=' + bd.claimed);
       }
     } catch (_) {}
   }
@@ -857,13 +862,13 @@ figma.ui.onmessage = async (msg) => {
     await setStored(STORAGE_KEYS.CONNECT_NONCE_DATA, { nonce: connectNonce, createdAt: Date.now() });
     let connectUrl = 'https://www.figdex.com/plugin-connect?nonce=' + encodeURIComponent(connectNonce) + '&docId=' + encodeURIComponent(docId) + '&mode=upgrade&anonId=' + encodeURIComponent(anonId);
     figma.ui.postMessage({ type: 'OPEN_FIGDEX_WEB', url: connectUrl });
-    try { console.log('[FigDex] poll_start upgrade'); } catch (e) {}
+    debugLog('[FigDex] poll_start upgrade');
     const POLL_INTERVAL_MS = 2000;
     const POLL_MAX_MS = 120000;
     const pollStart = Date.now();
     const doPoll = async () => {
       if (Date.now() - pollStart >= POLL_MAX_MS) {
-        try { console.log('[FigDex] poll_timeout'); } catch (e) {}
+        debugLog('[FigDex] poll_timeout');
         figma.ui.postMessage({ type: 'CONNECT_TIMEOUT' });
         return;
       }
@@ -871,7 +876,7 @@ figma.ui.onmessage = async (msg) => {
         const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
         const data = res.ok ? await res.json() : {};
         if (data.ready === true && data.token && (data.user || data.userId)) {
-          try { console.log('[FigDex] poll_success'); } catch (e) {}
+          debugLog('[FigDex] poll_success');
           const connectedUser = typeof data.user === 'object' && data.user ? data.user : (typeof data.userId === 'object' ? data.userId : { id: data.userId });
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
           await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
@@ -883,15 +888,15 @@ figma.ui.onmessage = async (msg) => {
             });
             var claimData = claimRes.ok ? await claimRes.json() : {};
             if (claimData.claimed > 0) {
-              try { console.log('[FigDex] claim_by_anon_id claimed=' + claimData.claimed); } catch (_) {}
+              debugLog('[FigDex] claim_by_anon_id claimed=' + claimData.claimed);
             }
           } catch (_) {}
           figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
           await loadUserLimitsToUI(data.token);
           return;
         }
-        try { console.log('[FigDex] poll_tick'); } catch (e) {}
-      } catch (e) { try { console.log('[FigDex] poll_tick'); } catch (e2) {} }
+        debugLog('[FigDex] poll_tick');
+      } catch (e) { debugLog('[FigDex] poll_tick'); }
       setTimeout(doPoll, POLL_INTERVAL_MS);
     };
     setTimeout(doPoll, POLL_INTERVAL_MS);
@@ -916,13 +921,13 @@ figma.ui.onmessage = async (msg) => {
       } catch (e) { /* ignore; open without loginToken */ }
     }
     figma.ui.postMessage({ type: 'OPEN_FIGDEX_WEB', url: connectUrl });
-    try { console.log('[FigDex] poll_start'); } catch (e) {}
+    debugLog('[FigDex] poll_start');
     const POLL_INTERVAL_MS = 2000;
     const POLL_MAX_MS = 120000;
     const pollStart = Date.now();
     const doPoll = async () => {
       if (Date.now() - pollStart >= POLL_MAX_MS) {
-        try { console.log('[FigDex] poll_timeout'); } catch (e) {}
+        debugLog('[FigDex] poll_timeout');
         figma.ui.postMessage({ type: 'CONNECT_TIMEOUT' });
         return;
       }
@@ -930,7 +935,7 @@ figma.ui.onmessage = async (msg) => {
         const res = await fetch('https://www.figdex.com/api/plugin-connect/status?nonce=' + encodeURIComponent(connectNonce));
         const data = res.ok ? await res.json() : {};
         if (data.ready === true && data.token && (data.user || data.userId)) {
-          try { console.log('[FigDex] poll_success'); } catch (e) {}
+          debugLog('[FigDex] poll_success');
           const connectedUser = typeof data.user === 'object' && data.user ? data.user : (typeof data.userId === 'object' ? data.userId : { id: data.userId });
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
           await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
@@ -938,8 +943,8 @@ figma.ui.onmessage = async (msg) => {
           await loadUserLimitsToUI(data.token);
           return;
         }
-        try { console.log('[FigDex] poll_tick'); } catch (e) {}
-      } catch (e) { try { console.log('[FigDex] poll_tick'); } catch (e2) {} }
+        debugLog('[FigDex] poll_tick');
+      } catch (e) { debugLog('[FigDex] poll_tick'); }
       setTimeout(doPoll, POLL_INTERVAL_MS);
     };
     setTimeout(doPoll, POLL_INTERVAL_MS);

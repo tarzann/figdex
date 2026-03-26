@@ -5,7 +5,9 @@
 (function(global) {
   'use strict';
   var PREFIX = '[FigDex]';
+  var DEBUG_LOGS = false;
   function log(event, data) {
+    if (!DEBUG_LOGS) return;
     if (data !== undefined && data !== null) {
       try { console.log(PREFIX, event, data); } catch (e) {}
     } else {

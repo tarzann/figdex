@@ -20,7 +20,7 @@
   var _telemetry = null;
   var _onOpenWeb = null;
   var _onRunIndexing = null;
-  var _trace = true;
+  var _trace = false;
 
   function getState() { return _state; }
   function getPendingAction() { return _pendingAction; }
@@ -29,12 +29,10 @@
   function _traceTransition(prev, event, next) {
     if (_trace && _telemetry) {
       _telemetry.log('state_change', { prevState: prev, event: event, nextState: next });
-      try { console.log('[FigDex] controller:', prev, '->', event, '->', next); } catch (e) {}
     }
   }
 
   function dispatch(event, payload) {
-    try { console.log('[FigDex] controller.dispatch', event, payload || {}); } catch (e) {}
     var prev = _state;
     payload = payload || {};
 
@@ -54,7 +52,6 @@
         } else if (event === 'UI_CREATE_INDEX_CLICKED') {
           var sel = payload.selectedPages || [];
           var connected = _identityStore && _identityStore.isConnected();
-          try { console.log('[FigDex] gating: isConnected', connected); } catch (e) {}
           if (!connected) {
             _pendingAction = { type: 'START_INDEXING', selectedPages: sel };
             _state = STATES.NEEDS_CONNECT;
@@ -78,7 +75,6 @@
         } else if (event === 'UI_CREATE_INDEX_CLICKED') {
           var selectedPages0 = payload.selectedPages || [];
           var isConnected0 = _identityStore && _identityStore.isConnected();
-          try { console.log('[FigDex] gating: isConnected', isConnected0); } catch (e) {}
           if (!isConnected0) {
             _pendingAction = { type: 'START_INDEXING', selectedPages: selectedPages0 };
             _state = STATES.NEEDS_CONNECT;
@@ -99,7 +95,6 @@
         } else if (event === 'UI_CREATE_INDEX_CLICKED') {
           var selectedPages = payload.selectedPages || [];
           var isConnected = _identityStore && _identityStore.isConnected();
-          try { console.log('[FigDex] gating: isConnected', isConnected); } catch (e) {}
           if (!isConnected) {
             _pendingAction = { type: 'START_INDEXING', selectedPages: selectedPages };
             _state = STATES.NEEDS_CONNECT;

@@ -83,48 +83,6 @@
         color: #1976d2;
       }
 
-      .header-connect-control {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-right: 8px;
-      }
-      .header-connect-status {
-        font-size: 0.65em;
-        color: #666;
-        padding: 2px 6px;
-        border-radius: 6px;
-        background: #f0f0f0;
-      }
-      .header-connect-status.connected {
-        color: #2e7d32;
-        background: #e8f5e9;
-        cursor: pointer;
-        transition: background 0.2s, box-shadow 0.2s;
-      }
-      .header-connect-status.connected:hover {
-        background: #c8e6c9;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-      }
-      .header-connect-btn {
-        font-size: 0.65em;
-        padding: 4px 8px;
-        border: 1px solid #9e9e9e;
-        border-radius: 6px;
-        background: #fff;
-        color: #555;
-        cursor: pointer;
-        transition: background 0.2s, color 0.2s;
-      }
-      .header-connect-btn:hover:not(:disabled) {
-        background: #f5f5f5;
-        color: #333;
-      }
-      .header-connect-btn:disabled {
-        cursor: default;
-        opacity: 0.7;
-      }
-
       #markNoIndexBtn, #markAllIndexBtn {
         margin-top: 8px;
         padding: 4px 0;
@@ -712,9 +670,8 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.15</div>
+        <div class="version" id="pluginVersionLabel">v1.32.16</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
-        <span id="buttonClickLog" style="display: none; font-size: 0.6em; color: #1976d2; margin-left: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Last button click"></span>
       </div>
       <div style="flex: 1;"></div>
       <button id="settingsIconBtn" class="settings-icon-btn" title="Settings">⚙️</button>
@@ -747,32 +704,6 @@
       <div id="currentFileStatusLine" style="font-size:0.72em; color:#666;">Paste the Figma file link to load pages and keep this file synced correctly.</div>
     </div>
     
-    <script>
-      // Animate header benefit text
-      (function() {
-        const benefits = [
-          'Connect to FigDex',
-          '☁️ Cloud backup',
-          '👥 Team sharing', 
-          '🔍 Smart search',
-          '🏷️ Custom tags',
-          '📱 Any device'
-        ];
-        let currentBenefit = 0;
-        const textEl = document.getElementById('headerBenefitText');
-        if (textEl) {
-          setInterval(() => {
-            textEl.style.opacity = '0';
-            setTimeout(() => {
-              currentBenefit = (currentBenefit + 1) % benefits.length;
-              textEl.textContent = benefits[currentBenefit];
-              textEl.style.opacity = '1';
-            }, 300);
-          }, 3000);
-        }
-      })();
-    </script>
-
     <!-- Marketing Banner for Disconnected Users (Large version - hidden by default, using header version instead) -->
     <div id="marketingBannerTop" style="display: none; margin: 8px 16px 0 16px; padding: 12px 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; box-shadow: 0 3px 12px rgba(102, 126, 234, 0.3); color: white; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; width: 354px; max-width: 354px; min-width: 354px; box-sizing: border-box; overflow: hidden; position: relative;" onclick="openWebLogin()">
       <!-- Decorative circles -->
@@ -1116,7 +1047,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.15</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.16</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1181,7 +1112,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span id="menuVersionText">v1.32.15</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.16</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1441,6 +1372,7 @@
     (function(global) {
       'use strict';
       var PREFIX = '[FigDex]';
+      var DEBUG_LOGS = false;
       var _sessionId = '';
       var _anonId = '';
       var _pluginVersion = '0.0.0';
@@ -1452,6 +1384,7 @@
       }
       _sessionId = randomId();
       function log(event, data) {
+        if (!DEBUG_LOGS) return;
         if (data !== undefined && data !== null) {
           try { console.log(PREFIX, event, data); } catch (e) {}
         } else {
@@ -1573,18 +1506,16 @@
       var _onOpenWeb = null;
       var _onRunIndexing = null;
       var _onStateChange = null;
-      var _trace = true;
+      var _trace = false;
       function getState() { return _state; }
       function getPendingAction() { return _pendingAction; }
       function clearPendingAction() { _pendingAction = null; }
       function _traceTransition(prev, event, next) {
         if (_trace && _telemetry) {
           _telemetry.log('state_change', { prevState: prev, event: event, nextState: next });
-          try { console.log('[FigDex] controller:', prev, '->', event, '->', next); } catch (e) {}
         }
       }
       function dispatch(event, payload) {
-        try { console.log('[FigDex] dispatch_enter', event, payload); } catch (e) {}
         try {
         var prev = _state;
         payload = payload || {};
@@ -1640,14 +1571,12 @@
           case STATES.NEEDS_CONNECT:
             if (event === 'EVT_CONNECT_SUCCESS') {
               var pa = _pendingAction;
-              try { console.log('[FigDex] CONNECT_SUCCESS', { state: _state, hasPending: !!pa }); } catch (e) {}
               if (_telemetry) _telemetry.log('connect_success');
               if (_onTrack) _onTrack('connect_success');
               _pendingAction = null;
               _state = STATES.READY_TO_INDEX;
               _traceTransition(prev, event, _state);
               if (pa && pa.type === 'START_INDEXING' && pa.selectedPages && _onRunIndexing) {
-                try { console.log('[FigDex] resume pendingAction', { pages: (pa.selectedPages && pa.selectedPages.length) || 0 }); } catch (e) {}
                 _state = STATES.INDEXING;
                 if (_telemetry) _telemetry.log('indexing_start');
                 if (_onTrack) _onTrack('indexing_start');
@@ -1718,7 +1647,6 @@
     })(window);
     </script>
     <script>
-      console.log('[FigDex] UI_BOOT_SIGNATURE', { ts: Date.now() });
       var state = { documentId: null, fileKey: '', pages: [], selectedPages: [], identity: null, identityPending: null, accountLimits: null, pluginVersion: '', step1Expanded: false, resultUrl: '', lastIndexError: '', lastIndexErrorCode: null, lastIndexUpgradeUrl: null, connectTimedOut: false, authExpiredMessage: '', hasEverCompletedIndex: false, indexingStatusText: 'Updating index…', indexingStartedAt: 0, indexingLastProgressAt: 0 };
       try { window.__figdexUIState = state; } catch (e) {}
       var controller = null;
@@ -1737,20 +1665,7 @@
           meta: {}
         };
       }
-      function logButtonClick(buttonId, label) {
-        var msg = '[FigDex] Button: ' + (label || buttonId || 'button');
-        console.log(msg);
-        var el = document.getElementById('buttonClickLog');
-        if (el) {
-          el.textContent = 'Click: ' + (label || buttonId || '');
-          el.style.display = 'inline';
-          el.style.color = '#1976d2';
-          clearTimeout(el._hideTimer);
-          el._hideTimer = setTimeout(function() { el.style.display = 'none'; }, 2000);
-        }
-      }
       function onClearDataClick() {
-        logButtonClick('debugClearStorageBtn', 'Clear data');
         var statusEl = document.getElementById('fileKeyInlineStatus');
         if (statusEl) { statusEl.textContent = 'Cleared'; statusEl.style.color = '#43a047'; }
         forceClearUI();
@@ -1774,7 +1689,6 @@
           if (status) { status.textContent = 'Invalid Figma link! Paste a link like figma.com/design/... or figma.com/file/...'; status.style.color = '#d32f2f'; }
           return;
         }
-        console.log('[FigDex] file key saved:', fileKey);
         sendIntent('set-file-key', { fileKey: fileKey });
         state.fileKey = fileKey;
         if (telemetry && telemetry.track) telemetry.track('filekey_saved', buildTelemetryContext());
@@ -1941,7 +1855,6 @@
         var ctrl = window.__figdexFlowController || controller;
         var ctrlState = (typeof stateOrControllerState === 'string') ? stateOrControllerState : (ctrl ? ctrl.getState() : '');
         var advanceBtn = document.getElementById('advanceBtn');
-        var headerBanner = document.getElementById('headerMarketingBanner');
         var listDiv = document.getElementById('pagesList');
         var pagesLockedHint = document.getElementById('pagesLockedHint');
         var step1Summary = document.getElementById('fileKeyStep1Summary');
@@ -2044,25 +1957,6 @@
             advanceBtn.textContent = primaryAction.button;
           }
         }
-        if (headerBanner) headerBanner.style.display = model.identity && model.identity.exists ? 'none' : 'flex';
-        var headerConnectStatus = document.getElementById('headerConnectStatus');
-        var headerConnectBtn = document.getElementById('headerConnectBtn');
-        if (headerConnectStatus) {
-          var connected = model.identity && model.identity.exists;
-          headerConnectStatus.textContent = connected ? 'Connected' : 'Not connected';
-          headerConnectStatus.classList.toggle('connected', !!connected);
-          headerConnectStatus.title = connected ? 'Open FigDex Web' : 'Not connected';
-        }
-        if (headerConnectBtn) {
-          var connectedBtn = model.identity && model.identity.exists;
-          headerConnectBtn.style.display = connectedBtn ? 'none' : 'inline-block';
-          if (!connectedBtn) headerConnectBtn.disabled = false;
-        }
-        var headerSaveSyncLink = document.getElementById('headerSaveSyncLink');
-        if (headerSaveSyncLink) {
-          var connectedLink = model.identity && model.identity.exists;
-          headerSaveSyncLink.style.display = connectedLink ? 'none' : 'inline';
-        }
         var selectedCountEl = document.getElementById('selectedPagesCount');
         if (selectedCountEl) selectedCountEl.textContent = (model.selectedPages || []).length + ' pages selected';
         var indexOutcomeHintEl = document.getElementById('indexOutcomeHint');
@@ -2162,19 +2056,15 @@
       }
 
       function __figdexOnCreateIndexClick() {
-        try { console.log('[FigDex] Index click handler called'); } catch (e) {}
         var btn = document.getElementById('advanceBtn');
         if (btn && btn.disabled) {
-          try { console.log('[FigDex] Index click: early return (button disabled)'); } catch (e) {}
           return;
         }
         var ctrl = window.__figdexFlowController || controller;
         if (ctrl && ctrl.getState && ctrl.getState() === 'INDEXING') {
-          try { console.log('[FigDex] Index click: early return (INDEXING)'); } catch (e) {}
           return;
         }
         if (!ctrl) {
-          try { console.log('[FigDex] Index click: early return (no controller)'); } catch (e) {}
           return;
         }
         if (!controller && ctrl === window.__figdexFlowController) {
@@ -2185,7 +2075,7 @@
             ctrl.init({
               identityStore: idStore,
               telemetry: tel,
-              trace: true,
+              trace: false,
               onOpenWeb: function() { window.open('https://www.figdex.com/login?from=figma-plugin', 'figdex_web', 'width=1200,height=800'); },
               onRunIndexing: function(selectedPages) {
                 sendIntent('start-advanced', { selectedPages: selectedPages || state.selectedPages });
@@ -2196,7 +2086,6 @@
           }
         }
         if (telemetry && telemetry.track) telemetry.track('index_click', buildTelemetryContext());
-        try { console.log('[FigDex] Index click: dispatching UI_CREATE_INDEX_CLICKED', state.selectedPages || []); } catch (e) {}
         ctrl.dispatch('UI_CREATE_INDEX_CLICKED', { selectedPages: state.selectedPages || [] });
         var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
         render(state, model);
@@ -2300,23 +2189,7 @@
       function init() {
         if (window.__figdex_ui_inited) return;
         window.__figdex_ui_inited = true;
-        try { console.log('[FigDex] UI_INIT_ONCE'); } catch (e) {}
         showPagesSkeleton();
-        var debugClearBtn = document.getElementById('debugClearStorageBtn');
-        if (debugClearBtn) { }
-        document.body.addEventListener('click', function(e) {
-          var btn = e.target && (e.target.closest ? e.target.closest('button') : (e.target.tagName === 'BUTTON' ? e.target : null));
-          if (!btn) return;
-          var id = btn.id || '';
-          if (id === 'debugClearStorageBtn') return;
-          var tag = btn.getAttribute('data-tag');
-          var q = btn.getAttribute('data-q');
-          var label = (btn.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 25);
-          if (tag) label = 'Tag: ' + tag;
-          else if (q != null && q !== '') label = 'Quality: ' + q;
-          else if (!label) label = id || 'button';
-          logButtonClick(id, label);
-        }, true);
         var saveBtn = document.getElementById('fileKeyInlineSaveBtn');
         var saveInput = document.getElementById('fileKeyInlineInput');
         if (saveBtn && saveInput) {
@@ -2407,30 +2280,6 @@
         if (openGalleryFromPagesBtn) {
           openGalleryFromPagesBtn.addEventListener('click', function() {
             window.open(buildGalleryUrl(), 'figdex_web', 'width=1200,height=800');
-          });
-        }
-        var headerConnectBtn = document.getElementById('headerConnectBtn');
-        if (headerConnectBtn) {
-          headerConnectBtn.addEventListener('click', function() {
-            if (headerConnectBtn.disabled) return;
-            headerConnectBtn.disabled = true;
-            sendIntent('UI_OPEN_FIGDEX_WEB');
-          });
-        }
-        var headerConnectStatus = document.getElementById('headerConnectStatus');
-        if (headerConnectStatus) {
-          headerConnectStatus.addEventListener('click', function() {
-            var id = identityStore ? identityStore.getIdentity() : null;
-            if (id && id.exists) {
-              window.open(buildGalleryUrl(), 'figdex_web', 'width=1200,height=800');
-            }
-          });
-        }
-        var headerSaveSyncLink = document.getElementById('headerSaveSyncLink');
-        if (headerSaveSyncLink) {
-          headerSaveSyncLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            sendIntent('UI_OPEN_FIGDEX_WEB_UPGRADE');
           });
         }
         var accountPrimaryBtn = document.getElementById('accountPrimaryBtn');
@@ -2530,11 +2379,10 @@
         telemetry = tel;
         identityStore = idStore;
         controller = ctrl;
-        telemetry.log('init');
         controller.init({
           identityStore: identityStore,
           telemetry: telemetry,
-          trace: true,
+          trace: false,
           onTrack: function(ev) { if (telemetry && telemetry.track) telemetry.track(ev, buildTelemetryContext()); },
           onOpenWeb: function() { window.open('https://www.figdex.com/login?from=figma-plugin', 'figdex_web', 'width=1200,height=800'); },
           onRunIndexing: function(selectedPages) {
@@ -2550,12 +2398,6 @@
         controller.dispatch('identity_loaded');
         var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore.getIdentity() };
         render(state, model);
-        var banner = document.getElementById('headerMarketingBanner');
-        if (banner) {
-          banner.addEventListener('click', function() {
-            controller.dispatch('intent_open_web');
-          });
-        }
         sendIntent('refresh-pages');
         sendIntent('get-has-ever-indexed');
       }
@@ -2578,7 +2420,6 @@
           state.documentId = newDocId;
         }
         if (msg.type === 'UI_RENDER' && msg.payload) {
-          try { console.log('[FigDex] UI_RENDER', msg.payload.state); } catch (e) {}
           render(msg.payload.state, msg.payload.model);
           return;
         }
@@ -2596,6 +2437,12 @@
           state.pluginVersion = msg.version || '';
           var telGlobal = window.__figdexTelemetry;
           if (telGlobal && telGlobal.setPluginVersion) telGlobal.setPluginVersion(msg.version || '');
+          var pluginVersionLabel = document.getElementById('pluginVersionLabel');
+          if (pluginVersionLabel) pluginVersionLabel.textContent = msg.version || '';
+          var versionNodes = document.querySelectorAll('.menuVersionText');
+          for (var vi = 0; vi < versionNodes.length; vi++) {
+            versionNodes[vi].textContent = msg.version || '';
+          }
         }
         if (msg.type === 'TELEMETRY_ANON_ID' && msg.anonId) {
           var telG = window.__figdexTelemetry;
@@ -2667,8 +2514,6 @@
             sendIntent('get-file-thumbnail', { fileKey: state.fileKey });
           }
           render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: idStore ? idStore.getIdentity() : null });
-          var hcbLoaded = document.getElementById('headerConnectBtn');
-          if (hcbLoaded) hcbLoaded.disabled = false;
         }
         if (msg.type === 'WEB_ACCOUNT_LIMITS_LOADED') {
           state.accountLimits = msg.limits && typeof msg.limits === 'object' ? msg.limits : null;
@@ -2682,8 +2527,6 @@
           if (controller) controller.dispatch('connect_timeout');
           var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
           render(state, model);
-          var hcb = document.getElementById('headerConnectBtn');
-          if (hcb) hcb.disabled = false;
         }
         if (msg.type === 'AUTH_EXPIRED') {
           if (identityStore) identityStore.clearIdentity();
@@ -2705,7 +2548,6 @@
           }
           var countEl = document.getElementById('selectedPagesCount');
           if (countEl) countEl.textContent = state.selectedPages.length + ' pages selected';
-          console.log('[FigDex] pages loaded:', state.pages.length, 'selected:', state.selectedPages.length);
           var statusEl = document.getElementById('fileKeyInlineStatus');
           if (statusEl) { statusEl.textContent = state.pages.length > 0 ? 'Loaded ' + state.pages.length + ' pages' : 'Saved!'; statusEl.style.color = '#43a047'; }
           if (state.fileKey) sendIntent('get-file-thumbnail', { fileKey: state.fileKey });
