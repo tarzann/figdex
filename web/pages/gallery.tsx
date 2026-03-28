@@ -958,7 +958,6 @@ export default function Home() {
     pageSizeValue: number
   ) => {
     try {
-      setLoading(true);
       setFilePageLoading(true);
       setFrames([]);
       setFileModeSearchActive(false);
@@ -990,7 +989,6 @@ export default function Home() {
       setFrames([]);
     } finally {
       setFilePageLoading(false);
-      setLoading(false);
     }
   };
 
@@ -2189,7 +2187,7 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalOpen, frameThumbsForModal.length]);
 
-  if (loading) {
+  if (loading && !(viewMode === 'file' && selectedFile)) {
     return (
       <Box>
         {/* Header skeleton */}
