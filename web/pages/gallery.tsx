@@ -548,6 +548,7 @@ export default function Home() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [frames, setFrames] = useState<Frame[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState('');
   const [currentIndexFile, setCurrentIndexFile] = useState('');
   const [indexFiles, setIndexFiles] = useState<any[]>([]);
@@ -947,6 +948,12 @@ export default function Home() {
     document.addEventListener('visibilitychange', handler);
     return () => document.removeEventListener('visibilitychange', handler);
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setHasLoadedOnce(true);
+    }
+  }, [loading]);
 
   const getFileIndexIds = (fileInfo: { id: string; _chunks?: any[] }) =>
     fileInfo._chunks?.length ? fileInfo._chunks.map((chunk: any) => chunk.id) : [fileInfo.id];
@@ -2187,7 +2194,7 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalOpen, frameThumbsForModal.length]);
 
-  if (loading && !(viewMode === 'file' && selectedFile)) {
+  if (loading && !hasLoadedOnce) {
     return (
       <Box>
         {/* Header skeleton */}
