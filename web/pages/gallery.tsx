@@ -572,6 +572,7 @@ export default function Home() {
   const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number }>>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
+  const [filePageLoading, setFilePageLoading] = useState(false);
   const [fileModeSearchActive, setFileModeSearchActive] = useState(false);
   const [fileThumbnails, setFileThumbnails] = useState<Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }>>([]);
   const [allFramesData, setAllFramesData] = useState<any[]>([]); // Store all frames for allFrames view
@@ -957,6 +958,8 @@ export default function Home() {
   ) => {
     try {
       setLoading(true);
+      setFilePageLoading(true);
+      setFrames([]);
       setFileModeSearchActive(false);
       const offset = Math.max(0, (pageNumber - 1) * pageSizeValue);
       const response = await fetch(
@@ -985,6 +988,7 @@ export default function Home() {
       setError(err.message || 'An error occurred while loading page frames');
       setFrames([]);
     } finally {
+      setFilePageLoading(false);
       setLoading(false);
     }
   };
@@ -1028,6 +1032,7 @@ export default function Home() {
       setFilePages([]);
       setSelectedFilePageId(null);
       setSelectedFilePageFrameCount(0);
+      setFilePageLoading(false);
       setFileModeSearchActive(false);
 
       const response = await fetch(`/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}`);
@@ -2944,6 +2949,14 @@ export default function Home() {
                 {fileModeSearchActive ? `Search results across ${filePages.length} pages` : `${filePages.length} pages`}
               </Typography>
             </Box>
+            {filePageLoading && !fileModeSearchActive && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">
+                  Loading page...
+                </Typography>
+              </Box>
+            )}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {filePages.map((pageInfo) => {
                 const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
@@ -2953,6 +2966,7 @@ export default function Home() {
                     label={`${pageInfo.name} (${pageInfo.frameCount})`}
                     color={isSelected ? 'primary' : 'default'}
                     variant={isSelected ? 'filled' : 'outlined'}
+                    disabled={filePageLoading}
                     onClick={() => {
                       setSearch('');
                       setPage(1);
