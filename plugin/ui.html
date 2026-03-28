@@ -174,20 +174,15 @@
         padding: 3px 8px;
       }
 
-      .pages-actions {
-        display: flex;
-        gap: 6px;
-        align-items: center;
-      }
-
       .pages-action-btn {
         font-size: 0.68em;
         color: #1976d2;
         background: #fff;
         border: 1px solid #d5deea;
         border-radius: 999px;
-        padding: 4px 10px;
+        padding: 3px 9px;
         cursor: pointer;
+        line-height: 1.1;
         transition: background 0.2s, border-color 0.2s, color 0.2s;
       }
 
@@ -489,8 +484,12 @@
         flex: 0 0 auto;
       }
       #pagesHeader > div:nth-child(2) {
-        flex: 1 1 0;
+        flex: 1 1 auto;
         min-width: 0;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 6px;
       }
       #pagesHeader > div:last-child {
         flex: 0 0 auto;
@@ -778,7 +777,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.33</div>
+        <div class="version" id="pluginVersionLabel">v1.32.34</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -921,10 +920,6 @@
         <div id="selectedPagesCount" style="font-size: 0.7em; color: #444; margin-bottom: 6px;">0 pages selected</div>
         <div class="pages-toolbar">
           <div id="pagesSummaryChips" class="pages-summary"></div>
-          <div class="pages-actions">
-            <button type="button" id="selectAllPagesBtn" class="pages-action-btn">Select all</button>
-            <button type="button" id="clearPagesBtn" class="pages-action-btn">Clear</button>
-          </div>
         </div>
         
         <!-- File Thumbnail -->
@@ -941,7 +936,10 @@
               <input type="checkbox" id="toggleSelectCheckbox" style="accent-color: #2897FB; width: 12px; height: 12px; margin-right: 8px; margin-left: 8px; vertical-align: middle;">
               <span style="font-size: 0.7em; display: inline-block; width: 270px;">Page Name</span>
             </div>
-            <div></div>
+            <div>
+              <button type="button" id="selectAllPagesBtn" class="pages-action-btn">Select all</button>
+              <button type="button" id="clearPagesBtn" class="pages-action-btn">Clear</button>
+            </div>
             <div>
               <button id="refreshPagesBtn" title="Refresh pages">&#x21bb;</button>
             </div>
@@ -1177,7 +1175,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.33</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.34</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1242,7 +1240,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.33</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.34</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
