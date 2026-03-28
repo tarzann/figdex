@@ -778,7 +778,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.30</div>
+        <div class="version" id="pluginVersionLabel">v1.32.31</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -828,7 +828,6 @@
       </div>
       <div id="currentFileStatusLine" class="section-copy">Paste the Figma file link to load pages and keep this file synced correctly.</div>
       <div id="fileKeyRequiredMsg" style="display:block; font-size:0.75em; color:#333;">
-        <div id="fileKeyStep1Summary" style="display: none; font-size:0.8em; font-weight:600; color:#43a047;">Linked to this file ✓ <span id="fileKeyStep1PagesCount">0</span> pages loaded</div>
         <div id="fileKeyStep1Full">
           <div id="fileKeyInlineSection" style="display:block;">
             <input id="fileKeyInlineInput" type="text" style="display:block; width:100%; max-width:100%; box-sizing:border-box; margin-bottom:6px; padding:6px 8px; font-size:0.75em; border:1px solid #e0e0e0; border-radius:4px; background:#fafbfc; color:#222;" placeholder="Paste Figma file link" />
@@ -1178,7 +1177,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.30</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.31</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1243,7 +1242,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.30</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.31</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1993,16 +1992,12 @@
         var advanceBtn = document.getElementById('advanceBtn');
         var listDiv = document.getElementById('pagesList');
         var pagesLockedHint = document.getElementById('pagesLockedHint');
-        var step1Summary = document.getElementById('fileKeyStep1Summary');
         var step1Full = document.getElementById('fileKeyStep1Full');
         var step1ChangeLink = document.getElementById('fileKeyStep1ChangeLink');
-        var step1PagesCount = document.getElementById('fileKeyStep1PagesCount');
         var pagesCard = document.getElementById('pagesCard');
         var step1Collapsed = model.fileKey && model.pages && model.pages.length > 0 && !uiState.step1Expanded;
-        if (step1Summary) step1Summary.style.display = step1Collapsed ? 'block' : 'none';
         if (step1Full) step1Full.style.display = step1Collapsed ? 'none' : 'block';
         if (step1ChangeLink) step1ChangeLink.style.display = step1Collapsed ? 'block' : 'none';
-        if (step1PagesCount && model.pages) step1PagesCount.textContent = model.pages.length;
         if (pagesCard) {
           if (step1Collapsed) { pagesCard.classList.remove('step-disabled'); pagesCard.classList.add('step-complete'); }
           else { pagesCard.classList.add('step-disabled'); pagesCard.classList.remove('step-complete'); }
