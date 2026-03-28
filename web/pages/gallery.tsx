@@ -573,6 +573,7 @@ export default function Home() {
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
   const [filePageLoading, setFilePageLoading] = useState(false);
+  const [fileSearchLoading, setFileSearchLoading] = useState(false);
   const [fileModeSearchActive, setFileModeSearchActive] = useState(false);
   const [fileThumbnails, setFileThumbnails] = useState<Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }>>([]);
   const [allFramesData, setAllFramesData] = useState<any[]>([]); // Store all frames for allFrames view
@@ -995,13 +996,12 @@ export default function Home() {
 
   const searchSelectedFile = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }, query: string) => {
     try {
-      setLoading(true);
-      setFrames([]);
+      setError('');
+      setFileSearchLoading(true);
       const response = await fetch(`/api/file-index-view?mode=search&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&q=${encodeURIComponent(query)}`);
       const data = await parseJsonResponse(response, 'Failed to search file');
       if (!data?.success) {
         setError(data?.error || 'Failed to search file');
-        setFrames([]);
         return;
       }
       const searchFrames = Array.isArray(data?.data?.frames) ? data.data.frames.map((frame: any) => ({
@@ -1014,9 +1014,8 @@ export default function Home() {
     } catch (err: any) {
       console.error('Error searching file frames:', err);
       setError(err.message || 'An error occurred while searching file frames');
-      setFrames([]);
     } finally {
-      setLoading(false);
+      setFileSearchLoading(false);
     }
   };
 
@@ -2925,6 +2924,9 @@ export default function Home() {
                     startAdornment: (
                       <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
                     ),
+                    endAdornment: viewMode === 'file' && fileSearchLoading ? (
+                      <CircularProgress size={16} />
+                    ) : undefined,
                   }}
                 />
               </Box>
@@ -2954,6 +2956,14 @@ export default function Home() {
                 <CircularProgress size={16} />
                 <Typography variant="caption" color="text.secondary">
                   Loading page...
+                </Typography>
+              </Box>
+            )}
+            {fileSearchLoading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">
+                  Searching file...
                 </Typography>
               </Box>
             )}
