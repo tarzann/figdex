@@ -341,19 +341,34 @@ function getAdaptiveExportScale(width, height) {
   var longestSide = Math.max(w, h);
   var pixelArea = w * h;
   var scale = 0.75;
-  if (longestSide > 20000 || pixelArea > 40000000) scale = Math.min(scale, 0.12);
-  else if (longestSide > 14000 || pixelArea > 24000000) scale = Math.min(scale, 0.18);
-  else if (longestSide > 10000 || pixelArea > 16000000) scale = Math.min(scale, 0.24);
-  else if (longestSide > 7000 || pixelArea > 9000000) scale = Math.min(scale, 0.33);
-  else if (longestSide > 4500 || pixelArea > 5000000) scale = Math.min(scale, 0.5);
-  return Math.max(0.08, scale);
+  if (longestSide > 22000 || pixelArea > 120000000) scale = Math.min(scale, 0.18);
+  else if (longestSide > 18000 || pixelArea > 80000000) scale = Math.min(scale, 0.25);
+  else if (longestSide > 14000 || pixelArea > 50000000) scale = Math.min(scale, 0.33);
+  else if (longestSide > 10000 || pixelArea > 25000000) scale = Math.min(scale, 0.5);
+  else if (longestSide > 7000 || pixelArea > 12000000) scale = Math.min(scale, 0.67);
+  return Math.max(0.18, scale);
+}
+
+function getAdaptiveThumbnailScale(width, height) {
+  var w = Math.max(1, Number(width) || 1);
+  var h = Math.max(1, Number(height) || 1);
+  var longestSide = Math.max(w, h);
+  var pixelArea = w * h;
+  var scale = 0.75;
+  if (longestSide > 24000 || pixelArea > 120000000) scale = Math.min(scale, 0.18);
+  else if (longestSide > 18000 || pixelArea > 80000000) scale = Math.min(scale, 0.22);
+  else if (longestSide > 14000 || pixelArea > 50000000) scale = Math.min(scale, 0.28);
+  else if (longestSide > 10000 || pixelArea > 25000000) scale = Math.min(scale, 0.38);
+  else if (longestSide > 7000 || pixelArea > 12000000) scale = Math.min(scale, 0.5);
+  else if (longestSide > 5000 || pixelArea > 6000000) scale = Math.min(scale, 0.62);
+  return Math.max(0.18, scale);
 }
 
 async function exportFrameImageData(frame, width, height) {
-  var attempts = [getAdaptiveExportScale(width, height), 0.5, 0.33, 0.24, 0.18, 0.12, 0.08];
+  var attempts = [getAdaptiveExportScale(width, height), 0.67, 0.5, 0.4, 0.33, 0.25, 0.18];
   var tried = {};
   for (var i = 0; i < attempts.length; i++) {
-    var scale = Math.max(0.08, Math.min(1, attempts[i]));
+    var scale = Math.max(0.18, Math.min(1, attempts[i]));
     var key = scale.toFixed(3);
     if (tried[key]) continue;
     tried[key] = true;
@@ -368,11 +383,11 @@ async function exportFrameImageData(frame, width, height) {
 }
 
 async function exportFrameThumbnailData(frame, width, height) {
-  var baseScale = getAdaptiveExportScale(width, height);
-  var attempts = [Math.min(baseScale, 0.18), 0.14, 0.1, 0.08, 0.06];
+  var baseScale = getAdaptiveThumbnailScale(width, height);
+  var attempts = [baseScale, 0.62, 0.5, 0.38, 0.28, 0.22, 0.18];
   var tried = {};
   for (var i = 0; i < attempts.length; i++) {
-    var scale = Math.max(0.04, Math.min(0.18, attempts[i]));
+    var scale = Math.max(0.18, Math.min(0.75, attempts[i]));
     var key = scale.toFixed(3);
     if (tried[key]) continue;
     tried[key] = true;
