@@ -1728,6 +1728,8 @@
       function getPrimaryActionConfig(model, ctrlState) {
         var pages = Array.isArray(model.pages) ? model.pages : [];
         var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
+        var connected = !!(model.identity && model.identity.exists);
+        var isGuestPlan = !connected || getConnectedPlanLabel(model.identity) === 'Guest';
         var hasPages = pages.length > 0;
         var hasSelection = selectedPages.length > 0;
         var currentFileIndexed = !!(model.fileKey && currentFileHasIndexedPages(pages));
@@ -1737,7 +1739,7 @@
         if (ctrlState === 'DONE') return { title: 'Index completed', detail: 'Open FigDex Web to review the updated gallery.', button: 'View in FigDex Web', disabled: false, action: 'open-web' };
         if (ctrlState === 'ERROR') {
           if (isAuthError) return { title: 'Reconnect required', detail: state.lastIndexError || 'Your session expired. Reconnect to continue indexing.', button: 'Reconnect', disabled: false, action: 'connect' };
-          if (isLimitError) return { title: 'Plan limit reached', detail: state.lastIndexError || 'This action exceeds your current plan limits.', button: 'Upgrade on Web', disabled: false, action: 'upgrade' };
+          if (isLimitError) return { title: 'Plan limit reached', detail: state.lastIndexError || 'This action exceeds your current plan limits.', button: isGuestPlan ? 'Create free account' : 'Upgrade to Pro', disabled: false, action: 'upgrade' };
           return { title: 'Action blocked', detail: state.lastIndexError || 'Please review the message below and try again.', button: 'Try again', disabled: false, action: 'retry' };
         }
         if (!model.fileKey) return { title: 'Link this file first', detail: 'Paste the Figma file link before indexing.', button: 'Link file to continue', disabled: true, action: 'none' };
@@ -1833,7 +1835,7 @@
             accountPrimaryBtn.dataset.action = 'open-web';
           } else if (state.lastIndexUpgradeUrl || state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED') {
             accountPrimaryBtn.style.display = '';
-            accountPrimaryBtn.textContent = 'Create free account';
+            accountPrimaryBtn.textContent = getConnectedPlanLabel(model.identity) === 'Guest' ? 'Create free account' : 'Upgrade to Pro';
             accountPrimaryBtn.dataset.action = 'upgrade';
           } else if (state.authExpiredMessage) {
             accountPrimaryBtn.style.display = '';
@@ -1938,9 +1940,10 @@
           var errMsg = state.lastIndexError || 'Something went wrong.';
           var isAuthError = state.authExpiredMessage === 'Session expired' || (errMsg && (errMsg.indexOf('Session expired') >= 0 || errMsg.indexOf('Connect your FigDex') >= 0));
           var isGuestLimit = state.lastIndexErrorCode === 'GUEST_FILE_LIMIT' || state.lastIndexErrorCode === 'GUEST_FRAME_LIMIT' || state.lastIndexErrorCode === 'FILE_LIMIT_REACHED' || state.lastIndexErrorCode === 'FRAME_LIMIT_REACHED';
+          var isGuestPlan = getConnectedPlanLabel(model.identity) === 'Guest';
           if (indexErrorText) indexErrorText.textContent = errMsg;
           if (indexErrorActionBtn) {
-            indexErrorActionBtn.textContent = isAuthError ? 'Continue on Web' : (isGuestLimit ? 'Create free account' : 'Try again');
+            indexErrorActionBtn.textContent = isAuthError ? 'Continue on Web' : (isGuestLimit ? (isGuestPlan ? 'Create free account' : 'Upgrade to Pro') : 'Try again');
             indexErrorActionBtn._figdexErrorIsAuth = isAuthError;
             indexErrorActionBtn._figdexUpgradeUrl = state.lastIndexUpgradeUrl || null;
           }
