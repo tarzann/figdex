@@ -38,6 +38,23 @@ const normalizeFrame = (frame: any, page: any) => ({
   customTags: Array.isArray(frame?.customTags) ? frame.customTags : [],
 });
 
+const buildClientFrame = (payload: any, overrides: Record<string, any>) => ({
+  id: overrides.id || payload?.id || '',
+  name: overrides.name || payload?.name || 'Untitled Frame',
+  url: payload?.url || '',
+  pageId: overrides.pageId || payload?.pageId || '',
+  pageName: overrides.pageName || payload?.pageName || '',
+  width: typeof payload?.width === 'number' ? payload.width : null,
+  height: typeof payload?.height === 'number' ? payload.height : null,
+  texts: overrides.texts ?? payload?.texts ?? null,
+  textContent: overrides.textContent ?? payload?.textContent ?? null,
+  searchTokens: Array.isArray(payload?.searchTokens) ? payload.searchTokens : [],
+  frameTags: Array.isArray(overrides.frameTags) ? overrides.frameTags : (Array.isArray(payload?.frameTags) ? payload.frameTags : []),
+  customTags: Array.isArray(overrides.customTags) ? overrides.customTags : (Array.isArray(payload?.customTags) ? payload.customTags : []),
+  image: overrides.image ?? payload?.image ?? null,
+  thumb_url: overrides.thumb_url ?? payload?.thumb_url ?? null,
+});
+
 const filterLegacyFrames = (pages: any[], query: string) => {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -199,8 +216,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         (normalizedFrames || []).forEach((frame: any) => {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
-          frames.push({
-            ...payload,
+          frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
             pageId,
@@ -211,7 +227,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
             image: typeof frame.image_url === 'string' && frame.image_url ? frame.image_url : payload.image,
             thumb_url: typeof frame.thumb_url === 'string' && frame.thumb_url ? frame.thumb_url : payload.thumb_url,
-          });
+          }));
         });
       }
 
@@ -264,8 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         (searchFrames || []).forEach((frame: any) => {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
-          frames.push({
-            ...payload,
+          frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
             pageName: seenPageNames.get(String(frame.page_id)) || payload.pageName || '',
@@ -275,7 +290,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
             image: typeof frame.image_url === 'string' && frame.image_url ? frame.image_url : payload.image,
             thumb_url: typeof frame.thumb_url === 'string' && frame.thumb_url ? frame.thumb_url : payload.thumb_url,
-          });
+          }));
         });
       }
 
