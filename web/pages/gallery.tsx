@@ -2968,8 +2968,8 @@ export default function Home() {
         )}
         {/* Categorized Tags Display (per frame) */}
         <Grid container spacing={4}>
-        {/* Main gallery: lobby uses Grid (avoids Masonry overlap with 1-2 covers), file/allFrames use Masonry */}
-        {viewMode === 'lobby' ? (
+        {/* Main gallery: lobby/file use Grid, allFrames uses Masonry */}
+        {viewMode !== 'allFrames' ? (
           <Box
             sx={{
               display: 'grid',
@@ -2996,54 +2996,22 @@ export default function Home() {
                   onClick={() => loadFileFrames(file)}
                 >
                   {thumb.image ? (
-                    <>
-                      {console.log(`📸 [Render] Rendering cover image for ${file.fileName}: ${thumb.image.substring(0, 60)}...`)}
-                      <img
-                        src={thumb.image}
-                        alt={thumb.label}
-                        loading="lazy"
-                        style={{
-                          borderRadius: 10,
-                          border: '1.5px solid #e0e0e0',
-                          background: '#fff',
-                          marginBottom: 6,
-                          width: '100%',
-                          height: '156px', // 5:3 aspect ratio (width * 3/5): 260 * 3/5 = 156
-                          display: 'block',
-                          objectFit: 'cover'
-                        }}
-                        onLoad={() => {
-                          console.log(`✅ [Cover Image] Successfully loaded: ${thumb.image?.substring(0, 60)}...`);
-                        }}
+                    <img
+                      src={thumb.image}
+                      alt={thumb.label}
+                      loading="lazy"
+                      style={{
+                        borderRadius: 10,
+                        border: '1.5px solid #e0e0e0',
+                        background: '#fff',
+                        marginBottom: 6,
+                        width: '100%',
+                        height: '156px', // 5:3 aspect ratio (width * 3/5): 260 * 3/5 = 156
+                        display: 'block',
+                        objectFit: 'cover'
+                      }}
                       onError={(e) => {
                         const imgElement = e.target as HTMLImageElement;
-                        const fullUrl = imgElement.src;
-                        console.error(`❌ [Cover Image] Failed to load: ${fullUrl}`);
-                        console.error(`❌ [Cover Image] Error details:`, {
-                          type: e.type,
-                          target: imgElement,
-                          naturalWidth: imgElement.naturalWidth,
-                          naturalHeight: imgElement.naturalHeight,
-                          complete: imgElement.complete,
-                          src: imgElement.src
-                        });
-                        
-                        // Try to fetch the URL directly to see what error we get
-                        fetch(fullUrl, { method: 'HEAD', mode: 'no-cors' })
-                          .then(() => console.log(`✅ [Cover Image] URL is accessible (no-cors mode)`))
-                          .catch((fetchError) => {
-                            console.error(`❌ [Cover Image] Fetch error:`, fetchError);
-                            // Try to check if it's a CORS issue
-                            fetch(fullUrl, { method: 'HEAD' })
-                              .then((response) => {
-                                console.log(`✅ [Cover Image] URL is accessible, status: ${response.status}`);
-                              })
-                              .catch((corsError) => {
-                                console.error(`❌ [Cover Image] CORS error:`, corsError);
-                              });
-                          });
-                        
-                        // If image fails to load, show placeholder
                         imgElement.style.display = 'none';
                         const box = imgElement.parentElement;
                         if (box && !box.querySelector('.placeholder')) {
@@ -3054,8 +3022,7 @@ export default function Home() {
                           box.appendChild(placeholder);
                         }
                       }}
-                      />
-                    </>
+                    />
                   ) : (
                     <Box
                       sx={{
@@ -3130,13 +3097,6 @@ export default function Home() {
                     if (frameIndex !== -1) {
                       handleOpenModal(frameIndex);
                     }
-                  }}
-                  onLoad={(e) => {
-                    const isThumbnail = thumb.thumbnail && thumb.thumbnail !== thumb.image;
-                    if (isThumbnail) {
-                      console.log(`✅ Thumbnail loaded for: ${thumb.label}`);
-                    }
-                    // Keep thumbnails only - full image loads only on click (in modal)
                   }}
                 />
                 <IconButton
