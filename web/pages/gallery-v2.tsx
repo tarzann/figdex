@@ -48,7 +48,6 @@ import {
   ListSubheader,
   Pagination,
   PaginationItem,
-  Skeleton,
 } from '@mui/material';
 import { useRouter } from 'next/router';
 import Masonry from 'react-masonry-css';
@@ -1281,74 +1280,6 @@ export default function GalleryV2() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalOpen, visibleThumbs.length]);
-
-  if (loading) {
-    return (
-      <Box>
-        {/* Header skeleton */}
-        <Box sx={{ 
-          position: 'sticky', 
-          top: 0, 
-          zIndex: 100, 
-          bgcolor: '#f8f9fa', 
-          borderBottom: '1px solid #e0e0e0',
-          py: 2,
-          px: 4
-        }}>
-          <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Box display="flex" alignItems="center" gap={2}>
-              <Skeleton variant="circular" width={40} height={40} />
-              <Skeleton variant="text" width={120} height={40} />
-            </Box>
-            <Skeleton variant="circular" width={40} height={40} />
-          </Box>
-          <Skeleton variant="rectangular" width="100%" height={56} sx={{ borderRadius: 1 }} />
-        </Box>
-
-        {/* Sidebar skeleton */}
-        <Box sx={{ 
-          position: 'fixed', 
-          left: 0, 
-          top: 120, 
-          width: 300, 
-          height: 'calc(100vh - 120px)', 
-          bgcolor: '#fff',
-          borderRight: '1px solid #e0e0e0',
-          p: 2,
-          overflowY: 'auto'
-        }}>
-          <Skeleton variant="rectangular" width="100%" height={200} sx={{ borderRadius: 2, mb: 2 }} />
-          <Skeleton variant="rectangular" width="100%" height={80} sx={{ borderRadius: 1, mb: 2 }} />
-          <Skeleton variant="rectangular" width="100%" height={120} sx={{ borderRadius: 2, mb: 2 }} />
-        </Box>
-
-        {/* Main content skeleton */}
-        <Box sx={{ 
-          ml: '300px', 
-          px: 4, 
-          py: 4 
-        }}>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[180, 220, 200, 250, 190, 230, 210, 240, 200].map((height, idx) => (
-              <Box key={idx} sx={{ width: 260, mb: 2 }}>
-                <Skeleton 
-                  variant="rectangular" 
-                  width={260} 
-                  height={height} 
-                  sx={{ borderRadius: 2, mb: 1 }} 
-                />
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-start', mt: 1 }}>
-                  <Skeleton variant="rectangular" width={60} height={20} sx={{ borderRadius: '16px' }} />
-                  <Skeleton variant="rectangular" width={80} height={20} sx={{ borderRadius: '16px' }} />
-                  <Skeleton variant="rectangular" width={50} height={20} sx={{ borderRadius: '16px' }} />
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      </Box>
-    );
-  }
 
   if (error) {
     const showFixButton = isAdmin && error === 'No indices found for user';
