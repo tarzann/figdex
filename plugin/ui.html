@@ -192,69 +192,6 @@
         vertical-align: middle;
         margin-left: 6px;
       }
-      /* Skeleton Loading Styles */
-      .skeleton-item {
-        display: flex;
-        align-items: center;
-        padding: 8px 12px;
-        border-bottom: 1px solid #f0f0f0;
-        animation: skeleton-breathe 2s ease-in-out infinite;
-      }
-      
-      .skeleton-checkbox {
-        width: 16px;
-        height: 16px;
-        border-radius: 3px;
-        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        margin-right: 12px;
-        flex-shrink: 0;
-      }
-      
-      .skeleton-text {
-        height: 14px;
-        border-radius: 4px;
-        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        flex: 1;
-        margin-right: 8px;
-      }
-      
-      .skeleton-text.short {
-        width: 60%;
-      }
-      
-      .skeleton-text.medium {
-        width: 80%;
-      }
-      
-      .skeleton-icon {
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        flex-shrink: 0;
-      }
-      
-      @keyframes skeleton-pulse {
-        0% {
-          background-position: 200% 0;
-        }
-        100% {
-          background-position: -200% 0;
-        }
-      }
-      
-      @keyframes skeleton-breathe {
-        0%, 100% {
-          opacity: 0.6;
-        }
-        50% {
-          opacity: 1;
-        }
-      }
-      
       .disabled-page {
         color: #b0b0b0;
         cursor: not-allowed;
@@ -817,7 +754,6 @@
             </div>
           </div>
           <div id="pagesList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px;"></div>
-          <div id="pagesListSkeleton" style="display: none; max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px; padding: 8px;"></div>
           <div id="pageListHelperText" style="display: none; font-size: 0.7em; color: #666; margin-top: 6px; margin-bottom: 4px;"></div>
           <div id="openGalleryFromPagesWrap" style="display: none; margin-top: 8px; text-align: center;">
             <button type="button" id="openGalleryFromPagesBtn" style="font-size:0.75em; background: transparent; color: #1976d2; border: 1px solid #1976d2; border-radius: 6px; cursor: pointer; padding: 6px 12px;">Open FigDex Web</button>
@@ -1693,7 +1629,6 @@
         if (controller) controller.dispatch('file_link_saved');
         var statusEl = document.getElementById('fileKeyInlineStatus');
         if (statusEl) { statusEl.textContent = 'Loading pages...'; statusEl.style.color = '#1976d2'; }
-        showPagesSkeleton();
         sendIntent('refresh-pages');
         sendIntent('get-file-thumbnail', { fileKey: fileKey });
         render(state, { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null });
@@ -1711,19 +1646,7 @@
         var setStatusEl = document.getElementById('fileKeySetStatus');
         if (setStatusEl) setStatusEl.textContent = '';
         var listDiv = document.getElementById('pagesList');
-        var skeletonDiv = document.getElementById('pagesListSkeleton');
         if (listDiv) { listDiv.innerHTML = ''; listDiv.style.display = 'none'; }
-        if (skeletonDiv) {
-          skeletonDiv.style.display = 'block';
-          skeletonDiv.innerHTML = '';
-          for (var i = 0; i < 6; i++) {
-            var item = document.createElement('div');
-            item.className = 'skeleton-item';
-            var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
-            item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
-            skeletonDiv.appendChild(item);
-          }
-        }
         var thumbContainer = document.getElementById('fileThumbnailContainer');
         var thumbImg = document.getElementById('fileThumbnail');
         if (thumbContainer) thumbContainer.style.display = 'none';
@@ -1733,24 +1656,6 @@
         var advanceBtn = document.getElementById('advanceBtn');
         if (advanceBtn) advanceBtn.disabled = true;
       }
-
-      function showPagesSkeletonNow() {
-        var listDiv = document.getElementById('pagesList');
-        var skeletonDiv = document.getElementById('pagesListSkeleton');
-        if (!listDiv || !skeletonDiv) return;
-        listDiv.style.display = 'none';
-        skeletonDiv.style.display = 'block';
-        skeletonDiv.innerHTML = '';
-        for (var i = 0; i < 6; i++) {
-          var item = document.createElement('div');
-          item.className = 'skeleton-item';
-          var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
-          item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
-          skeletonDiv.appendChild(item);
-        }
-      }
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showPagesSkeletonNow);
-      else setTimeout(showPagesSkeletonNow, 0);
 
       function currentFileHasIndexedPages(pages) {
         if (!Array.isArray(pages)) return false;
@@ -1871,14 +1776,12 @@
         }
         if (!model.fileKey) {
           if (listDiv) { listDiv.innerHTML = ''; listDiv.style.display = 'none'; }
-          showPagesSkeleton();
           if (pagesLockedHint) pagesLockedHint.style.display = 'block';
           var thumbContainer = document.getElementById('fileThumbnailContainer');
           var thumbImg = document.getElementById('fileThumbnail');
           if (thumbContainer) thumbContainer.style.display = 'none';
           if (thumbImg) thumbImg.src = '';
         } else {
-          hidePagesSkeleton();
           if (pagesLockedHint) pagesLockedHint.style.display = 'none';
           if (model.pages && model.pages.length > 0) {
             if (listDiv) listDiv.style.display = 'block';
@@ -2094,30 +1997,6 @@
       }
       window.__figdexOnCreateIndexClick = __figdexOnCreateIndexClick;
 
-      function showPagesSkeleton() {
-        var listDiv = document.getElementById('pagesList');
-        var skeletonDiv = document.getElementById('pagesListSkeleton');
-        if (!listDiv || !skeletonDiv) return;
-        listDiv.innerHTML = '';
-        listDiv.style.display = 'none';
-        skeletonDiv.style.display = 'block';
-        skeletonDiv.innerHTML = '';
-        for (var i = 0; i < 6; i++) {
-          var item = document.createElement('div');
-          item.className = 'skeleton-item';
-          var textWidth = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
-          item.innerHTML = '<div class="skeleton-checkbox"></div><div class="skeleton-text ' + textWidth + '"></div><div class="skeleton-icon"></div>';
-          skeletonDiv.appendChild(item);
-        }
-      }
-
-      function hidePagesSkeleton() {
-        var listDiv = document.getElementById('pagesList');
-        var skeletonDiv = document.getElementById('pagesListSkeleton');
-        if (listDiv) listDiv.style.display = 'block';
-        if (skeletonDiv) skeletonDiv.style.display = 'none';
-      }
-
       function getStatusIcon(page) {
         if (!page) return '';
         if (page.isCoverPage) return '';
@@ -2191,7 +2070,6 @@
       function init() {
         if (window.__figdex_ui_inited) return;
         window.__figdex_ui_inited = true;
-        showPagesSkeleton();
         var saveBtn = document.getElementById('fileKeyInlineSaveBtn');
         var saveInput = document.getElementById('fileKeyInlineInput');
         if (saveBtn && saveInput) {
