@@ -83,6 +83,73 @@
         color: #1976d2;
       }
 
+      .plugin-shell {
+        padding: 16px;
+        padding-bottom: 0;
+        box-sizing: border-box;
+      }
+
+      .hero-block {
+        margin: 0 0 12px 0;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+
+      .hero-title {
+        font-size: 1.08em;
+        font-weight: 700;
+        color: #1f2937;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        letter-spacing: -0.01em;
+      }
+
+      .hero-copy {
+        font-size: 0.74em;
+        color: #667085;
+        line-height: 1.45;
+      }
+
+      .section-card {
+        margin: 0 0 12px 0;
+        padding: 12px;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+
+      .section-card-muted {
+        background: #f8f9fa;
+      }
+
+      .section-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .section-title {
+        font-size: 0.84em;
+        font-weight: 600;
+        color: #1976d2;
+        letter-spacing: -0.01em;
+      }
+
+      .section-copy {
+        font-size: 0.72em;
+        color: #666;
+        line-height: 1.45;
+        margin-bottom: 10px;
+      }
+
       #markNoIndexBtn, #markAllIndexBtn {
         margin-top: 8px;
         padding: 4px 0;
@@ -607,26 +674,26 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.27</div>
+        <div class="version" id="pluginVersionLabel">v1.32.28</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
       <button id="settingsIconBtn" class="settings-icon-btn" title="Settings">⚙️</button>
     </div>
 
-    <div style="padding: 16px; padding-bottom: 0; box-sizing: border-box;">
-    <div style="margin: 0 0 10px 0; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;">
-      <div style="font-size: 1em; font-weight: 700; color: #1f2937; line-height: 1.25; margin-bottom: 4px;">Index This File</div>
-      <div style="font-size: 0.74em; color: #667085; line-height: 1.45;">Browse and search all its screens in FigDex Web.</div>
+    <div class="plugin-shell">
+    <div class="hero-block">
+      <div class="hero-title">Index This File</div>
+      <div class="hero-copy">Browse and search all its screens in FigDex Web.</div>
     </div>
 
-    <div id="accountStatusCard" style="margin: 0 0 10px 0; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
-        <div style="font-size:0.85em; font-weight:600; color:#1976d2;">Account</div>
+    <div id="accountStatusCard" class="section-card">
+      <div class="section-header-row">
+        <div class="section-title">Account</div>
         <span id="accountPlanBadge" style="font-size:0.7em; background:#fff3e0; color:#8d6e63; padding:2px 8px; border-radius:999px; border:1px solid #ffe0b2;">Guest</span>
       </div>
       <div id="accountIdentityLine" style="font-size:0.8em; font-weight:600; color:#333; margin-bottom:4px;">Guest mode</div>
-      <div id="accountStatusLine" style="font-size:0.72em; color:#666; margin-bottom:10px;">You can create your first index here and continue on the web later.</div>
+      <div id="accountStatusLine" class="section-copy">You can create your first index here and continue on the web later.</div>
       <div id="accountUsageWrap" style="display:none; margin-bottom:10px; padding:8px 10px; background:#f8f9fb; border:1px solid #e6e8ee; border-radius:8px;">
         <div id="accountUsageFiles" style="font-size:0.72em; color:#333; margin-bottom:4px;">Files: --</div>
         <div id="accountUsageFrames" style="font-size:0.72em; color:#333;">Frames: --</div>
@@ -634,12 +701,12 @@
       <button type="button" id="accountPrimaryBtn" style="font-size:0.78em; background:#1976d2; color:#fff; border:none; border-radius:8px; cursor:pointer; padding:9px 14px; font-weight:600; width:100%;">Connect to FigDex</button>
     </div>
 
-    <div id="currentFileStatusCard" style="margin: 0 0 10px 0; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
-        <div style="font-size:0.85em; font-weight:600; color:#1976d2;">Current File</div>
+    <div id="currentFileStatusCard" class="section-card">
+      <div class="section-header-row">
+        <div class="section-title">Current File</div>
         <span id="currentFileBadge" style="font-size:0.7em; background:#f5f5f5; color:#666; padding:2px 8px; border-radius:999px; border:1px solid #e0e0e0;">Link required</span>
       </div>
-      <div id="currentFileStatusLine" style="font-size:0.72em; color:#666; margin-bottom:10px;">Paste the Figma file link to load pages and keep this file synced correctly.</div>
+      <div id="currentFileStatusLine" class="section-copy">Paste the Figma file link to load pages and keep this file synced correctly.</div>
       <div id="fileKeyRequiredMsg" style="display:block; font-size:0.75em; color:#333;">
         <div id="fileKeyStep1Summary" style="display: none; font-size:0.8em; font-weight:600; color:#43a047;">Linked to this file ✓ <span id="fileKeyStep1PagesCount">0</span> pages loaded</div>
         <div id="fileKeyStep1Full">
@@ -724,14 +791,14 @@
       <!-- Marketing Box (Compact) - REMOVED, using marketingBannerTop instead -->
 
       <!-- Pages Section -->
-      <div id="pagesCard" class="step-disabled" style="margin-bottom: 12px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+      <div id="pagesCard" class="section-card section-card-muted step-disabled">
         <div id="pagesCardHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-size: 0.8em; font-weight: 600; color: #1976d2;">Step 2: Select pages</div>
+          <div class="section-title">Pages</div>
           <button id="pagesCardToggleBtn" style="background: transparent; border: none; cursor: pointer; font-size: 0.9em; color: #666; padding: 4px 8px; transition: color 0.2s; display: flex; align-items: center; flex-shrink: 0;" title="Collapse/Expand">
             <span id="pagesCardToggleIcon" style="display: inline-block; width: 12px; text-align: center;">▼</span>
           </button>
         </div>
-        <div style="font-size: 0.7em; color: #666; margin-bottom: 6px;">Select pages to include in the index</div>
+        <div class="section-copy" style="margin-bottom: 6px;">Select pages to include in the index.</div>
         <div id="selectedPagesCount" style="font-size: 0.7em; color: #444; margin-bottom: 6px;">0 pages selected</div>
         
         <!-- File Thumbnail -->
@@ -774,9 +841,12 @@
           </div>
         </div>
         <!-- Create Index Button -->
-        <div id="actionCard" style="display:block; text-align: center; margin-top: 8px;">
+        <div id="actionCard" class="section-card" style="display:block; text-align: center; margin-top: 8px;">
+          <div class="section-header-row" style="justify-content:center; margin-bottom:4px;">
+            <div class="section-title" style="color:#1f2937;">Action</div>
+          </div>
           <div id="actionStatusTitle" style="font-size:0.82em; font-weight:600; color:#333; margin-bottom:4px;">Ready to create index</div>
-          <div id="indexOutcomeHint" style="font-size:0.7em; color:#666; margin-bottom:6px;">This will create a visual gallery of all selected screens in FigDex Web.</div>
+          <div id="indexOutcomeHint" class="section-copy" style="margin-bottom:6px;">This will create a visual gallery of all selected screens in FigDex Web.</div>
           <div id="indexErrorBlock" style="display: none; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; text-align: center;">
             <div id="indexErrorText" style="font-size: 0.75em; color: #555; margin-bottom: 8px;"></div>
             <button type="button" id="indexErrorActionBtn" style="font-size: 0.8em; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 8px 14px; font-weight: 500;">Try again</button>
@@ -981,7 +1051,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.27</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.28</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1046,7 +1116,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.27</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.28</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
