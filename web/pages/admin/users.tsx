@@ -475,18 +475,11 @@ export default function AdminUsers() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Stack spacing={0.5}>
-                    <Chip
-                      label={(user.plan_label || derivePlanValue(user.plan, user.is_admin)).toUpperCase()}
-                      color={getPlanChipColor(user.plan, user.is_admin)}
-                      size="small"
-                    />
-                    {!user.is_admin && (
-                      <Typography variant="caption" color="text.secondary">
-                        {user.plan_label || derivePlanValue(user.plan, user.is_admin)}
-                      </Typography>
-                    )}
-                  </Stack>
+                  <Chip
+                    label={(user.plan_label || derivePlanValue(user.plan, user.is_admin)).toUpperCase()}
+                    color={getPlanChipColor(user.plan, user.is_admin)}
+                    size="small"
+                  />
                 </TableCell>
                 <TableCell>
                   <Stack spacing={0.25}>
