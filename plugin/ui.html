@@ -150,6 +150,59 @@
         margin-bottom: 10px;
       }
 
+      .pages-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+      }
+
+      .pages-summary {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .pages-summary-chip {
+        font-size: 0.64em;
+        color: #516071;
+        background: #fff;
+        border: 1px solid #e3e8ef;
+        border-radius: 999px;
+        padding: 3px 8px;
+      }
+
+      .pages-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .pages-action-btn {
+        font-size: 0.68em;
+        color: #1976d2;
+        background: #fff;
+        border: 1px solid #d5deea;
+        border-radius: 999px;
+        padding: 4px 10px;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
+      }
+
+      .pages-action-btn:hover {
+        background: #eef5ff;
+        border-color: #bfd6ff;
+      }
+
+      .pages-action-btn:disabled {
+        color: #98a2b3;
+        background: #f8fafc;
+        border-color: #e4e7ec;
+        cursor: not-allowed;
+      }
+
       .usage-metric {
         margin-bottom: 8px;
       }
@@ -725,7 +778,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.29</div>
+        <div class="version" id="pluginVersionLabel">v1.32.30</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -867,6 +920,13 @@
         </div>
         <div class="section-copy" style="margin-bottom: 6px;">Select pages to include in the index.</div>
         <div id="selectedPagesCount" style="font-size: 0.7em; color: #444; margin-bottom: 6px;">0 pages selected</div>
+        <div class="pages-toolbar">
+          <div id="pagesSummaryChips" class="pages-summary"></div>
+          <div class="pages-actions">
+            <button type="button" id="selectAllPagesBtn" class="pages-action-btn">Select all</button>
+            <button type="button" id="clearPagesBtn" class="pages-action-btn">Clear</button>
+          </div>
+        </div>
         
         <!-- File Thumbnail -->
         <div id="fileThumbnailContainer" style="display: none; margin-bottom: 12px; text-align: center;">
@@ -1118,7 +1178,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.29</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.30</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1183,7 +1243,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.29</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.30</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1880,6 +1940,22 @@
         return { badge: 'Indexed', badgeBg: '#e8f5e9', badgeColor: '#2e7d32', title: 'This file is indexed and up to date.', detail: indexedPages + ' indexed pages. Select pages if you want to update the gallery.' };
       }
 
+      function getPagesSummary(model) {
+        var pages = Array.isArray(model.pages) ? model.pages : [];
+        var selectablePages = pages.filter(function(p) {
+          return p && p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage;
+        });
+        var indexed = selectablePages.filter(function(p) { return p.status === 'up_to_date'; }).length;
+        var updating = selectablePages.filter(function(p) { return p.status === 'needs_update'; }).length;
+        var fresh = Math.max(0, selectablePages.length - indexed - updating);
+        return {
+          selectable: selectablePages.length,
+          indexed: indexed,
+          updating: updating,
+          fresh: fresh
+        };
+      }
+
       function getPrimaryActionConfig(model, ctrlState) {
         var pages = Array.isArray(model.pages) ? model.pages : [];
         var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
@@ -1962,8 +2038,12 @@
         var currentFileBadge = document.getElementById('currentFileBadge');
         var currentFileStatusLine = document.getElementById('currentFileStatusLine');
         var actionStatusTitle = document.getElementById('actionStatusTitle');
+        var pagesSummaryChips = document.getElementById('pagesSummaryChips');
+        var selectAllPagesBtn = document.getElementById('selectAllPagesBtn');
+        var clearPagesBtn = document.getElementById('clearPagesBtn');
         var primaryAction = getPrimaryActionConfig(model, ctrlState);
         var fileSummary = getCurrentFileSummary(model);
+        var pagesSummary = getPagesSummary(model);
         var connected = model.identity && model.identity.exists;
         if (accountPlanBadge) {
           accountPlanBadge.textContent = getConnectedPlanLabel(model.identity);
@@ -2031,6 +2111,22 @@
         }
         var selectedCountEl = document.getElementById('selectedPagesCount');
         if (selectedCountEl) selectedCountEl.textContent = (model.selectedPages || []).length + ' pages selected';
+        if (pagesSummaryChips) {
+          var chips = [];
+          if (pagesSummary.selectable > 0) {
+            chips.push('<span class="pages-summary-chip">' + pagesSummary.selectable + ' available</span>');
+            if (pagesSummary.fresh > 0) chips.push('<span class="pages-summary-chip">' + pagesSummary.fresh + ' new</span>');
+            if (pagesSummary.updating > 0) chips.push('<span class="pages-summary-chip">' + pagesSummary.updating + ' need update</span>');
+            if (pagesSummary.indexed > 0) chips.push('<span class="pages-summary-chip">' + pagesSummary.indexed + ' indexed</span>');
+          }
+          pagesSummaryChips.innerHTML = chips.join('');
+        }
+        if (selectAllPagesBtn) {
+          selectAllPagesBtn.disabled = !pagesSummary.selectable;
+        }
+        if (clearPagesBtn) {
+          clearPagesBtn.disabled = !(model.selectedPages || []).length;
+        }
         var indexOutcomeHintEl = document.getElementById('indexOutcomeHint');
         if (indexOutcomeHintEl) {
           var showHint = ctrlState !== 'ERROR';
@@ -2269,6 +2365,26 @@
             updateToggleSelectCheckbox(state.pages);
             var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
             if (typeof render === 'function') render(state, model);
+          });
+        }
+        var selectAllPagesBtn = document.getElementById('selectAllPagesBtn');
+        if (selectAllPagesBtn) {
+          selectAllPagesBtn.addEventListener('click', function() {
+            state.selectedPages = (state.pages || []).filter(function(p) {
+              return p && p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage;
+            }).map(function(p) { return p.id; });
+            sendIntent('save-selected-pages', { pages: state.selectedPages });
+            var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+            render(state, model);
+          });
+        }
+        var clearPagesBtn = document.getElementById('clearPagesBtn');
+        if (clearPagesBtn) {
+          clearPagesBtn.addEventListener('click', function() {
+            state.selectedPages = [];
+            sendIntent('save-selected-pages', { pages: state.selectedPages });
+            var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
+            render(state, model);
           });
         }
         var refreshPagesBtn = document.getElementById('refreshPagesBtn');
