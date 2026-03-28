@@ -569,6 +569,9 @@ export default function Home() {
   // Gallery Lobby state
   const [viewMode, setViewMode] = useState<'lobby' | 'allFrames' | 'file'>('lobby'); // 'lobby' = show file thumbnails, 'allFrames' = show all frames, 'file' = show frames of selected file
   const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string } | null>(null);
+  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number }>>([]);
+  const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
+  const [fileModeSearchActive, setFileModeSearchActive] = useState(false);
   const [fileThumbnails, setFileThumbnails] = useState<Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }>>([]);
   const [allFramesData, setAllFramesData] = useState<any[]>([]); // Store all frames for allFrames view
   const [guestPlan, setGuestPlan] = useState<string | null>(null); // Plan from get-indices when guest (e.g. 'guest')
@@ -665,6 +668,9 @@ export default function Home() {
   useEffect(() => {
     const loadIndexData = async () => {
       try {
+        if (viewMode === 'file' && selectedFile) {
+          return;
+        }
         setLoading(true);
         setError('');
         let user = null;
@@ -927,7 +933,7 @@ export default function Home() {
     if (router.isReady) {
       loadIndexData();
     }
-  }, [router.isReady, router.query.index, router.query.anonId, viewMode, authFromUrlApplied, visibilityRefreshTrigger]);
+  }, [router.isReady, router.query.index, router.query.anonId, viewMode, selectedFile, authFromUrlApplied, visibilityRefreshTrigger]);
 
   // When tab becomes visible (e.g. user returns after indexing from plugin), refetch indices
   useEffect(() => {
@@ -939,52 +945,99 @@ export default function Home() {
     return () => document.removeEventListener('visibilitychange', handler);
   }, []);
 
-  // Load frames for specific file (handles chunked files by merging all chunks)
+  const getFileIndexIds = (fileInfo: { id: string; _chunks?: any[] }) =>
+    fileInfo._chunks?.length ? fileInfo._chunks.map((chunk: any) => chunk.id) : [fileInfo.id];
+
+  const loadSelectedFilePage = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }, pageId: string) => {
+    try {
+      setLoading(true);
+      setFrames([]);
+      setFileModeSearchActive(false);
+      const response = await fetch(`/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&pageId=${encodeURIComponent(pageId)}`);
+      const data = await parseJsonResponse(response, 'Failed to load page frames');
+      if (!data?.success) {
+        setError(data?.error || 'Failed to load page frames');
+        setFrames([]);
+        return;
+      }
+      const pageFrames = Array.isArray(data?.data?.frames) ? data.data.frames.map((frame: any) => ({
+        ...frame,
+        _fileId: fileInfo.id,
+        _fileName: fileInfo.fileName,
+      })) : [];
+      setSelectedFilePageId(pageId);
+      setFrames(pageFrames);
+    } catch (err: any) {
+      console.error('Error loading page frames:', err);
+      setError(err.message || 'An error occurred while loading page frames');
+      setFrames([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchSelectedFile = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }, query: string) => {
+    try {
+      setLoading(true);
+      setFrames([]);
+      const response = await fetch(`/api/file-index-view?mode=search&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&q=${encodeURIComponent(query)}`);
+      const data = await parseJsonResponse(response, 'Failed to search file');
+      if (!data?.success) {
+        setError(data?.error || 'Failed to search file');
+        setFrames([]);
+        return;
+      }
+      const searchFrames = Array.isArray(data?.data?.frames) ? data.data.frames.map((frame: any) => ({
+        ...frame,
+        _fileId: fileInfo.id,
+        _fileName: fileInfo.fileName,
+      })) : [];
+      setFileModeSearchActive(true);
+      setFrames(searchFrames);
+    } catch (err: any) {
+      console.error('Error searching file frames:', err);
+      setError(err.message || 'An error occurred while searching file frames');
+      setFrames([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load frames for specific file using lightweight page summary first
   const loadFileFrames = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }) => {
     try {
       setLoading(true);
+      setError('');
       setViewMode('file');
       setSelectedFile(fileInfo);
-      // Clear frames first to prevent showing frames from previous file
+      setSelectedIndex(fileInfo.id);
       setFrames([]);
-      
-      const indicesToLoad = fileInfo._chunks?.length ? fileInfo._chunks : [{ id: fileInfo.id }];
-      const seen = new Set<string>();
-      const results = await mapInBatches(indicesToLoad, 4, async (idx: any) => {
-        const indexId = typeof idx === 'object' && idx?.id ? idx.id : idx;
-        const response = await fetch(`/api/get-index-data?indexId=${indexId}`);
-        const data = await parseJsonResponse(response, 'Failed to load file frames');
-        if (!data?.success || !data?.data?.index_data) {
-          return { success: false, error: data?.error || 'Failed to load file frames', frames: [] };
-        }
-        const fileFrames = extractFramesFromIndexPayload(data.data.index_data, { id: fileInfo.id, fileName: fileInfo.fileName })
-          .filter((frame: any, index: number) => {
-            const key = String(frame.url || frame.id || `${fileInfo.id}::${frame.pageName || ''}::${frame.name || 'frame'}::${index}`);
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-        return { success: true, frames: fileFrames };
-      });
+      setFilePages([]);
+      setSelectedFilePageId(null);
+      setFileModeSearchActive(false);
 
-      const failedResult = results.find((result: any) => !result.success);
-      if (failedResult) {
-        setError(failedResult.error || 'Failed to load file frames');
+      const response = await fetch(`/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}`);
+      const data = await parseJsonResponse(response, 'Failed to load file summary');
+      if (!data?.success) {
+        setError(data?.error || 'Failed to load file summary');
         setFrames([]);
-        setLoading(false);
         return;
       }
 
-      const allFrames: any[] = [];
-      results.forEach((result: any) => {
-        if (Array.isArray(result.frames)) allFrames.push(...result.frames);
-      });
-      
-      setFrames(allFrames);
+      const pagesSummary = Array.isArray(data?.data?.pages) ? data.data.pages : [];
+      setFilePages(pagesSummary);
+
+      if (pagesSummary.length === 0) {
+        setFrames([]);
+        return;
+      }
+
+      await loadSelectedFilePage(fileInfo, String(pagesSummary[0].id));
     } catch (err: any) {
-      console.error('Error loading file frames:', err);
-      setError(err.message || 'An error occurred while loading file frames');
+      console.error('Error loading file summary:', err);
+      setError(err.message || 'An error occurred while loading file summary');
       setFrames([]);
+      setFilePages([]);
     } finally {
       setLoading(false);
     }
@@ -1044,6 +1097,21 @@ export default function Home() {
       setFavorites(favs ? JSON.parse(favs) : []);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (viewMode !== 'file' || !selectedFile) return;
+
+    const trimmedQuery = search.trim();
+    const timeoutId = window.setTimeout(() => {
+      if (trimmedQuery) {
+        searchSelectedFile(selectedFile, trimmedQuery);
+      } else if (fileModeSearchActive && selectedFilePageId) {
+        loadSelectedFilePage(selectedFile, selectedFilePageId);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search, viewMode, selectedFile, selectedFilePageId, fileModeSearchActive]);
   
   // Save favorites to localStorage
   useEffect(() => {
@@ -2838,6 +2906,35 @@ export default function Home() {
         transition: 'margin-left 0.3s ease',
         px: 4
       }}>
+        {viewMode === 'file' && selectedFile && filePages.length > 0 && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5, gap: 2, flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {selectedFile.fileName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {fileModeSearchActive ? `Search results across ${filePages.length} pages` : `${filePages.length} pages`}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {filePages.map((pageInfo) => {
+                const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+                return (
+                  <Chip
+                    key={pageInfo.id}
+                    label={`${pageInfo.name} (${pageInfo.frameCount})`}
+                    color={isSelected ? 'primary' : 'default'}
+                    variant={isSelected ? 'filled' : 'outlined'}
+                    onClick={() => {
+                      setSearch('');
+                      loadSelectedFilePage(selectedFile, pageInfo.id);
+                    }}
+                  />
+                );
+              })}
+            </Box>
+          </Box>
+        )}
         {/* Categorized Tags Display (per frame) */}
         <Grid container spacing={4}>
         {/* Main gallery: lobby uses Grid (avoids Masonry overlap with 1-2 covers), file/allFrames use Masonry */}
