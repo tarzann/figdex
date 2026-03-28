@@ -22,7 +22,7 @@
       /* Tab Content */
       .tab-content {
         display: none;
-        padding: 16px;
+        padding: 0 16px 20px 16px;
         padding-bottom: 20px;
         width: 100%;
         max-width: 100%;
@@ -148,6 +148,57 @@
         color: #666;
         line-height: 1.45;
         margin-bottom: 10px;
+      }
+
+      .usage-metric {
+        margin-bottom: 8px;
+      }
+
+      .usage-metric:last-child {
+        margin-bottom: 0;
+      }
+
+      .usage-label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .usage-label {
+        font-size: 0.7em;
+        font-weight: 600;
+        color: #334155;
+      }
+
+      .usage-value {
+        font-size: 0.68em;
+        color: #667085;
+      }
+
+      .usage-track {
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: #e7edf5;
+        overflow: hidden;
+      }
+
+      .usage-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1976d2 0%, #4dabf7 100%);
+        transition: width 0.25s ease;
+      }
+
+      .usage-fill.warn {
+        background: linear-gradient(90deg, #ef6c00 0%, #ffb74d 100%);
+      }
+
+      .usage-fill.danger {
+        background: linear-gradient(90deg, #d32f2f 0%, #ef5350 100%);
       }
 
       #markNoIndexBtn, #markAllIndexBtn {
@@ -674,7 +725,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.28</div>
+        <div class="version" id="pluginVersionLabel">v1.32.29</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -695,8 +746,24 @@
       <div id="accountIdentityLine" style="font-size:0.8em; font-weight:600; color:#333; margin-bottom:4px;">Guest mode</div>
       <div id="accountStatusLine" class="section-copy">You can create your first index here and continue on the web later.</div>
       <div id="accountUsageWrap" style="display:none; margin-bottom:10px; padding:8px 10px; background:#f8f9fb; border:1px solid #e6e8ee; border-radius:8px;">
-        <div id="accountUsageFiles" style="font-size:0.72em; color:#333; margin-bottom:4px;">Files: --</div>
-        <div id="accountUsageFrames" style="font-size:0.72em; color:#333;">Frames: --</div>
+        <div class="usage-metric">
+          <div class="usage-label-row">
+            <div class="usage-label">Files</div>
+            <div id="accountUsageFiles" class="usage-value">--</div>
+          </div>
+          <div class="usage-track">
+            <div id="accountUsageFilesBar" class="usage-fill"></div>
+          </div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-label-row">
+            <div class="usage-label">Frames</div>
+            <div id="accountUsageFrames" class="usage-value">--</div>
+          </div>
+          <div class="usage-track">
+            <div id="accountUsageFramesBar" class="usage-fill"></div>
+          </div>
+        </div>
       </div>
       <button type="button" id="accountPrimaryBtn" style="font-size:0.78em; background:#1976d2; color:#fff; border:none; border-radius:8px; cursor:pointer; padding:9px 14px; font-weight:600; width:100%;">Connect to FigDex</button>
     </div>
@@ -1051,7 +1118,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.28</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.29</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1116,7 +1183,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.28</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.29</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1769,9 +1836,27 @@
         var limits = state.accountLimits;
         if (!limits || typeof limits !== 'object') return null;
         return {
-          files: 'Files: ' + formatLimitValue(limits.currentFiles || 0) + ' / ' + formatLimitValue(limits.maxFiles),
-          frames: 'Frames: ' + formatLimitValue(limits.currentFrames || 0) + ' / ' + formatLimitValue(limits.maxFrames)
+          files: formatLimitValue(limits.currentFiles || 0) + ' / ' + formatLimitValue(limits.maxFiles),
+          frames: formatLimitValue(limits.currentFrames || 0) + ' / ' + formatLimitValue(limits.maxFrames),
+          currentFiles: Number(limits.currentFiles || 0),
+          maxFiles: limits.maxFiles,
+          currentFrames: Number(limits.currentFrames || 0),
+          maxFrames: limits.maxFrames
         };
+      }
+
+      function getUsageRatio(currentValue, maxValue) {
+        var current = Number(currentValue || 0);
+        if (!isFinite(current) || current < 0) current = 0;
+        if (maxValue === null || maxValue === undefined) return { percent: 12, tone: '' };
+        var max = Number(maxValue);
+        if (!isFinite(max) || max <= 0) return { percent: 0, tone: '' };
+        var ratio = Math.max(0, Math.min(1, current / max));
+        var percent = Math.max(4, Math.round(ratio * 100));
+        var tone = '';
+        if (ratio >= 1) tone = 'danger';
+        else if (ratio >= 0.8) tone = 'warn';
+        return { percent: percent, tone: tone };
       }
 
       function getCurrentFileSummary(model) {
@@ -1871,6 +1956,8 @@
         var accountUsageWrap = document.getElementById('accountUsageWrap');
         var accountUsageFiles = document.getElementById('accountUsageFiles');
         var accountUsageFrames = document.getElementById('accountUsageFrames');
+        var accountUsageFilesBar = document.getElementById('accountUsageFilesBar');
+        var accountUsageFramesBar = document.getElementById('accountUsageFramesBar');
         var accountPrimaryBtn = document.getElementById('accountPrimaryBtn');
         var currentFileBadge = document.getElementById('currentFileBadge');
         var currentFileStatusLine = document.getElementById('currentFileStatusLine');
@@ -1896,6 +1983,16 @@
           if (usageSummary) {
             if (accountUsageFiles) accountUsageFiles.textContent = usageSummary.files;
             if (accountUsageFrames) accountUsageFrames.textContent = usageSummary.frames;
+            if (accountUsageFilesBar) {
+              var fileRatio = getUsageRatio(usageSummary.currentFiles, usageSummary.maxFiles);
+              accountUsageFilesBar.style.width = fileRatio.percent + '%';
+              accountUsageFilesBar.className = 'usage-fill' + (fileRatio.tone ? ' ' + fileRatio.tone : '');
+            }
+            if (accountUsageFramesBar) {
+              var frameRatio = getUsageRatio(usageSummary.currentFrames, usageSummary.maxFrames);
+              accountUsageFramesBar.style.width = frameRatio.percent + '%';
+              accountUsageFramesBar.className = 'usage-fill' + (frameRatio.tone ? ' ' + frameRatio.tone : '');
+            }
           }
         }
         if (accountPrimaryBtn) {
