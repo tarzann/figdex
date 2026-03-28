@@ -571,6 +571,7 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string } | null>(null);
   const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number }>>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
+  const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
   const [fileModeSearchActive, setFileModeSearchActive] = useState(false);
   const [fileThumbnails, setFileThumbnails] = useState<Array<{ id: string; fileName: string; thumbnail?: string; frameCount: number }>>([]);
   const [allFramesData, setAllFramesData] = useState<any[]>([]); // Store all frames for allFrames view
@@ -948,12 +949,19 @@ export default function Home() {
   const getFileIndexIds = (fileInfo: { id: string; _chunks?: any[] }) =>
     fileInfo._chunks?.length ? fileInfo._chunks.map((chunk: any) => chunk.id) : [fileInfo.id];
 
-  const loadSelectedFilePage = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }, pageId: string) => {
+  const loadSelectedFilePage = async (
+    fileInfo: { id: string; fileName: string; _chunks?: any[] },
+    pageId: string,
+    pageNumber: number,
+    pageSizeValue: number
+  ) => {
     try {
       setLoading(true);
-      setFrames([]);
       setFileModeSearchActive(false);
-      const response = await fetch(`/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&pageId=${encodeURIComponent(pageId)}`);
+      const offset = Math.max(0, (pageNumber - 1) * pageSizeValue);
+      const response = await fetch(
+        `/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&pageId=${encodeURIComponent(pageId)}&offset=${offset}&limit=${pageSizeValue}`
+      );
       const data = await parseJsonResponse(response, 'Failed to load page frames');
       if (!data?.success) {
         setError(data?.error || 'Failed to load page frames');
@@ -966,6 +974,11 @@ export default function Home() {
         _fileName: fileInfo.fileName,
       })) : [];
       setSelectedFilePageId(pageId);
+      setSelectedFilePageFrameCount(
+        typeof data?.data?.totalFrames === 'number'
+          ? data.data.totalFrames
+          : pageFrames.length
+      );
       setFrames(pageFrames);
     } catch (err: any) {
       console.error('Error loading page frames:', err);
@@ -1014,6 +1027,7 @@ export default function Home() {
       setFrames([]);
       setFilePages([]);
       setSelectedFilePageId(null);
+      setSelectedFilePageFrameCount(0);
       setFileModeSearchActive(false);
 
       const response = await fetch(`/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}`);
@@ -1032,7 +1046,11 @@ export default function Home() {
         return;
       }
 
-      await loadSelectedFilePage(fileInfo, String(pagesSummary[0].id));
+      setPage(1);
+      setSelectedFilePageId(String(pagesSummary[0].id));
+      setSelectedFilePageFrameCount(
+        typeof pagesSummary[0].frameCount === 'number' ? pagesSummary[0].frameCount : 0
+      );
     } catch (err: any) {
       console.error('Error loading file summary:', err);
       setError(err.message || 'An error occurred while loading file summary');
@@ -1105,13 +1123,13 @@ export default function Home() {
     const timeoutId = window.setTimeout(() => {
       if (trimmedQuery) {
         searchSelectedFile(selectedFile, trimmedQuery);
-      } else if (fileModeSearchActive && selectedFilePageId) {
-        loadSelectedFilePage(selectedFile, selectedFilePageId);
+      } else if (selectedFilePageId) {
+        loadSelectedFilePage(selectedFile, selectedFilePageId, page, pageSize);
       }
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [search, viewMode, selectedFile, selectedFilePageId, fileModeSearchActive]);
+  }, [search, viewMode, selectedFile, selectedFilePageId, fileModeSearchActive, page, pageSize]);
   
   // Save favorites to localStorage
   useEffect(() => {
@@ -2088,7 +2106,14 @@ export default function Home() {
       }));
     }
   }, [viewMode === 'lobby' ? (search.trim() ? advancedFilteredThumbs : filteredFileThumbs) : advancedFilteredThumbs, viewMode, search]);
-  const totalPages = Math.max(1, Math.ceil(visibleThumbs.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      viewMode === 'file' && !fileModeSearchActive
+        ? selectedFilePageFrameCount / pageSize
+        : visibleThumbs.length / pageSize
+    )
+  );
 
   useEffect(() => {
     setPage(1);
@@ -2110,9 +2135,12 @@ export default function Home() {
   }, []);
 
   const pagedThumbs = useMemo(() => {
+    if (viewMode === 'file' && !fileModeSearchActive) {
+      return visibleThumbs;
+    }
     const start = (page - 1) * pageSize;
     return visibleThumbs.slice(start, start + pageSize);
-  }, [visibleThumbs, page, pageSize]);
+  }, [visibleThumbs, page, pageSize, viewMode, fileModeSearchActive]);
 
   // 2. Display all images in one gallery (Masonry)
   // 3. Modal allows navigation between all images in gallery
@@ -2927,7 +2955,10 @@ export default function Home() {
                     variant={isSelected ? 'filled' : 'outlined'}
                     onClick={() => {
                       setSearch('');
-                      loadSelectedFilePage(selectedFile, pageInfo.id);
+                      setPage(1);
+                      setFileModeSearchActive(false);
+                      setSelectedFilePageId(pageInfo.id);
+                      setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
                     }}
                   />
                 );

@@ -94,6 +94,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const mode = typeof req.query.mode === 'string' ? req.query.mode : 'summary';
   const pageId = typeof req.query.pageId === 'string' ? req.query.pageId : '';
   const query = typeof req.query.q === 'string' ? req.query.q : '';
+  const parsedOffset = Number.parseInt(typeof req.query.offset === 'string' ? req.query.offset : '0', 10);
+  const parsedLimit = Number.parseInt(typeof req.query.limit === 'string' ? req.query.limit : '24', 10);
+  const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 24;
   const rawIndexIds = typeof req.query.indexIds === 'string'
     ? req.query.indexIds
     : typeof req.query.indexId === 'string'
@@ -197,6 +201,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const frames: any[] = [];
+      let totalFrames = 0;
 
       for (const file of normalizedFiles) {
         const { data: normalizedPage } = await svc
@@ -208,10 +213,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (!normalizedPage) continue;
 
+        const { count } = await svc
+          .from('indexed_frames')
+          .select('id', { count: 'exact', head: true })
+          .eq('page_id', normalizedPage.id);
+
+        totalFrames += typeof count === 'number' ? count : 0;
+
         const { data: normalizedFrames } = await svc
           .from('indexed_frames')
           .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
           .eq('page_id', normalizedPage.id)
+          .range(offset, offset + limit - 1)
           .order('sort_order', { ascending: true });
 
         (normalizedFrames || []).forEach((frame: any) => {
@@ -236,14 +249,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pages.forEach((page: any, pageIndex: number) => {
           const candidatePageId = String(page?.pageId || page?.id || page?.name || `page-${pageIndex}`);
           if (candidatePageId !== pageId || !Array.isArray(page?.frames)) return;
-          page.frames.forEach((frame: any) => frames.push(normalizeFrame(frame, page)));
+          const normalizedPageFrames = page.frames.map((frame: any) => normalizeFrame(frame, page));
+          totalFrames += normalizedPageFrames.length;
+          normalizedPageFrames
+            .slice(offset, offset + limit)
+            .forEach((frame: any) => frames.push(frame));
         });
       }
+
+      const dedupedFrames = dedupeFrames(frames);
+      const hasSingleNormalizedSource = normalizedFiles.length === 1 && legacyFiles.length === 0;
+      const pageFrames = hasSingleNormalizedSource ? dedupedFrames : dedupedFrames.slice(0, limit);
+      const safeTotalFrames = hasSingleNormalizedSource ? totalFrames : Math.max(totalFrames, dedupedFrames.length);
 
       return res.status(200).json({
         success: true,
         data: {
-          frames: dedupeFrames(frames),
+          frames: pageFrames,
+          totalFrames: safeTotalFrames,
         },
       });
     }
