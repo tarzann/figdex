@@ -367,6 +367,25 @@ async function exportFrameImageData(frame, width, height) {
   throw new Error('FRAME_EXPORT_FAILED');
 }
 
+async function exportFrameThumbnailData(frame, width, height) {
+  var baseScale = getAdaptiveExportScale(width, height);
+  var attempts = [Math.min(baseScale, 0.18), 0.14, 0.1, 0.08, 0.06];
+  var tried = {};
+  for (var i = 0; i < attempts.length; i++) {
+    var scale = Math.max(0.04, Math.min(0.18, attempts[i]));
+    var key = scale.toFixed(3);
+    if (tried[key]) continue;
+    tried[key] = true;
+    try {
+      var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: scale } });
+      if (bytes && bytes.length > 0) {
+        return 'data:image/jpeg;base64,' + figma.base64Encode(bytes);
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
 let globalFileKey = '';
 let sessionFileKey = '';
 
@@ -1213,6 +1232,7 @@ figma.ui.onmessage = async (msg) => {
               var exportResult = await exportFrameImageData(frame, w, h);
               var bytes = exportResult.bytes;
               var b64 = figma.base64Encode(bytes);
+              var thumbDataUrl = await exportFrameThumbnailData(frame, w, h);
               var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
               var frameItem = {
                 id: frame.id,
@@ -1226,7 +1246,8 @@ figma.ui.onmessage = async (msg) => {
                 url: frameUrl,
                 textContent: textContent,
                 searchTokens: searchTokens,
-                image: 'data:image/jpeg;base64,' + b64
+                image: 'data:image/jpeg;base64,' + b64,
+                thumb_url: thumbDataUrl
               };
               allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: frameItem });
               var totalEst = frameIds.length;

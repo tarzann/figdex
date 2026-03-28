@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { createThumbnailDataUrl, isDataImageUrl } from '../../lib/image-thumbnails';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
@@ -54,6 +55,41 @@ const buildClientFrame = (payload: any, overrides: Record<string, any>) => ({
   image: overrides.image ?? payload?.image ?? null,
   thumb_url: overrides.thumb_url ?? payload?.thumb_url ?? null,
 });
+
+const resolveFramePreview = async (
+  svc: any,
+  frameRow: any,
+  payload: any
+) => {
+  const existingThumb = typeof frameRow?.thumb_url === 'string' && frameRow.thumb_url
+    ? frameRow.thumb_url
+    : (typeof payload?.thumb_url === 'string' && payload.thumb_url ? payload.thumb_url : null);
+  const sourceImage = typeof frameRow?.image_url === 'string' && frameRow.image_url
+    ? frameRow.image_url
+    : (typeof payload?.image === 'string' ? payload.image : null);
+
+  if (existingThumb) {
+    return { thumbUrl: existingThumb, listImage: existingThumb };
+  }
+
+  if (!isDataImageUrl(sourceImage)) {
+    return { thumbUrl: null, listImage: sourceImage };
+  }
+
+  const generatedThumb = await createThumbnailDataUrl(sourceImage);
+  if (generatedThumb && frameRow?.page_id && frameRow?.figma_frame_id) {
+    void svc
+      .from('indexed_frames')
+      .update({ thumb_url: generatedThumb })
+      .eq('page_id', frameRow.page_id)
+      .eq('figma_frame_id', frameRow.figma_frame_id);
+  }
+
+  return {
+    thumbUrl: generatedThumb,
+    listImage: generatedThumb || null,
+  };
+};
 
 const filterLegacyFrames = (pages: any[], query: string) => {
   const q = query.trim().toLowerCase();
@@ -227,8 +263,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .range(offset, offset + limit - 1)
           .order('sort_order', { ascending: true });
 
-        (normalizedFrames || []).forEach((frame: any) => {
+        for (const frame of normalizedFrames || []) {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const preview = await resolveFramePreview(svc, { ...frame, page_id: normalizedPage.id }, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
@@ -238,10 +275,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
-            image: typeof frame.image_url === 'string' && frame.image_url ? frame.image_url : payload.image,
-            thumb_url: typeof frame.thumb_url === 'string' && frame.thumb_url ? frame.thumb_url : payload.thumb_url,
+            image: preview.listImage,
+            thumb_url: preview.thumbUrl,
           }));
-        });
+        }
       }
 
       for (const file of legacyFiles) {
@@ -301,8 +338,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .order('sort_order', { ascending: true })
           .limit(500);
 
-        (searchFrames || []).forEach((frame: any) => {
+        for (const frame of searchFrames || []) {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const preview = await resolveFramePreview(svc, frame, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
@@ -311,10 +349,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
-            image: typeof frame.image_url === 'string' && frame.image_url ? frame.image_url : payload.image,
-            thumb_url: typeof frame.thumb_url === 'string' && frame.thumb_url ? frame.thumb_url : payload.thumb_url,
+            image: preview.listImage,
+            thumb_url: preview.thumbUrl,
           }));
-        });
+        }
       }
 
       for (const file of legacyFiles) {
