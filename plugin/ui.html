@@ -778,7 +778,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.31</div>
+        <div class="version" id="pluginVersionLabel">v1.32.32</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -1177,7 +1177,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.31</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.32</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1242,7 +1242,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.31</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.32</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1921,6 +1921,9 @@
       function getCurrentFileSummary(model) {
         var pages = Array.isArray(model.pages) ? model.pages : [];
         var selectedPages = Array.isArray(model.selectedPages) ? model.selectedPages : [];
+        var indexablePages = pages.filter(function(p) {
+          return p && p.hasFrames !== false && !p.isIndexPage && !p.isCoverPage;
+        });
         var indexedPages = pages.filter(function(p) { return p && p.status === 'up_to_date'; }).length;
         var dirtyPages = pages.filter(function(p) { return p && p.status === 'needs_update'; }).length;
         var hasIndexedCurrentFile = !!(model.fileKey && currentFileHasIndexedPages(pages));
@@ -1931,7 +1934,7 @@
           return { badge: 'Loading pages', badgeBg: '#e3f2fd', badgeColor: '#1565c0', title: 'This file is linked.', detail: 'Loading pages for this file now.' };
         }
         if (!hasIndexedCurrentFile) {
-          return { badge: 'Not indexed', badgeBg: '#fff3e0', badgeColor: '#8d6e63', title: 'This file is ready for its first index.', detail: selectedPages.length + ' pages selected from ' + pages.length + ' available.' };
+          return { badge: 'Not indexed', badgeBg: '#fff3e0', badgeColor: '#8d6e63', title: 'This file is ready for its first index.', detail: selectedPages.length + ' of ' + indexablePages.length + ' indexable pages selected.' };
         }
         if (dirtyPages > 0) {
           return { badge: 'Needs update', badgeBg: '#fff8e1', badgeColor: '#a66b00', title: 'This file already has an index.', detail: dirtyPages + ' pages need update. ' + selectedPages.length + ' pages currently selected.' };
