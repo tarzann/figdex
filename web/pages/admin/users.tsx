@@ -31,7 +31,7 @@ import { Edit, Delete, Add, ArrowBack, DeleteForever, RestartAlt } from '@mui/ic
 import type { PlanLimits } from '../../lib/plans';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.32.04'; // Added reset indices action while preserving user plan
+const PAGE_VERSION = 'v1.32.05'; // Show plan usage in admin users table
 const PROTECTED_ADMIN_EMAILS = ['ranmor01@gmail.com', 'ranmor@gmail.com'];
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
@@ -41,12 +41,17 @@ interface User {
   full_name: string;
   api_key: string;
   plan?: string;
+  plan_label?: string;
   is_active: boolean;
   is_admin: boolean;
   is_guest?: boolean;
   created_at: string;
   credits_remaining?: number;
   credits_reset_date?: string | null;
+  usage_files?: number;
+  usage_frames?: number;
+  max_projects?: number | null;
+  max_frames_total?: number | null;
 }
 
 type PlanMap = Record<string, PlanLimits>;
@@ -87,6 +92,12 @@ export default function AdminUsers() {
     if (normalized === 'pro') return 'primary';
     if (normalized === 'guest') return 'warning';
     return 'default';
+  };
+
+  const formatLimit = (current?: number, max?: number | null) => {
+    const currentValue = typeof current === 'number' ? current : 0;
+    if (max === null || typeof max === 'undefined') return `${currentValue} / Unlimited`;
+    return `${currentValue} / ${max}`;
   };
 
   useEffect(() => {
@@ -438,7 +449,7 @@ export default function AdminUsers() {
               <TableCell>Status</TableCell>
               <TableCell>Role</TableCell>
               <TableCell>Plan</TableCell>
-              <TableCell>Credits</TableCell>
+              <TableCell>Usage</TableCell>
               <TableCell>Created At</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -464,26 +475,28 @@ export default function AdminUsers() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={derivePlanValue(user.plan, user.is_admin).toUpperCase()}
-                    color={getPlanChipColor(user.plan, user.is_admin)}
-                    size="small"
-                  />
+                  <Stack spacing={0.5}>
+                    <Chip
+                      label={(user.plan_label || derivePlanValue(user.plan, user.is_admin)).toUpperCase()}
+                      color={getPlanChipColor(user.plan, user.is_admin)}
+                      size="small"
+                    />
+                    {!user.is_admin && (
+                      <Typography variant="caption" color="text.secondary">
+                        {user.plan_label || derivePlanValue(user.plan, user.is_admin)}
+                      </Typography>
+                    )}
+                  </Stack>
                 </TableCell>
                 <TableCell>
-                  {user.is_guest ? (
-                    <Typography variant="body2" color="text.secondary">-</Typography>
-                  ) : user.is_admin ? (
-                    <Typography variant="body2" color="text.secondary">Unlimited</Typography>
-                  ) : (
+                  <Stack spacing={0.25}>
                     <Typography variant="body2">
-                      {user.credits_remaining?.toLocaleString() || 0}
-                      {(() => {
-                        const base = user.plan === 'pro' ? 1000 : user.plan === 'team' ? 2000 : 100;
-                        return `/${base}`;
-                      })()}
+                      Files: {formatLimit(user.usage_files, user.max_projects)}
                     </Typography>
-                  )}
+                    <Typography variant="body2" color="text.secondary">
+                      Frames: {formatLimit(user.usage_frames, user.max_frames_total)}
+                    </Typography>
+                  </Stack>
                 </TableCell>
                 <TableCell>
                   {new Date(user.created_at).toLocaleDateString()}

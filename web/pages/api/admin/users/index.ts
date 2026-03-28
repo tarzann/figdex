@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '../../../../lib/admin-middleware';
-import { dbPlanRowToPlanLimits, type DbPlanRow } from '../../../../lib/plans';
+import { dbPlanRowToPlanLimits, resolvePlanId, type DbPlanRow } from '../../../../lib/plans';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -16,6 +16,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     .select('id, email, full_name, api_key, plan, is_active, is_admin, created_at, credits_remaining, credits_reset_date')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ success: false, error: error.message });
+
+  const { data: usageRows, error: usageError } = await supabaseAdmin
+    .from('indexed_owner_usage')
+    .select('user_id, owner_anon_id, total_files, total_frames');
+  if (usageError) return res.status(500).json({ success: false, error: usageError.message });
 
   const { data: guestRows, error: guestError } = await supabaseAdmin
     .from('index_files')
@@ -79,10 +84,54 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const plans = Array.isArray(planRows)
     ? planRows.map((row: any) => dbPlanRowToPlanLimits(row as DbPlanRow))
     : [];
+
+  const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+  const usageByUserId = new Map<string, { usage_files: number; usage_frames: number }>();
+  const usageByAnonId = new Map<string, { usage_files: number; usage_frames: number }>();
+
+  for (const row of usageRows || []) {
+    const usage = {
+      usage_files: typeof (row as any)?.total_files === 'number' ? (row as any).total_files : 0,
+      usage_frames: typeof (row as any)?.total_frames === 'number' ? (row as any).total_frames : 0
+    };
+    if ((row as any)?.user_id) usageByUserId.set((row as any).user_id, usage);
+    if ((row as any)?.owner_anon_id) usageByAnonId.set((row as any).owner_anon_id, usage);
+  }
+
+  const hydratedUsers = users.map((user: any) => {
+    const planId = resolvePlanId(user.plan, user.is_admin);
+    const plan = planMap.get(planId);
+    const usage = usageByUserId.get(user.id) || { usage_files: 0, usage_frames: 0 };
+    return {
+      ...user,
+      plan_label: plan?.label || planId,
+      usage_files: usage.usage_files,
+      usage_frames: usage.usage_frames,
+      max_projects: plan?.maxProjects ?? null,
+      max_frames_total: plan?.maxFramesTotal ?? null
+    };
+  });
+
+  const hydratedGuests = guests.map((guest: any) => {
+    const anonId = String(guest.id).replace(/^guest:/, '');
+    const plan = planMap.get('guest');
+    const usage = usageByAnonId.get(anonId) || {
+      usage_files: guest.projects || 0,
+      usage_frames: 0
+    };
+    return {
+      ...guest,
+      plan_label: plan?.label || 'Guest',
+      usage_files: usage.usage_files,
+      usage_frames: usage.usage_frames,
+      max_projects: plan?.maxProjects ?? null,
+      max_frames_total: plan?.maxFramesTotal ?? null
+    };
+  });
   
   return res.status(200).json({
     success: true,
-    users: [...users, ...guests].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()),
+    users: [...hydratedUsers, ...hydratedGuests].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()),
     plans
   });
 }
