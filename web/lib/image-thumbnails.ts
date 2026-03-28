@@ -14,8 +14,8 @@ export async function createThumbnailDataUrl(
   if (!match) return null;
 
   try {
-    const width = Math.max(120, Math.min(480, Number(options?.width) || 320));
-    const quality = Math.max(40, Math.min(80, Number(options?.quality) || 58));
+    const width = Math.max(180, Math.min(560, Number(options?.width) || 440));
+    const quality = Math.max(55, Math.min(86, Number(options?.quality) || 72));
     const input = Buffer.from(match[1], 'base64');
     const output = await sharp(input)
       .resize({ width, withoutEnlargement: true })
