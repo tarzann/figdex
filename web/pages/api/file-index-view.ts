@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { createThumbnailDataUrl, isDataImageUrl } from '../../lib/image-thumbnails';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
@@ -56,11 +55,7 @@ const buildClientFrame = (payload: any, overrides: Record<string, any>) => ({
   thumb_url: overrides.thumb_url ?? payload?.thumb_url ?? null,
 });
 
-const resolveFramePreview = async (
-  svc: any,
-  frameRow: any,
-  payload: any
-) => {
+const resolveFramePreview = (frameRow: any, payload: any) => {
   const existingThumb = typeof frameRow?.thumb_url === 'string' && frameRow.thumb_url
     ? frameRow.thumb_url
     : (typeof payload?.thumb_url === 'string' && payload.thumb_url ? payload.thumb_url : null);
@@ -72,22 +67,9 @@ const resolveFramePreview = async (
     return { thumbUrl: existingThumb, listImage: existingThumb };
   }
 
-  if (!isDataImageUrl(sourceImage)) {
-    return { thumbUrl: null, listImage: sourceImage };
-  }
-
-  const generatedThumb = await createThumbnailDataUrl(sourceImage);
-  if (generatedThumb && frameRow?.page_id && frameRow?.figma_frame_id) {
-    void svc
-      .from('indexed_frames')
-      .update({ thumb_url: generatedThumb })
-      .eq('page_id', frameRow.page_id)
-      .eq('figma_frame_id', frameRow.figma_frame_id);
-  }
-
   return {
-    thumbUrl: generatedThumb,
-    listImage: generatedThumb || null,
+    thumbUrl: null,
+    listImage: sourceImage || null,
   };
 };
 
@@ -265,7 +247,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         for (const frame of normalizedFrames || []) {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
-          const preview = await resolveFramePreview(svc, { ...frame, page_id: normalizedPage.id }, payload);
+          const preview = resolveFramePreview({ ...frame, page_id: normalizedPage.id }, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
@@ -340,7 +322,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         for (const frame of searchFrames || []) {
           const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
-          const preview = await resolveFramePreview(svc, frame, payload);
+          const preview = resolveFramePreview(frame, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
