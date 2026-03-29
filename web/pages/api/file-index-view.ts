@@ -14,6 +14,35 @@ const dedupeFrames = (frames: any[]) => {
   });
 };
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const tokenizeQuery = (query: string) =>
+  query
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+const matchesLooseQuery = (values: unknown[], query: string) => {
+  const tokens = tokenizeQuery(query);
+  if (tokens.length === 0) return false;
+
+  const haystack = values
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value: any) => String(value).toLowerCase())
+    .join(' ');
+
+  if (!haystack) return false;
+
+  if (tokens.length === 1) {
+    return haystack.includes(tokens[0]);
+  }
+
+  const regex = new RegExp(tokens.map(escapeRegExp).join('.*'), 'i');
+  return regex.test(haystack);
+};
+
 const parseIndexPayload = (raw: any) => {
   if (typeof raw !== 'string') return raw;
   try {
@@ -71,15 +100,14 @@ const resolveFramePreview = (frameRow: any, payload: any) => {
 };
 
 const filterLegacyFrames = (pages: any[], query: string) => {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
+  if (!query.trim()) return [];
   return dedupeFrames(
     pages.flatMap((page: any) => {
       if (!Array.isArray(page?.frames)) return [];
       return page.frames
         .map((frame: any) => normalizeFrame(frame, page))
         .filter((frame: any) => {
-          const haystacks = [
+          return matchesLooseQuery([
             frame?.name,
             frame?.pageName,
             frame?.textContent,
@@ -87,10 +115,7 @@ const filterLegacyFrames = (pages: any[], query: string) => {
             ...(Array.isArray(frame?.searchTokens) ? frame.searchTokens : []),
             ...(Array.isArray(frame?.frameTags) ? frame.frameTags : []),
             ...(Array.isArray(frame?.customTags) ? frame.customTags : []),
-          ]
-            .filter((value) => typeof value === 'string' && value.trim())
-            .map((value: string) => value.toLowerCase());
-          return haystacks.some((value: string) => value.includes(q));
+          ], query);
         });
     })
   );
@@ -294,6 +319,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const frames: any[] = [];
       const seenPageNames = new Map<string, string>();
+      const queryTokens = tokenizeQuery(query);
+      const searchSeed = queryTokens[0] || query.trim();
 
       for (const file of normalizedFiles) {
         const { data: pages } = await svc
@@ -308,17 +335,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (pageIds.length === 0) continue;
 
-        const pattern = `%${query.trim()}%`;
+        const pattern = `%${searchSeed}%`;
         const { data: searchFrames } = await svc
           .from('indexed_frames')
           .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order')
           .in('page_id', pageIds)
           .or(`frame_name.ilike.${pattern},search_text.ilike.${pattern}`)
           .order('sort_order', { ascending: true })
-          .limit(500);
+          .limit(1000);
 
         for (const frame of searchFrames || []) {
           const payload: any = {};
+          if (!matchesLooseQuery([
+            frame.frame_name,
+            frame.search_text,
+            ...(Array.isArray(frame.frame_tags) ? frame.frame_tags : []),
+            ...(Array.isArray(frame.custom_tags) ? frame.custom_tags : []),
+            seenPageNames.get(String(frame.page_id)) || '',
+          ], query)) {
+            continue;
+          }
           const preview = resolveFramePreview(frame, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,

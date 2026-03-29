@@ -1881,22 +1881,28 @@ export default function Home() {
     // If in lobby mode and we have allFramesGalleryThumbs, filter files by matching frames
     if (viewMode === 'lobby' && allFramesGalleryThumbs.length > 0) {
       const q = search.toLowerCase().trim();
-      const includesQuery = (value: unknown) => typeof value === 'string' && value.toLowerCase().includes(q);
+      const queryTokens = q.split(/\s+/).filter(Boolean);
+      const matchesLooseQuery = (values: unknown[]) => {
+        const haystack = values
+          .filter((value) => typeof value === 'string' && String(value).trim())
+          .map((value: any) => String(value).toLowerCase())
+          .join(' ');
+        if (!haystack) return false;
+        if (queryTokens.length <= 1) return haystack.includes(q);
+        const regex = new RegExp(queryTokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
+        return regex.test(haystack);
+      };
       const matchingFrames = allFramesGalleryThumbs.filter(({ frame, thumb }) => {
-        if (includesQuery(frame.name)) return true;
-        if (includesQuery(thumb.label)) return true;
-        if (includesQuery((frame as any).pageName)) return true;
-        if (includesQuery((frame as any).textContent)) return true;
-        if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
-          const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
-          if (tokens.some((token: string) => token.toLowerCase().includes(q))) return true;
-        }
-        if (includesQuery(thumb.texts)) return true;
-        if (frame.customTags && Array.isArray(frame.customTags) &&
-            frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
-        if (frame.frameTags && Array.isArray(frame.frameTags) &&
-            frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
-        return false;
+        return matchesLooseQuery([
+          frame.name,
+          thumb.label,
+          (frame as any).pageName,
+          (frame as any).textContent,
+          thumb.texts,
+          ...(Array.isArray((frame as any).searchTokens) ? (frame as any).searchTokens : []),
+          ...(Array.isArray(frame.customTags) ? frame.customTags : []),
+          ...(Array.isArray(frame.frameTags) ? frame.frameTags : []),
+        ]);
       });
       
       // Get unique fileIds from matching frames
@@ -1974,25 +1980,29 @@ export default function Home() {
       return viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs;
     }
     const q = search.toLowerCase().trim();
+    const queryTokens = q.split(/\s+/).filter(Boolean);
     const sourceThumbs = viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs;
-    const includesQuery = (value: unknown) => typeof value === 'string' && value.toLowerCase().includes(q);
+    const matchesLooseQuery = (values: unknown[]) => {
+      const haystack = values
+        .filter((value) => typeof value === 'string' && String(value).trim())
+        .map((value: any) => String(value).toLowerCase())
+        .join(' ');
+      if (!haystack) return false;
+      if (queryTokens.length <= 1) return haystack.includes(q);
+      const regex = new RegExp(queryTokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
+      return regex.test(haystack);
+    };
     return sourceThumbs.filter(({ frame, thumb }) => {
-      if (includesQuery(frame.name)) return true;
-      if (includesQuery(thumb.label)) return true;
-      if (includesQuery((frame as any).pageName)) return true;
-      if (includesQuery((frame as any).textContent)) return true;
-      if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
-        const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
-        if (tokens.some((token: string) => token.toLowerCase().includes(q))) return true;
-      }
-      if (includesQuery(thumb.texts)) return true;
-      if (frame.customTags && Array.isArray(frame.customTags)) {
-        if (frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
-      }
-      if (frame.frameTags && Array.isArray(frame.frameTags)) {
-        if (frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
-      }
-      return false;
+      return matchesLooseQuery([
+        frame.name,
+        thumb.label,
+        (frame as any).pageName,
+        (frame as any).textContent,
+        thumb.texts,
+        ...(Array.isArray((frame as any).searchTokens) ? (frame as any).searchTokens : []),
+        ...(Array.isArray(frame.customTags) ? frame.customTags : []),
+        ...(Array.isArray(frame.frameTags) ? frame.frameTags : []),
+      ]);
     });
   }, [viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs, search, viewMode]);
 
