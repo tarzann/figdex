@@ -35,11 +35,58 @@ interface IndexFile {
   file_name: string;
   file_size: number;
   created_at: string;
+  frame_count?: number;
   grouped_ids?: string[];
   project_id?: string;
   figma_file_key?: string;
   source?: 'Plugin' | 'API'; // Indicates if index was uploaded via Plugin or API
+  update_count?: number;
 }
+
+const getIndexGroupKey = (index: Partial<IndexFile>) => {
+  const fileKey = typeof index.figma_file_key === 'string' ? index.figma_file_key.trim() : '';
+  const projectId = typeof index.project_id === 'string' ? index.project_id.trim() : '';
+  const fileName = typeof index.file_name === 'string' ? index.file_name.trim().toLowerCase() : '';
+  const userId = typeof index.user_id === 'string' ? index.user_id.trim() : '';
+  return [userId, fileKey || projectId || fileName || String(index.id || '')].join('::');
+};
+
+const collapseAdminIndices = (indices: IndexFile[]) => {
+  const grouped = new Map<string, IndexFile>();
+
+  indices.forEach((index) => {
+    const key = getIndexGroupKey(index);
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        ...index,
+        grouped_ids: index.grouped_ids && index.grouped_ids.length ? index.grouped_ids : [index.id],
+        update_count: 1,
+      });
+      return;
+    }
+
+    const existingTs = new Date(existing.created_at || 0).getTime();
+    const nextTs = new Date(index.created_at || 0).getTime();
+    const latest = nextTs >= existingTs ? index : existing;
+    const older = nextTs >= existingTs ? existing : index;
+
+    grouped.set(key, {
+      ...older,
+      ...latest,
+      grouped_ids: Array.from(new Set([...(existing.grouped_ids || [existing.id]), ...(index.grouped_ids || [index.id])])),
+      frame_count: Math.max(
+        typeof existing.frame_count === 'number' ? existing.frame_count : 0,
+        typeof index.frame_count === 'number' ? index.frame_count : 0
+      ),
+      update_count: (existing.update_count || 1) + 1,
+    });
+  });
+
+  return Array.from(grouped.values()).sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  );
+};
 
 export default function AdminIndicesV2() {
   const router = useRouter();
@@ -134,8 +181,9 @@ export default function AdminIndicesV2() {
       
       if (data.success) {
         console.log(`✅ Loaded ${data.indices?.length || 0} indices`);
-        setIndices(data.indices || []);
-        setFilteredIndices(data.indices || []);
+        const collapsed = collapseAdminIndices(data.indices || []);
+        setIndices(collapsed);
+        setFilteredIndices(collapsed);
         setError(''); // Clear any previous errors
       } else {
         console.error('API returned error:', data);
@@ -459,7 +507,14 @@ export default function AdminIndicesV2() {
             ) : (
               filteredIndices.map((index: any) => (
                 <TableRow key={index.id}>
-                  <TableCell>{index.file_name}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <span>{index.file_name}</span>
+                      {(index.update_count || 1) > 1 && (
+                        <Chip size="small" variant="outlined" label={`${index.update_count} updates`} />
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{index.user_email || '-'}</TableCell>
                   <TableCell>
                     <Chip 
@@ -555,4 +610,3 @@ export default function AdminIndicesV2() {
     </Container>
   );
 }
-
