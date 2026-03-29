@@ -34,19 +34,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true);
 
-    // Get total indices count
-    const { count: totalIndices, error: indicesError } = await supabase
-      .from('index_files')
+    // Count logical indices from the normalized store.
+    // Legacy index_files can contain multiple rows for updates/chunks and should not drive dashboard totals.
+    let totalIndices = 0;
+    const { count: normalizedTotalIndices } = await supabase
+      .from('indexed_files')
       .select('*', { count: 'exact', head: true });
+    if (typeof normalizedTotalIndices === 'number') {
+      totalIndices = normalizedTotalIndices;
+    } else {
+      const { data: legacyIndices } = await supabase
+        .from('index_files')
+        .select('user_id, figma_file_key, project_id, file_name');
+      const logicalKeys = new Set(
+        (legacyIndices || []).map((row: any) => {
+          const fileKey = typeof row?.figma_file_key === 'string' ? row.figma_file_key.trim() : '';
+          const projectId = typeof row?.project_id === 'string' ? row.project_id.trim() : '';
+          const fileName = typeof row?.file_name === 'string' ? row.file_name.trim().toLowerCase() : '';
+          const userId = typeof row?.user_id === 'string' ? row.user_id.trim() : '';
+          return [userId, fileKey || projectId || fileName].join('::');
+        }).filter(Boolean)
+      );
+      totalIndices = logicalKeys.size;
+    }
 
     // Get indices uploaded in last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const { count: recentIndices, error: recentError } = await supabase
-      .from('index_files')
+    const { count: recentIndices } = await supabase
+      .from('indexed_files')
       .select('*', { count: 'exact', head: true })
-      .gte('uploaded_at', thirtyDaysAgo.toISOString());
+      .gte('last_indexed_at', thirtyDaysAgo.toISOString());
 
     // Get users created in last 30 days
     const { count: recentUsers, error: recentUsersError } = await supabase
@@ -102,16 +121,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .gte('created_at', weekStart.toISOString());
 
     // Get new indices today
-    const { count: newIndicesToday, error: newIndicesTodayError } = await supabase
-      .from('index_files')
+    const { count: newIndicesToday } = await supabase
+      .from('indexed_files')
       .select('*', { count: 'exact', head: true })
-      .gte('uploaded_at', today.toISOString());
+      .gte('last_indexed_at', today.toISOString());
 
     // Get new indices this week
-    const { count: newIndicesThisWeek, error: newIndicesWeekError } = await supabase
-      .from('index_files')
+    const { count: newIndicesThisWeek } = await supabase
+      .from('indexed_files')
       .select('*', { count: 'exact', head: true })
-      .gte('uploaded_at', weekStart.toISOString());
+      .gte('last_indexed_at', weekStart.toISOString());
 
     return res.status(200).json({
       success: true,
@@ -142,4 +161,3 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default handler;
-
