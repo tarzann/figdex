@@ -1881,22 +1881,21 @@ export default function Home() {
     // If in lobby mode and we have allFramesGalleryThumbs, filter files by matching frames
     if (viewMode === 'lobby' && allFramesGalleryThumbs.length > 0) {
       const q = search.toLowerCase().trim();
-      // Find frames that match the search
-      const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      const includesQuery = (value: unknown) => typeof value === 'string' && value.toLowerCase().includes(q);
       const matchingFrames = allFramesGalleryThumbs.filter(({ frame, thumb }) => {
-        if (frame.name && wordBoundaryRegex.test(frame.name)) return true;
-        if (thumb.label && wordBoundaryRegex.test(thumb.label)) return true;
-        if ((frame as any).pageName && String((frame as any).pageName).toLowerCase().includes(q)) return true;
-        if ((frame as any).textContent && wordBoundaryRegex.test(String((frame as any).textContent))) return true;
+        if (includesQuery(frame.name)) return true;
+        if (includesQuery(thumb.label)) return true;
+        if (includesQuery((frame as any).pageName)) return true;
+        if (includesQuery((frame as any).textContent)) return true;
         if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
           const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
-          if (tokens.some((token: string) => token.toLowerCase() === q || wordBoundaryRegex.test(token))) return true;
+          if (tokens.some((token: string) => token.toLowerCase().includes(q))) return true;
         }
-        if (thumb.texts && wordBoundaryRegex.test(thumb.texts)) return true;
+        if (includesQuery(thumb.texts)) return true;
         if (frame.customTags && Array.isArray(frame.customTags) &&
-            frame.customTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) return true;
+            frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
         if (frame.frameTags && Array.isArray(frame.frameTags) &&
-            frame.frameTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) return true;
+            frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
         return false;
       });
       
@@ -1976,58 +1975,22 @@ export default function Home() {
     }
     const q = search.toLowerCase().trim();
     const sourceThumbs = viewMode === 'lobby' ? allFramesGalleryThumbs : allGalleryThumbs;
-    const wordBoundaryRegex = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    const includesQuery = (value: unknown) => typeof value === 'string' && value.toLowerCase().includes(q);
     return sourceThumbs.filter(({ frame, thumb }) => {
-      // Search in frame name
-      if (frame.name && wordBoundaryRegex.test(frame.name)) {
-        console.log(`✅ [Search] Match in name: "${frame.name}"`);
-        return true;
-      }
-      // Search in label
-      if (thumb.label && wordBoundaryRegex.test(thumb.label)) {
-        console.log(`✅ [Search] Match in label: "${thumb.label}"`);
-        return true;
-      }
-      // Search in pageName (e.g. "novapay" contains "nova") - use includes for compound names
-      if ((frame as any).pageName && String((frame as any).pageName).toLowerCase().includes(q)) {
-        console.log(`✅ [Search] Match in pageName: "${(frame as any).pageName}"`);
-        return true;
-      }
-      
-      // Search in textContent - word boundary only
-      if ((frame as any).textContent && wordBoundaryRegex.test(String((frame as any).textContent || ''))) {
-        console.log(`✅ [Search] Match in textContent: "${frame.name}"`);
-        return true;
-      }
-      
-      // Search in searchTokens - exact or word-boundary (avoid "innovation" matching "nova")
+      if (includesQuery(frame.name)) return true;
+      if (includesQuery(thumb.label)) return true;
+      if (includesQuery((frame as any).pageName)) return true;
+      if (includesQuery((frame as any).textContent)) return true;
       if ((frame as any).searchTokens && Array.isArray((frame as any).searchTokens)) {
         const tokens = (frame as any).searchTokens.map((t: string) => String(t || '').trim()).filter(Boolean);
-        const tokenMatch = tokens.find((token: string) => token.toLowerCase() === q || wordBoundaryRegex.test(token));
-        if (tokenMatch) {
-          console.log(`✅ [Search] Match in searchTokens: "${frame.name}"`);
-          return true;
-        }
+        if (tokens.some((token: string) => token.toLowerCase().includes(q))) return true;
       }
-      
-      // Search in texts (fallback) - word boundary only
-      if (thumb.texts && wordBoundaryRegex.test(thumb.texts)) {
-        console.log(`✅ [Search] Match in texts: "${frame.name}"`);
-        return true;
-      }
-      
-      // Search in custom tags - exact or word-boundary
+      if (includesQuery(thumb.texts)) return true;
       if (frame.customTags && Array.isArray(frame.customTags)) {
-        if (frame.customTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) {
-          console.log(`✅ [Search] Match in customTags: "${frame.name}"`);
-          return true;
-        }
+        if (frame.customTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
       }
       if (frame.frameTags && Array.isArray(frame.frameTags)) {
-        if (frame.frameTags.some((tag: string) => tag.toLowerCase() === q || wordBoundaryRegex.test(tag))) {
-          console.log(`✅ [Search] Match in frameTags: "${frame.name}"`);
-          return true;
-        }
+        if (frame.frameTags.some((tag: string) => tag.toLowerCase().includes(q))) return true;
       }
       return false;
     });
