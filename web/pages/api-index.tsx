@@ -131,6 +131,8 @@ interface IndexFile {
   _isChunked?: boolean;
   _chunks?: any[];
   figma_file_key?: string;
+  project_id?: string;
+  _updateCount?: number;
 }
 
 // Version tracking - Update this number for each fix/change
@@ -146,6 +148,48 @@ const imageQualityMap: Record<'low' | 'med' | 'hi', { label: string; scale: numb
 function maskTokenSnippet(token: string): string {
   if (!token || token.length < 8) return '••••';
   return token.slice(0, 4) + '••••' + token.slice(-4);
+}
+
+function getIndexManagementKey(file: Partial<IndexFile>): string {
+  const fileKey = typeof file.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+  const projectId = typeof file.project_id === 'string' ? file.project_id.trim() : '';
+  const fileName = typeof file.file_name === 'string' ? file.file_name.trim().toLowerCase() : '';
+  return fileKey || projectId || fileName || String(file.id || '');
+}
+
+function collapseIndexManagementFiles(files: IndexFile[]): IndexFile[] {
+  const grouped = new Map<string, IndexFile>();
+
+  files.forEach((file) => {
+    const key = getIndexManagementKey(file);
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        ...file,
+        _updateCount: 1,
+      });
+      return;
+    }
+
+    const existingTs = new Date(existing.uploaded_at || 0).getTime();
+    const nextTs = new Date(file.uploaded_at || 0).getTime();
+    const latest = nextTs >= existingTs ? file : existing;
+    const base = nextTs >= existingTs ? existing : file;
+
+    grouped.set(key, {
+      ...base,
+      ...latest,
+      frame_count: Math.max(
+        typeof existing.frame_count === 'number' ? existing.frame_count : 0,
+        typeof file.frame_count === 'number' ? file.frame_count : 0
+      ),
+      _updateCount: (existing._updateCount || 1) + 1,
+    });
+  });
+
+  return Array.from(grouped.values()).sort(
+    (a, b) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime()
+  );
 }
 
 export default function ApiIndexPage() {
@@ -409,7 +453,7 @@ export default function ApiIndexPage() {
       }
 
       if (data.success && Array.isArray(data.data)) {
-        setIndexFiles(data.data);
+        setIndexFiles(collapseIndexManagementFiles(data.data));
       } else {
         setIndexFiles([]);
       }
@@ -3044,6 +3088,14 @@ export default function ApiIndexPage() {
                                     variant={file.source === 'API' ? 'filled' : 'outlined'}
                                     sx={{ flexShrink: 0 }}
                                   />
+                                  {(file._updateCount || 1) > 1 && (
+                                    <Chip
+                                      label={`${file._updateCount} updates`}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ flexShrink: 0 }}
+                                    />
+                                  )}
                                 </Stack>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                                   <Typography 

@@ -384,6 +384,26 @@ export default function AdminUsers() {
       const response = await fetch(`/api/admin/users/${userId}/reset-indices`, { method: 'POST', headers });
       const data = await response.json();
       if (data.success) {
+        setUsers((prev) => {
+          if (isGuest) {
+            return prev.filter((user) => user.id !== userId);
+          }
+          return prev.map((user) => {
+            if (user.id !== userId) return user;
+            return {
+              ...user,
+              usage_files: 0,
+              usage_frames: 0,
+            };
+          });
+        });
+        if (selectedUser?.id === userId && !isGuest) {
+          setSelectedUser({
+            ...selectedUser,
+            usage_files: 0,
+            usage_frames: 0,
+          });
+        }
         await loadUsers();
         alert(isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully');
       } else {
