@@ -5,7 +5,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { CREDIT_COSTS, CREDIT_PACKAGES } from '../lib/plans';
+import type { GetServerSideProps } from 'next';
+import { createClient } from '@supabase/supabase-js';
+import { CREDIT_PACKAGES, dbPlanRowToPlanLimits, type DbPlanRow, type PlanLimits } from '../lib/plans';
 import { usePaddleCheckout } from '../components/PaddleCheckout';
 import {
   AccountCircle as AccountCircleIcon,
@@ -19,7 +21,24 @@ import {
   FolderOpen as FolderOpenIcon
 } from '@mui/icons-material';
 
-export default function Pricing() {
+type PublicPlanConfig = {
+  planId: 'free' | 'pro' | 'team';
+  title: string;
+  eyebrow: string;
+  summary: string;
+  price: string;
+  suffix: string;
+  emphasized: boolean;
+  isSubscribable: boolean;
+  enabled: boolean;
+  limits: PlanLimits;
+};
+
+interface PricingProps {
+  publicPlans: PublicPlanConfig[];
+}
+
+export default function Pricing({ publicPlans }: PricingProps) {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
@@ -151,47 +170,38 @@ export default function Pricing() {
     }
   };
 
-  const planCards = [
-    {
-      id: 'free',
-      title: 'Free',
-      price: '$0',
-      suffix: '/mo',
-      eyebrow: 'Best for exploring the product',
-      summary: 'Start indexing your first file and get a clean feel for the workflow.',
-      highlights: ['1 Figma file', 'Up to 300 frames', '100 credits / month', 'Basic search', 'Private access only'],
-      creditNotes: ['1 re-index = 50 credits'],
-      cta: 'Index your first file',
-      variant: 'outlined' as const,
-      emphasized: false,
-    },
-    {
-      id: 'pro',
-      title: 'Pro',
-      price: '$29',
-      suffix: '/mo',
-      eyebrow: 'Best for individual product designers',
-      summary: 'Use FigDex on real projects with enough quota, stronger search, and better day-to-day workflow.',
-      highlights: ['10 files', '5,000 frames', '1,000 credits / month', 'Advanced search & filters', 'Private galleries', 'Standard processing priority'],
-      creditNotes: ['1 index = 100 credits', '+1 file = 200 credits/month', '+1,000 frames = 150 credits/month'],
-      cta: isLoggedIn ? 'Subscribe to Pro' : 'Start Pro trial',
-      variant: 'contained' as const,
-      emphasized: true,
-    },
-    {
-      id: 'team',
-      title: 'Team',
-      price: '$49',
-      suffix: '/mo',
-      eyebrow: 'Best for shared review and handoff',
-      summary: 'Give teams a shared gallery, larger quotas, and faster processing for collaborative work.',
-      highlights: ['20 files', '15,000 frames', '2,000 credits / month', 'Team sharing', 'Public galleries', 'Faster job queue', 'Team-level visibility'],
-      creditNotes: ['1 index = 100 credits', '+1 file = 150 credits/month', '+1,000 frames = 120 credits/month'],
-      cta: isLoggedIn ? 'Subscribe to Team' : 'Choose Team',
-      variant: 'outlined' as const,
-      emphasized: false,
-    }
-  ];
+  const planCards = publicPlans.map((plan) => {
+    const highlights = [
+      plan.limits.maxProjects == null ? 'Unlimited files' : `${plan.limits.maxProjects.toLocaleString()} files`,
+      plan.limits.maxFramesTotal == null ? 'Unlimited frames' : `${plan.limits.maxFramesTotal.toLocaleString()} frames`,
+      plan.limits.creditsPerMonth == null ? 'Custom monthly credits' : `${plan.limits.creditsPerMonth.toLocaleString()} credits / month`,
+      plan.planId === 'free' ? 'Basic search' : 'Advanced search & filters',
+      plan.planId === 'team' ? 'Public galleries and team sharing' : 'Private galleries',
+      plan.planId === 'team' ? 'Faster processing queue' : 'Standard processing priority',
+    ];
+
+    const creditNotes =
+      plan.planId === 'free'
+        ? ['1 re-index = 50 credits']
+        : plan.planId === 'team'
+          ? ['1 index = 100 credits', '+1 file = 150 credits/month', '+1,000 frames = 120 credits/month']
+          : ['1 index = 100 credits', '+1 file = 200 credits/month', '+1,000 frames = 150 credits/month'];
+
+    return {
+      ...plan,
+      highlights,
+      creditNotes,
+      cta:
+        plan.planId === 'free'
+          ? 'Index your first file'
+          : isLoggedIn
+            ? `Subscribe to ${plan.title}`
+            : plan.planId === 'pro'
+              ? 'Start Pro trial'
+              : `Choose ${plan.title}`,
+      variant: plan.emphasized ? ('contained' as const) : ('outlined' as const),
+    };
+  });
   
   return (
     <Box
@@ -366,7 +376,7 @@ export default function Pricing() {
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 4, mb: 6 }}>
           {planCards.map((plan) => (
-            <Box key={plan.id}>
+            <Box key={plan.planId}>
               <Card
                 sx={{
                   borderRadius: 4,
@@ -389,7 +399,7 @@ export default function Pricing() {
                   <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em' }}>
                     {plan.eyebrow}
                   </Typography>
-                  <Typography variant="h5" fontWeight={700}>{plan.title}</Typography>
+                    <Typography variant="h5" fontWeight={700}>{plan.title}</Typography>
                   <Typography variant="h3" fontWeight={800} sx={{ mt: 1 }}>
                     {plan.price} <Typography component="span" variant="subtitle2" color="text.secondary">{plan.suffix}</Typography>
                   </Typography>
@@ -414,7 +424,7 @@ export default function Pricing() {
                       </Typography>
                     ))}
                   </Box>
-                  {plan.id === 'free' ? (
+                  {plan.planId === 'free' ? (
                     <Link href="/register" passHref>
                       <Button variant="outlined" fullWidth sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}>
                         {plan.cta}
@@ -426,7 +436,7 @@ export default function Pricing() {
                       color="primary"
                       fullWidth
                       sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}
-                      onClick={() => handleSubscribe(plan.id as 'pro' | 'team')}
+                      onClick={() => handleSubscribe(plan.planId as 'pro' | 'team')}
                       disabled={!paddleReady || paddleInitializing}
                     >
                       {paddleInitializing ? (
@@ -447,7 +457,7 @@ export default function Pricing() {
                       </Button>
                     </Link>
                   )}
-                  {plan.id === 'pro' && (
+                  {plan.planId === 'pro' && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
                       14-day free trial included
                     </Typography>
@@ -533,3 +543,151 @@ export default function Pricing() {
   );
 }
 
+export const getServerSideProps: GetServerSideProps<PricingProps> = async () => {
+  const fallbackPlans: PublicPlanConfig[] = [
+    {
+      planId: 'free',
+      title: 'Free',
+      eyebrow: 'Best for exploring the product',
+      summary: 'Start indexing your first file and get a clean feel for the workflow.',
+      price: '$0',
+      suffix: '/mo',
+      emphasized: false,
+      isSubscribable: false,
+      enabled: true,
+      limits: dbPlanRowToPlanLimits({
+        plan_id: 'free',
+        label: 'Free',
+        max_projects: 2,
+        max_frames_total: 500,
+        credits_per_month: 100,
+        max_uploads_per_day: null,
+        max_uploads_per_month: null,
+        max_frames_per_month: 500,
+        max_index_size_bytes: null,
+        retention_days: 30,
+        max_indexes_per_day: null
+      } as DbPlanRow, 'free')
+    },
+    {
+      planId: 'pro',
+      title: 'Pro',
+      eyebrow: 'Best for individual product designers',
+      summary: 'Use FigDex on real projects with enough quota, stronger search, and better day-to-day workflow.',
+      price: '$29',
+      suffix: '/mo',
+      emphasized: true,
+      isSubscribable: true,
+      enabled: true,
+      limits: dbPlanRowToPlanLimits({
+        plan_id: 'pro',
+        label: 'Pro',
+        max_projects: 10,
+        max_frames_total: 5000,
+        credits_per_month: 1000,
+        max_uploads_per_day: null,
+        max_uploads_per_month: null,
+        max_frames_per_month: null,
+        max_index_size_bytes: null,
+        retention_days: 180,
+        max_indexes_per_day: 20
+      } as DbPlanRow, 'pro')
+    },
+    {
+      planId: 'team',
+      title: 'Team',
+      eyebrow: 'Best for shared review and handoff',
+      summary: 'Give teams a shared gallery, larger quotas, and faster processing for collaborative work.',
+      price: '$49',
+      suffix: '/mo',
+      emphasized: false,
+      isSubscribable: true,
+      enabled: true,
+      limits: dbPlanRowToPlanLimits({
+        plan_id: 'team',
+        label: 'Team',
+        max_projects: 20,
+        max_frames_total: 15000,
+        credits_per_month: 2000,
+        max_uploads_per_day: null,
+        max_uploads_per_month: null,
+        max_frames_per_month: null,
+        max_index_size_bytes: null,
+        retention_days: 365,
+        max_indexes_per_day: 50
+      } as DbPlanRow, 'team')
+    }
+  ];
+
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceUrl || !serviceKey) {
+    return { props: { publicPlans: fallbackPlans } };
+  }
+
+  try {
+    const supabaseAdmin = createClient(serviceUrl, serviceKey);
+    const { data, error } = await supabaseAdmin
+      .from('plans')
+      .select('plan_id,label,max_projects,max_frames_total,credits_per_month,max_uploads_per_day,max_uploads_per_month,max_frames_per_month,max_index_size_bytes,retention_days,max_indexes_per_day,is_subscribable,enabled,sort_order')
+      .in('plan_id', ['free', 'pro', 'team'])
+      .eq('enabled', true)
+      .order('sort_order', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return { props: { publicPlans: fallbackPlans } };
+    }
+
+    const marketingMeta: Record<'free' | 'pro' | 'team', Pick<PublicPlanConfig, 'price' | 'suffix' | 'eyebrow' | 'summary' | 'emphasized'>> = {
+      free: {
+        price: '$0',
+        suffix: '/mo',
+        eyebrow: 'Best for exploring the product',
+        summary: 'Start indexing your first file and get a clean feel for the workflow.',
+        emphasized: false,
+      },
+      pro: {
+        price: '$29',
+        suffix: '/mo',
+        eyebrow: 'Best for individual product designers',
+        summary: 'Use FigDex on real projects with enough quota, stronger search, and better day-to-day workflow.',
+        emphasized: true,
+      },
+      team: {
+        price: '$49',
+        suffix: '/mo',
+        eyebrow: 'Best for shared review and handoff',
+        summary: 'Give teams a shared gallery, larger quotas, and faster processing for collaborative work.',
+        emphasized: false,
+      }
+    };
+
+    const publicPlans = (data as Array<DbPlanRow & { is_subscribable?: boolean | null; enabled?: boolean | null; sort_order?: number | null }>)
+      .map((row) => row.plan_id)
+      .filter((planId): planId is 'free' | 'pro' | 'team' => planId === 'free' || planId === 'pro' || planId === 'team')
+      .map((planId) => {
+        const row = data.find((item: any) => item.plan_id === planId) as any;
+        return {
+          planId,
+          title: row.label || planId.charAt(0).toUpperCase() + planId.slice(1),
+          eyebrow: marketingMeta[planId].eyebrow,
+          summary: marketingMeta[planId].summary,
+          price: marketingMeta[planId].price,
+          suffix: marketingMeta[planId].suffix,
+          emphasized: marketingMeta[planId].emphasized,
+          isSubscribable: !!row.is_subscribable,
+          enabled: !!row.enabled,
+          limits: dbPlanRowToPlanLimits(row as DbPlanRow, planId)
+        };
+      });
+
+    return {
+      props: {
+        publicPlans: publicPlans.length > 0 ? publicPlans : fallbackPlans
+      }
+    };
+  } catch {
+    return { props: { publicPlans: fallbackPlans } };
+  }
+};
