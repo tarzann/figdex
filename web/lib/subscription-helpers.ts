@@ -23,6 +23,8 @@ export interface CanCreateIndexResult {
 // Temporarily disable daily index limits until they are counted per logical file.
 const DAILY_INDEX_LIMITS_ENABLED = false;
 const REINDEX_COOLDOWN_MS = 3 * 60 * 1000;
+const RAPID_REINDEX_THRESHOLD = 5;
+const SESSION_COLLAPSE_MS = 30 * 1000;
 
 /**
  * Get user's effective limits (base plan + addons)
@@ -146,7 +148,7 @@ export async function checkFileIndexCooldown(
     return { allowed: true };
   }
 
-  let lastIndexedAt: string | null = null;
+  const timestamps: number[] = [];
 
   const { data: normalizedRow } = await supabaseAdmin
     .from('indexed_files')
@@ -158,34 +160,78 @@ export async function checkFileIndexCooldown(
     .maybeSingle();
 
   if (normalizedRow?.updated_at) {
-    lastIndexedAt = normalizedRow.updated_at;
-  } else {
-    const { data: legacyRow } = await supabaseAdmin
-      .from('index_files')
-      .select('uploaded_at')
-      .eq('user_id', userId)
-      .eq('figma_file_key', normalizedFileKey)
-      .order('uploaded_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (legacyRow?.uploaded_at) {
-      lastIndexedAt = legacyRow.uploaded_at;
+    const normalizedMs = new Date(normalizedRow.updated_at).getTime();
+    if (!Number.isNaN(normalizedMs)) {
+      timestamps.push(normalizedMs);
     }
   }
 
-  if (!lastIndexedAt) {
+  const { data: jobRows } = await supabaseAdmin
+    .from('index_jobs')
+    .select('created_at')
+    .eq('user_id', userId)
+    .eq('file_key', normalizedFileKey)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (Array.isArray(jobRows)) {
+    for (const row of jobRows) {
+      const valueMs = new Date((row as any)?.created_at || '').getTime();
+      if (!Number.isNaN(valueMs)) {
+        timestamps.push(valueMs);
+      }
+    }
+  }
+
+  const { data: legacyRows } = await supabaseAdmin
+    .from('index_files')
+    .select('uploaded_at')
+    .eq('user_id', userId)
+    .eq('figma_file_key', normalizedFileKey)
+    .order('uploaded_at', { ascending: false })
+    .limit(50);
+
+  if (Array.isArray(legacyRows)) {
+    for (const row of legacyRows) {
+      const valueMs = new Date((row as any)?.uploaded_at || '').getTime();
+      if (!Number.isNaN(valueMs)) {
+        timestamps.push(valueMs);
+      }
+    }
+  }
+
+  const sessionTimestamps = Array.from(new Set(timestamps))
+    .sort((a, b) => b - a)
+    .reduce((acc: number[], value) => {
+      if (acc.length === 0) {
+        acc.push(value);
+        return acc;
+      }
+      if (Math.abs(acc[acc.length - 1] - value) > SESSION_COLLAPSE_MS) {
+        acc.push(value);
+      }
+      return acc;
+    }, []);
+
+  if (sessionTimestamps.length === 0) {
     return { allowed: true };
   }
 
-  const lastIndexMs = new Date(lastIndexedAt).getTime();
-  if (Number.isNaN(lastIndexMs)) {
-    return { allowed: true };
+  const lastIndexMs = sessionTimestamps[0];
+  let consecutiveRapidIndexes = 1;
+  for (let i = 1; i < sessionTimestamps.length; i += 1) {
+    const previousMs = sessionTimestamps[i - 1];
+    const currentMs = sessionTimestamps[i];
+    if ((previousMs - currentMs) <= REINDEX_COOLDOWN_MS) {
+      consecutiveRapidIndexes += 1;
+      continue;
+    }
+    break;
   }
 
   const nowMs = Date.now();
   const remainingMs = REINDEX_COOLDOWN_MS - (nowMs - lastIndexMs);
-  if (remainingMs <= 0) {
+  if (remainingMs <= 0 || consecutiveRapidIndexes < RAPID_REINDEX_THRESHOLD) {
     return { allowed: true };
   }
 
@@ -193,8 +239,8 @@ export async function checkFileIndexCooldown(
   const remainingSeconds = Math.ceil(remainingMs / 1000);
   const remainingMinutes = Math.ceil(remainingSeconds / 60);
   const reason = remainingSeconds < 60
-    ? `This file was indexed a few moments ago. Please wait ${remainingSeconds} seconds before indexing it again.`
-    : `This file was indexed recently. Please wait about ${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'} before indexing it again.`;
+    ? `You have indexed this file ${consecutiveRapidIndexes} times in a row. Please wait ${remainingSeconds} seconds before indexing it again.`
+    : `You have indexed this file ${consecutiveRapidIndexes} times in a row. Please wait about ${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'} before indexing it again.`;
 
   return {
     allowed: false,
