@@ -2279,6 +2279,8 @@ export default function Home() {
           ? `${visibleThumbs.length.toLocaleString()} search results`
           : `${selectedFilePageFrameCount.toLocaleString()} frames in selected page`;
 
+  const selectedPageInfo = filePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
+
   return (
     <Box sx={{ direction: 'ltr', bgcolor: '#f7f9fa', minHeight: '100vh' }}>
       {/* Filter Sidebar */}
@@ -2965,51 +2967,98 @@ export default function Home() {
         px: 4
       }}>
         {viewMode === 'file' && selectedFile && filePages.length > 0 && (
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5, gap: 2, flexWrap: 'wrap' }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {selectedFile.fileName}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {fileModeSearchActive ? `Search results across ${filePages.length} pages` : `${filePages.length} pages`}
-              </Typography>
-            </Box>
-            {filePageLoading && !fileModeSearchActive && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <CircularProgress size={16} />
-                <Typography variant="caption" color="text.secondary">
-                  Loading page...
-                </Typography>
+          <Box sx={{ mb: 3, p: 2.5, bgcolor: '#fff', borderRadius: 3, border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(16,24,40,0.04)' }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', lg: '320px 1fr' },
+                gap: 2.5,
+                alignItems: 'start'
+              }}
+            >
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box>
+                  <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em' }}>
+                    File View
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                    {selectedFile.fileName}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
+                    {fileModeSearchActive
+                      ? `Showing search results across ${filePages.length} pages`
+                      : `Browse pages inside this file and load only what you need`}
+                  </Typography>
+                </Box>
+
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip size="small" label={`${filePages.length} pages`} sx={{ bgcolor: '#f8fafc', color: '#344054' }} />
+                  {!fileModeSearchActive && selectedPageInfo && (
+                    <Chip
+                      size="small"
+                      label={`${selectedPageInfo.frameCount.toLocaleString()} frames in ${selectedPageInfo.name}`}
+                      sx={{ bgcolor: '#eef4ff', color: '#3538cd' }}
+                    />
+                  )}
+                  {fileModeSearchActive && (
+                    <Chip
+                      size="small"
+                      label={`${visibleThumbs.length.toLocaleString()} search results`}
+                      sx={{ bgcolor: '#eff8ff', color: '#175cd3' }}
+                    />
+                  )}
+                </Stack>
+
+                {filePageLoading && !fileModeSearchActive && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="text.secondary">
+                      Loading page...
+                    </Typography>
+                  </Box>
+                )}
+                {fileSearchLoading && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="text.secondary">
+                      Searching file...
+                    </Typography>
+                  </Box>
+                )}
               </Box>
-            )}
-            {fileSearchLoading && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <CircularProgress size={16} />
-                <Typography variant="caption" color="text.secondary">
-                  Searching file...
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.25 }}>
+                  Pages
                 </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {filePages.map((pageInfo) => {
+                    const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+                    return (
+                      <Chip
+                        key={pageInfo.id}
+                        label={`${pageInfo.name} (${pageInfo.frameCount})`}
+                        color={isSelected ? 'primary' : 'default'}
+                        variant={isSelected ? 'filled' : 'outlined'}
+                        disabled={filePageLoading}
+                        onClick={() => {
+                          setSearch('');
+                          setPage(1);
+                          setFileModeSearchActive(false);
+                          setSelectedFilePageId(pageInfo.id);
+                          setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
+                        }}
+                        sx={{
+                          borderRadius: '999px',
+                          '& .MuiChip-label': {
+                            px: 1.5,
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </Box>
               </Box>
-            )}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {filePages.map((pageInfo) => {
-                const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
-                return (
-                  <Chip
-                    key={pageInfo.id}
-                    label={`${pageInfo.name} (${pageInfo.frameCount})`}
-                    color={isSelected ? 'primary' : 'default'}
-                    variant={isSelected ? 'filled' : 'outlined'}
-                    disabled={filePageLoading}
-                    onClick={() => {
-                      setSearch('');
-                      setPage(1);
-                      setFileModeSearchActive(false);
-                      setSelectedFilePageId(pageInfo.id);
-                      setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
-                    }}
-                  />
-                );
-              })}
             </Box>
           </Box>
         )}
