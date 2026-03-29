@@ -170,6 +170,10 @@ export default function Pricing({ publicPlans }: PricingProps) {
   };
 
   const planCards = publicPlans.map((plan) => {
+    const currentPlanId = user?.plan ? String(user.plan).toLowerCase() : null;
+    const isCurrentPlan =
+      (currentPlanId === 'unlimited' && plan.planId === 'team') ||
+      currentPlanId === plan.planId;
     const highlights = [
       plan.limits.maxProjects == null ? 'Unlimited files' : `${plan.limits.maxProjects.toLocaleString()} files`,
       plan.limits.maxFramesTotal == null ? 'Unlimited frames' : `${plan.limits.maxFramesTotal.toLocaleString()} frames`,
@@ -180,9 +184,12 @@ export default function Pricing({ publicPlans }: PricingProps) {
 
     return {
       ...plan,
+      isCurrentPlan,
       highlights,
       cta:
-        plan.planId === 'free'
+        isCurrentPlan
+          ? 'Current plan'
+          : plan.planId === 'free'
           ? 'Index your first file'
           : isLoggedIn
             ? `Subscribe to ${plan.title}`
@@ -406,7 +413,12 @@ export default function Pricing({ publicPlans }: PricingProps) {
                   </List>
                   {plan.planId === 'free' ? (
                     <Link href="/register" passHref>
-                      <Button variant="outlined" fullWidth sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        disabled={plan.isCurrentPlan}
+                        sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}
+                      >
                         {plan.cta}
                       </Button>
                     </Link>
@@ -417,9 +429,11 @@ export default function Pricing({ publicPlans }: PricingProps) {
                       fullWidth
                       sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}
                       onClick={() => handleSubscribe(plan.planId as 'pro' | 'team')}
-                      disabled={!paddleReady || paddleInitializing}
+                      disabled={plan.isCurrentPlan || !paddleReady || paddleInitializing}
                     >
-                      {paddleInitializing ? (
+                      {plan.isCurrentPlan ? (
+                        plan.cta
+                      ) : paddleInitializing ? (
                         <>
                           <CircularProgress size={20} sx={{ mr: 1 }} />
                           Initializing...
