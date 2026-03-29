@@ -610,6 +610,7 @@ export default function Home() {
   const [selectedSizeTags, setSelectedSizeTags] = useState<string[]>([]);
   const [namingTagsFilter, setNamingTagsFilter] = useState<string>('');
   const [sizeTagsFilter, setSizeTagsFilter] = useState<string>('');
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -2282,6 +2283,7 @@ export default function Home() {
           : `${selectedFilePageFrameCount.toLocaleString()} frames in selected page`;
 
   const selectedPageInfo = filePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
+  const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
 
   return (
     <Box sx={{ direction: 'ltr', bgcolor: '#f7f9fa', minHeight: '100vh' }}>
@@ -2483,258 +2485,144 @@ export default function Home() {
 
           <Divider sx={{ my: 2 }} />
 
-          {/* Tag Filters - AFTER */}
+          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1a1a1a' }}>
+                  More filters
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Refine by size and custom tags when needed
+                </Typography>
+              </Box>
+              <Button
+                size="small"
+                onClick={() => setMoreFiltersOpen((prev) => !prev)}
+                endIcon={moreFiltersOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                {activeAdvancedFiltersCount > 0 ? `${activeAdvancedFiltersCount} active` : 'Show'}
+              </Button>
+            </Box>
 
-          {/* Frame Types Filter - removed per request */}
-
-          {/* Colors Filter - removed per request */}
-
-          {/* Aspect Ratio Filter - removed per request */}
-          {/* <Box mb={3}>
-            <ListItemButton 
-              onClick={() => toggleFilterExpansion('aspectRatio')}
-              sx={{ px: 0, py: 1 }}
-            >
-              <AspectRatioIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                Aspect Ratios ({selectedAspectRatios.length})
-              </Typography>
-              {filtersExpanded.aspectRatio ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </ListItemButton>
-            <Collapse in={filtersExpanded.aspectRatio}>
-              <FormGroup sx={{ ml: 4 }}>
-                {getFilterOptions.aspectRatios.map((ratio) => {
-                  // Get appropriate icon for each ratio
-                  const getAspectIcon = (ratioName: string) => {
-                    if (ratioName.includes('Square')) return <CropSquareIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    if (ratioName.includes('Ultra Wide') || ratioName.includes('Wide')) return <CropLandscapeIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    if (ratioName.includes('Landscape') || ratioName.includes('Standard')) return <TabletIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    if (ratioName.includes('Portrait') || ratioName.includes('Tall')) return <CropPortraitIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    if (ratioName.includes('Ultra Tall')) return <PhoneIphoneIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    return <AspectRatioIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                  };
-
-                  return (
-                    <FormControlLabel
-                      key={ratio}
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={selectedAspectRatios.includes(ratio)}
-                          onChange={(e) => handleAspectRatioChange(ratio, e.target.checked)}
-                        />
-                      }
-                      label={
-                        <Box display="flex" alignItems="center">
-                          {getAspectIcon(ratio)}
-                          <Typography variant="body2">{ratio}</Typography>
-                        </Box>
-                      }
-                    />
-                  );
-                })}
-              </FormGroup>
-            </Collapse>
-          </Box> */}
-
-          {/* Device Type Filter - removed per request */}
-          {/* <Box mb={3}>
-            <ListItemButton 
-              onClick={() => toggleFilterExpansion('device')}
-              sx={{ px: 0, py: 1 }}
-            >
-              <DevicesIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                Device Types ({selectedDevices.length})
-              </Typography>
-              {filtersExpanded.device ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </ListItemButton>
-            <Collapse in={filtersExpanded.device}>
-              <FormGroup sx={{ ml: 4 }}>
-                {availableDevices.map((device) => {
-                  // Get appropriate icon for each device
-                  const getDeviceIcon = (deviceName: string) => {
-                    switch(deviceName) {
-                      case 'iOS': return <AppleIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                      case 'Android': return <AndroidIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                      case 'Mobile WebApp': return <PhoneIphoneIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                      case 'Tablet': return <TabletIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                      case 'Desktop': return <DesktopMacIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                      default: return <DevicesIcon sx={{ fontSize: 16, mr: 0.5 }} />;
-                    }
-                  };
-
-                  return (
-                    <FormControlLabel
-                      key={device}
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={selectedDevices.includes(device)}
-                          onChange={(e) => handleDeviceChange(device, e.target.checked)}
-                        />
-                      }
-                      label={
-                        <Box display="flex" alignItems="center">
-                          {getDeviceIcon(device)}
-                          <Typography variant="body2">{device}</Typography>
-                        </Box>
-                      }
-                    />
-                  );
-                })}
-              </FormGroup>
-            </Collapse>
-          </Box> */}
-
-          {/* Sections/Groups Filter - removed per request */}
-          {/* <Box mb={3}>
-            <ListItemButton 
-              onClick={() => toggleFilterExpansion('content')}
-              sx={{ px: 0, py: 1 }}
-            >
-              <FolderOpenIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                Sections ({selectedSections.length})
-              </Typography>
-              {filtersExpanded.content ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </ListItemButton>
-            <Collapse in={filtersExpanded.content}>
-              <FormGroup sx={{ ml: 4 }}>
-                {getFilterOptions.sections.map((section) => (
-                  <FormControlLabel
-                    key={section}
-                    control={
-                      <Checkbox
+            <Collapse in={moreFiltersOpen}>
+              <Stack spacing={2} sx={{ mt: 1.5 }}>
+                <Box sx={filterCardSx}>
+                  <ListItemButton 
+                    onClick={() => toggleFilterExpansion('sizeTags')}
+                    sx={{ px: 0, py: 1 }}
+                  >
+                    <ColorLensIcon sx={{ mr: 1 }} />
+                    <Typography variant="subtitle2" sx={{ flex: 1 }}>
+                      Size ({selectedSizeTags.length})
+                    </Typography>
+                    {filtersExpanded.sizeTags ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  </ListItemButton>
+                  <Collapse in={filtersExpanded.sizeTags}>
+                    <Box sx={{ ml: 2, mt: 1 }}>
+                      <TextField
                         size="small"
-                        checked={selectedSections.includes(section)}
-                        onChange={(e) => handleSectionChange(section, e.target.checked)}
+                        placeholder="Filter tags..."
+                        value={sizeTagsFilter}
+                        onChange={(e) => setSizeTagsFilter(e.target.value)}
+                        sx={{ 
+                          mb: 1.5, 
+                          width: '100%',
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 1,
+                          }
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <SearchIcon sx={{ color: '#999', mr: 1, fontSize: 18 }} />
+                          )
+                        }}
                       />
-                    }
-                    label={<Typography variant="body2">{section}</Typography>}
-                  />
-                ))}
-              </FormGroup>
-            </Collapse>
-          </Box> */}
-
-          {/* Naming Tags Filter - Removed: naming tags are only used for search, not displayed in filters or under frames */}
-
-          {/* Size Tags Filter */}
-          <Box sx={filterCardSx}>
-            <ListItemButton 
-              onClick={() => toggleFilterExpansion('sizeTags')}
-              sx={{ px: 0, py: 1 }}
-            >
-              <ColorLensIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                Size ({selectedSizeTags.length})
-              </Typography>
-              {filtersExpanded.sizeTags ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </ListItemButton>
-            <Collapse in={filtersExpanded.sizeTags}>
-              <Box sx={{ ml: 2, mt: 1 }}>
-                <TextField
-                  size="small"
-                  placeholder="Filter tags..."
-                  value={sizeTagsFilter}
-                  onChange={(e) => setSizeTagsFilter(e.target.value)}
-                  sx={{ 
-                    mb: 1.5, 
-                    width: '100%',
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 1,
-                    }
-                  }}
-                  InputProps={{
-                    startAdornment: (
-                      <SearchIcon sx={{ color: '#999', mr: 1, fontSize: 18 }} />
-                    )
-                  }}
-                />
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                  {getFilterOptions.sizeTags
-                    .filter(tag => tag.toLowerCase().includes(sizeTagsFilter.toLowerCase()))
-                    .map((tag) => {
-                  const isSelected = selectedSizeTags.includes(tag);
-                  return (
-                    <Box
-                      key={tag}
-                      onClick={() => {
-                        if (isSelected) {
-                          setSelectedSizeTags(prev => prev.filter(t => t !== tag));
-                        } else {
-                          setSelectedSizeTags(prev => [...prev, tag]);
-                        }
-                      }}
-                      sx={{
-                        display: 'inline-block',
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '16px',
-                        bgcolor: isSelected ? '#667eea' : '#f5f5f5',
-                        color: isSelected ? '#fff' : '#000',
-                        fontSize: '0.75rem',
-                        fontWeight: 400,
-                        lineHeight: 1.2,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          bgcolor: isSelected ? '#5568d3' : '#e8e8e8',
-                        }
-                      }}
-                    >
-                      {tag}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                        {getFilterOptions.sizeTags
+                          .filter(tag => tag.toLowerCase().includes(sizeTagsFilter.toLowerCase()))
+                          .map((tag) => {
+                        const isSelected = selectedSizeTags.includes(tag);
+                        return (
+                          <Box
+                            key={tag}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedSizeTags(prev => prev.filter(t => t !== tag));
+                              } else {
+                                setSelectedSizeTags(prev => [...prev, tag]);
+                              }
+                            }}
+                            sx={{
+                              display: 'inline-block',
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: '16px',
+                              bgcolor: isSelected ? '#667eea' : '#f5f5f5',
+                              color: isSelected ? '#fff' : '#000',
+                              fontSize: '0.75rem',
+                              fontWeight: 400,
+                              lineHeight: 1.2,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                bgcolor: isSelected ? '#5568d3' : '#e8e8e8',
+                              }
+                            }}
+                          >
+                            {tag}
+                          </Box>
+                        );
+                      })}
+                      </Box>
                     </Box>
-                  );
-                })}
+                  </Collapse>
                 </Box>
-              </Box>
-            </Collapse>
-          </Box>
 
-          {/* Custom Tags Filter */}
-          <Box sx={filterCardSx}>
-            <ListItemButton 
-              onClick={() => toggleFilterExpansion('customTags')}
-              sx={{ px: 0, py: 1 }}
-            >
-              <ColorLensIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                Custom Tags ({selectedCustomTags.length})
-              </Typography>
-              {filtersExpanded.customTags ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </ListItemButton>
-            <Collapse in={filtersExpanded.customTags}>
-              <Box sx={{ ml: 2, mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                {getFilterOptions.customTags.map((tag) => {
-                  const isSelected = selectedCustomTags.includes(tag);
-                  return (
-                    <Box
-                      key={tag}
-                      onClick={() => handleCustomTagChange(tag, !isSelected)}
-                      sx={{
-                        display: 'inline-block',
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '16px',
-                        bgcolor: isSelected ? '#667eea' : '#f5f5f5',
-                        color: isSelected ? '#fff' : '#000',
-                        fontSize: '0.75rem',
-                        fontWeight: 400,
-                        lineHeight: 1.2,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          bgcolor: isSelected ? '#5568d3' : '#e8e8e8',
-                        }
-                      }}
-                    >
-                      {tag}
+                <Box sx={filterCardSx}>
+                  <ListItemButton 
+                    onClick={() => toggleFilterExpansion('customTags')}
+                    sx={{ px: 0, py: 1 }}
+                  >
+                    <ColorLensIcon sx={{ mr: 1 }} />
+                    <Typography variant="subtitle2" sx={{ flex: 1 }}>
+                      Custom Tags ({selectedCustomTags.length})
+                    </Typography>
+                    {filtersExpanded.customTags ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  </ListItemButton>
+                  <Collapse in={filtersExpanded.customTags}>
+                    <Box sx={{ ml: 2, mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                      {getFilterOptions.customTags.map((tag) => {
+                        const isSelected = selectedCustomTags.includes(tag);
+                        return (
+                          <Box
+                            key={tag}
+                            onClick={() => handleCustomTagChange(tag, !isSelected)}
+                            sx={{
+                              display: 'inline-block',
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: '16px',
+                              bgcolor: isSelected ? '#667eea' : '#f5f5f5',
+                              color: isSelected ? '#fff' : '#000',
+                              fontSize: '0.75rem',
+                              fontWeight: 400,
+                              lineHeight: 1.2,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                bgcolor: isSelected ? '#5568d3' : '#e8e8e8',
+                              }
+                            }}
+                          >
+                            {tag}
+                          </Box>
+                        );
+                      })}
                     </Box>
-                  );
-                })}
-              </Box>
+                  </Collapse>
+                </Box>
+              </Stack>
             </Collapse>
           </Box>
 
