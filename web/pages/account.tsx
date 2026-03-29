@@ -462,6 +462,7 @@ export default function AccountPage() {
                       sx={{
                         height: 8,
                         borderRadius: 999,
+                        direction: 'ltr',
                         bgcolor: '#EEF2F6',
                         '& .MuiLinearProgress-bar': {
                           borderRadius: 999,
@@ -483,6 +484,7 @@ export default function AccountPage() {
                       sx={{
                         height: 8,
                         borderRadius: 999,
+                        direction: 'ltr',
                         bgcolor: '#EEF2F6',
                         '& .MuiLinearProgress-bar': {
                           borderRadius: 999,
