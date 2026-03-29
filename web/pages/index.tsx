@@ -147,18 +147,32 @@ const HomePageV2 = () => {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: '#f5f7fb',
+        backgroundImage: 'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)'
+      }}
+    >
       {/* Header */}
       <Container maxWidth="lg">
-        <Box sx={{ py: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box
+          sx={{
+            py: 3.5,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 3
+          }}
+        >
           <Box>
             <Typography 
               variant="h4" 
               sx={{ 
-                fontWeight: 300,
-                letterSpacing: 3,
+                fontWeight: 700,
+                letterSpacing: 1.5,
                 color: '#1a1a1a',
-                fontSize: '1.5rem'
+                fontSize: '1.25rem'
               }}
             >
               FIGDEX
@@ -183,11 +197,11 @@ const HomePageV2 = () => {
                   variant="text"
                   sx={{ 
                     color: '#1a1a1a',
-                    fontWeight: 400,
+                    fontWeight: 500,
                     textTransform: 'none',
                     fontSize: '0.95rem',
                     '&:hover': { 
-                      bgcolor: '#f5f5f5'
+                      bgcolor: '#eef2ff'
                     }
                   }}
                   onClick={() => router.push('/pricing')}
@@ -273,11 +287,11 @@ const HomePageV2 = () => {
                   variant="text"
                   sx={{ 
                     color: '#1a1a1a',
-                    fontWeight: 400,
+                    fontWeight: 500,
                     textTransform: 'none',
                     fontSize: '0.95rem',
                     '&:hover': { 
-                      bgcolor: '#f5f5f5'
+                      bgcolor: '#eef2ff'
                     }
                   }}
                   onClick={() => router.push('/pricing')}
@@ -288,11 +302,11 @@ const HomePageV2 = () => {
                   variant="text"
                   sx={{ 
                     color: '#1a1a1a',
-                    fontWeight: 400,
+                    fontWeight: 500,
                     textTransform: 'none',
                     fontSize: '0.95rem',
                     '&:hover': { 
-                      bgcolor: '#f5f5f5'
+                      bgcolor: '#eef2ff'
                     }
                   }}
                   onClick={() => setLoginDialogOpen(true)}
@@ -300,22 +314,22 @@ const HomePageV2 = () => {
                   Login
                 </Button>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   sx={{ 
-                    color: '#1a1a1a',
-                    borderColor: '#1a1a1a',
-                    fontWeight: 400,
+                    bgcolor: '#111827',
+                    color: '#fff',
+                    fontWeight: 600,
                     textTransform: 'none',
                     fontSize: '0.95rem',
                     px: 3,
+                    borderRadius: 999,
                     '&:hover': { 
-                      borderColor: '#1a1a1a',
-                      bgcolor: '#f5f5f5'
+                      bgcolor: '#1f2937'
                     }
                   }}
                   onClick={() => setRegisterDialogOpen(true)}
                 >
-                  Sign Up
+                  Start Free
                 </Button>
               </>
             )}
@@ -324,49 +338,68 @@ const HomePageV2 = () => {
       </Container>
 
       {/* SECTION 1 — HERO */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 4, alignItems: 'center' }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 5, md: 8 } }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.05fr) minmax(420px, 0.95fr)' },
+            gap: { xs: 4, md: 6 },
+            alignItems: 'center'
+          }}
+        >
           <Box>
+            <Chip
+              icon={<PluginIcon />}
+              label="Figma plugin + searchable web gallery"
+              sx={{
+                mb: 2.5,
+                bgcolor: '#eef4ff',
+                color: '#3538cd',
+                fontWeight: 600,
+                borderRadius: 999
+              }}
+            />
             <Typography 
               variant="h1" 
               sx={{ 
                 fontWeight: 700, 
                 color: '#1a1a1a', 
                 mb: 3,
-                fontSize: { xs: '2.5rem', md: '4rem' },
-                letterSpacing: -1,
+                fontSize: { xs: '2.8rem', md: '4.8rem' },
+                letterSpacing: -2,
                 lineHeight: 1.1
               }}
             >
-              Your Figma projects. Fully indexed. Instantly searchable.
+              Turn giant Figma files into a gallery your team can actually use.
             </Typography>
             <Typography 
               variant="h5" 
               sx={{ 
-                color: '#666', 
+                color: '#475467', 
                 mb: 4, 
                 lineHeight: 1.6,
                 fontSize: { xs: '1.1rem', md: '1.5rem' },
-                fontWeight: 300
+                fontWeight: 400,
+                maxWidth: 620
               }}
             >
-              Transform messy Figma files into organized, searchable design libraries — automatically.
+              Index pages from Figma, browse them as a clean visual library, search across thousands of screens, and share the exact views people need.
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
               <Button
                 variant="contained"
                 size="large"
                 sx={{ 
-                  bgcolor: '#1a1a1a',
+                  bgcolor: '#111827',
                   color: '#fff',
                   py: 1.5,
                   px: 5,
                   fontSize: '1rem',
-                  fontWeight: 400,
+                  fontWeight: 600,
                   textTransform: 'none',
-                  borderRadius: 0,
+                  borderRadius: 999,
                   '&:hover': { 
-                    bgcolor: '#333'
+                    bgcolor: '#1f2937'
                   }
                 }}
                 onClick={() => router.push('/register')}
@@ -379,84 +412,144 @@ const HomePageV2 = () => {
                 startIcon={<PlayIcon />}
                 sx={{ 
                   color: '#1a1a1a', 
-                  borderColor: '#ddd',
+                  borderColor: '#cbd5e1',
                   py: 1.5,
                   px: 5,
                   fontSize: '1rem',
-                  fontWeight: 400,
+                  fontWeight: 600,
                   textTransform: 'none',
-                  borderRadius: 0,
+                  borderRadius: 999,
                   '&:hover': { 
                     borderColor: '#1a1a1a',
-                    bgcolor: '#fafafa'
+                    bgcolor: '#fff'
                   }
                 }}
               >
                 Watch 60-Second Demo
               </Button>
             </Stack>
-            <Typography variant="body2" sx={{ color: '#999', fontSize: '0.85rem' }}>
-              No credit card required.
-            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3, flexWrap: 'wrap' }}>
+              {['No credit card required', 'Works with large multi-page files', 'Built for design review and handoff'].map((item) => (
+                <Stack key={item} direction="row" spacing={1} alignItems="center">
+                  <CheckCircleIcon sx={{ fontSize: 18, color: '#027a48' }} />
+                  <Typography variant="body2" sx={{ color: '#667085', fontWeight: 500 }}>
+                    {item}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
           </Box>
           <Box>
             <Box 
               sx={{ 
-                bgcolor: '#FAFAFA',
-                borderRadius: 2,
-                p: 4,
-                minHeight: 400,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid #eee'
+                bgcolor: '#fff',
+                borderRadius: 6,
+                p: 3,
+                border: '1px solid #e4e7ec',
+                boxShadow: '0 20px 50px rgba(15,23,42,0.08)'
               }}
             >
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                [Animated mockup: Figma file → loading bar → FigDex gallery with filters opening]
-              </Typography>
+              <Stack spacing={2.5}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, borderRadius: 4, bgcolor: '#f8fafc', border: '1px solid #eaecf0' }}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em' }}>
+                      Plugin
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                      Select pages and index
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#667085' }}>
+                      8 pages loaded, 2 selected
+                    </Typography>
+                  </Stack>
+                  <Chip label="Ready to index" sx={{ bgcolor: '#ecfdf3', color: '#027a48', fontWeight: 700 }} />
+                </Box>
+
+                <Stack direction="row" spacing={1.5} justifyContent="center" alignItems="center">
+                  <Box sx={{ width: 54, height: 54, borderRadius: '50%', bgcolor: '#111827', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(17,24,39,0.16)' }}>
+                    <UploadIcon />
+                  </Box>
+                  <Divider flexItem sx={{ alignSelf: 'center', borderColor: '#c7d7fe' }} />
+                  <Box sx={{ width: 54, height: 54, borderRadius: '50%', bgcolor: '#667eea', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(102,126,234,0.24)' }}>
+                    <SearchIcon />
+                  </Box>
+                  <Divider flexItem sx={{ alignSelf: 'center', borderColor: '#c7d7fe' }} />
+                  <Box sx={{ width: 54, height: 54, borderRadius: '50%', bgcolor: '#0f766e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(15,118,110,0.22)' }}>
+                    <ShareIcon />
+                  </Box>
+                </Stack>
+
+                <Box sx={{ p: 2.5, borderRadius: 4, bgcolor: '#111827', color: '#fff' }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                    <Box>
+                      <Typography variant="overline" sx={{ color: '#98a2b3', letterSpacing: '0.08em' }}>
+                        Gallery
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        Search across indexed screens
+                      </Typography>
+                    </Box>
+                    <Chip label="Live filters" sx={{ bgcolor: '#1d2939', color: '#d1e9ff' }} />
+                  </Stack>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
+                    {[
+                      { label: 'Indexed files', value: '12' },
+                      { label: 'Screens', value: '4,860' },
+                      { label: 'Search time', value: '<1s' },
+                      { label: 'Share links', value: 'Ready' },
+                    ].map((metric) => (
+                      <Box key={metric.label} sx={{ p: 1.5, borderRadius: 3, bgcolor: '#1f2937', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <Typography variant="caption" sx={{ color: '#98a2b3', display: 'block', mb: 0.25 }}>
+                          {metric.label}
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                          {metric.value}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              </Stack>
             </Box>
           </Box>
         </Box>
       </Container>
 
       {/* SECTION 2 — TRUST / SOCIAL PROOF */}
-      <Box sx={{ bgcolor: '#FAFAFA', py: { xs: 4, md: 6 } }}>
+      <Box sx={{ py: { xs: 4, md: 6 } }}>
         <Container maxWidth="lg">
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ width: '100%' }}>
-              <Typography 
-                variant="overline" 
-                sx={{ 
-                  color: '#666',
-                  fontSize: '0.75rem',
-                  letterSpacing: 2,
-                  textAlign: 'center',
-                  display: 'block',
-                  mb: 3,
-                  fontWeight: 400
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' },
+              gap: 2
+            }}
+          >
+            {[
+              { icon: <StorageIcon />, value: 'Large files', label: 'Index long, multi-page Figma projects without manual cleanup' },
+              { icon: <SearchIcon />, value: 'Fast search', label: 'Search by file, text, tags, size and filtered results' },
+              { icon: <ShareIcon />, value: 'Clean sharing', label: 'Share the full gallery or only the exact result set you want' },
+              { icon: <SpeedIcon />, value: 'Team-ready', label: 'Built for review, audits, handoff and ongoing design operations' },
+            ].map((item) => (
+              <Box
+                key={item.value}
+                sx={{
+                  p: 2.5,
+                  borderRadius: 4,
+                  bgcolor: '#fff',
+                  border: '1px solid #e4e7ec',
+                  boxShadow: '0 1px 2px rgba(16,24,40,0.04)'
                 }}
               >
-                Trusted by design teams managing thousands of frames
-              </Typography>
-            </Box>
-            <Box sx={{ width: '100%' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, flexWrap: 'wrap', opacity: 0.6 }}>
-                {['FinTech', 'HealthTech', 'SaaS', 'EdTech', 'Agencies', 'Enterprise'].map((logo, idx) => (
-                  <Typography 
-                    key={idx}
-                    variant="h6" 
-                    sx={{ 
-                      color: '#999',
-                      fontWeight: 300,
-                      fontSize: '1rem'
-                    }}
-                  >
-                    {logo}
-                  </Typography>
-                ))}
+                <Box sx={{ color: '#667eea', mb: 1.5 }}>{item.icon}</Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.75 }}>
+                  {item.value}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#667085', lineHeight: 1.65 }}>
+                  {item.label}
+                </Typography>
               </Box>
-            </Box>
+            ))}
           </Box>
         </Container>
       </Box>
@@ -1290,4 +1383,3 @@ const HomePageV2 = () => {
 };
 
 export default HomePageV2;
-
