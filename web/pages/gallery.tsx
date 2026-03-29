@@ -1773,7 +1773,9 @@ export default function Home() {
           id: file.id,
           fileName: file.file_name || file.fileName,
           _chunks: file._chunks,
-          frameCount
+          frameCount,
+          uploadedAt: file.uploaded_at,
+          projectId: file.project_id,
         },
         thumb: {
           thumbName: `${file.id}_${idx}`,
@@ -3083,11 +3085,20 @@ export default function Home() {
                 <Box
                   key={thumb.thumbName + idx}
                   sx={{
-                    mb: 2,
-                    textAlign: 'center',
                     cursor: 'pointer',
                     width: 260,
-                    position: 'relative'
+                    position: 'relative',
+                    borderRadius: 3,
+                    border: '1px solid #e5e7eb',
+                    background: '#fff',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
+                      borderColor: '#c7d7fe'
+                    }
                   }}
                   onClick={() => loadFileFrames(file)}
                 >
@@ -3097,12 +3108,8 @@ export default function Home() {
                       alt={thumb.label}
                       loading="lazy"
                       style={{
-                        borderRadius: 10,
-                        border: '1.5px solid #e0e0e0',
-                        background: '#fff',
-                        marginBottom: 6,
                         width: '100%',
-                        height: '156px', // 5:3 aspect ratio (width * 3/5): 260 * 3/5 = 156
+                        height: '156px',
                         display: 'block',
                         objectFit: 'cover'
                       }}
@@ -3122,10 +3129,7 @@ export default function Home() {
                   ) : (
                     <Box
                       sx={{
-                        borderRadius: 10,
-                        border: '1.5px solid #e0e0e0',
                         background: '#f5f5f5',
-                        marginBottom: 6,
                         width: '100%',
                         height: '156px',
                         display: 'flex',
@@ -3137,12 +3141,39 @@ export default function Home() {
                       <Typography variant="body2">No thumbnail</Typography>
                     </Box>
                   )}
-                  <Box sx={{ px: 0.5 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                  <Box sx={{ p: 1.5 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
+                      <Chip
+                        size="small"
+                        label="Indexed file"
+                        sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 600 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {file.uploadedAt ? formatDate(file.uploadedAt) : 'Recently updated'}
+                      </Typography>
+                    </Stack>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 700,
+                        mb: 0.75,
+                        minHeight: 40,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
                       {file.fileName}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {file.frameCount} frames
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" />
+                      {file.projectId && (
+                        <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5' }} />
+                      )}
+                    </Stack>
+                    <Typography variant="caption" sx={{ color: '#667085', fontWeight: 600 }}>
+                      Open file gallery
                     </Typography>
                   </Box>
                 </Box>
@@ -3265,13 +3296,45 @@ export default function Home() {
             if (item.isFile && item.file) {
               const { file, thumb } = item;
               return (
-                <Box key={thumb.thumbName + idx} sx={{ mb: 2, textAlign: 'center', cursor: 'pointer', width: 260, position: 'relative' }} onClick={() => loadFileFrames(file)}>
+                <Box
+                  key={thumb.thumbName + idx}
+                  sx={{
+                    cursor: 'pointer',
+                    width: 260,
+                    position: 'relative',
+                    borderRadius: 3,
+                    border: '1px solid #e5e7eb',
+                    background: '#fff',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
+                      borderColor: '#c7d7fe'
+                    }
+                  }}
+                  onClick={() => loadFileFrames(file)}
+                >
                   {thumb.image ? (
-                    <img src={thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 10, border: '1.5px solid #e0e0e0', background: '#fff', marginBottom: 6, width: '100%', height: 156, display: 'block', objectFit: 'cover' }} onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; const box = el.parentElement; if (box && !box.querySelector('.placeholder')) { const p = document.createElement('div'); p.className = 'placeholder'; p.style.cssText = 'padding:40px;text-align:center;color:#999;background:#f5f5f5;border-radius:10px;'; p.textContent = 'No thumbnail'; box.appendChild(p); } }} />
+                    <img src={thumb.image} alt={thumb.label} loading="lazy" style={{ width: '100%', height: 156, display: 'block', objectFit: 'cover' }} onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; const box = el.parentElement; if (box && !box.querySelector('.placeholder')) { const p = document.createElement('div'); p.className = 'placeholder'; p.style.cssText = 'padding:40px;text-align:center;color:#999;background:#f5f5f5;'; p.textContent = 'No thumbnail'; box.appendChild(p); } }} />
                   ) : (
-                    <Box sx={{ borderRadius: 10, border: '1.5px solid #e0e0e0', background: '#f5f5f5', marginBottom: 6, width: '100%', height: 156, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}><Typography variant="body2">No thumbnail</Typography></Box>
+                    <Box sx={{ background: '#f5f5f5', width: '100%', height: 156, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}><Typography variant="body2">No thumbnail</Typography></Box>
                   )}
-                  <Box sx={{ px: 0.5 }}><Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{file.fileName}</Typography><Typography variant="caption" color="text.secondary">{file.frameCount} frames</Typography></Box>
+                  <Box sx={{ p: 1.5 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
+                      <Chip size="small" label="Indexed file" sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 600 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {file.uploadedAt ? formatDate(file.uploadedAt) : 'Recently updated'}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75, minHeight: 40, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{file.fileName}</Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" />
+                      {file.projectId && <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5' }} />}
+                    </Stack>
+                    <Typography variant="caption" sx={{ color: '#667085', fontWeight: 600 }}>Open file gallery</Typography>
+                  </Box>
                 </Box>
               );
             }
