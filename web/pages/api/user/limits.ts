@@ -59,11 +59,19 @@ export default async function handler(
 
   try {
     // Get user info
-    const { data: user, error: userError } = await supabaseAdmin
+    let userQuery: any = await supabaseAdmin
       .from('users')
-      .select('id, plan, is_admin')
+      .select('id, plan, is_admin, bypass_indexing_limits')
       .eq('id', userId)
       .single();
+    if (userQuery.error && String(userQuery.error.message || '').includes('bypass_indexing_limits')) {
+      userQuery = await supabaseAdmin
+        .from('users')
+        .select('id, plan, is_admin')
+        .eq('id', userId)
+        .single();
+    }
+    const { data: user, error: userError } = userQuery;
 
     if (userError || !user) {
       return res.status(404).json({ error: 'User not found' });
@@ -96,6 +104,7 @@ export default async function handler(
         planId: planLimits.id,
         planLabel: planLimits.label,
         isUnlimited: user.is_admin || user.plan === 'unlimited',
+        bypassIndexingLimits: Boolean((user as any)?.bypass_indexing_limits),
       },
     });
   } catch (error: any) {

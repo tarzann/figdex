@@ -27,8 +27,7 @@ import {
   Stack,
   Tooltip
 } from '@mui/material';
-import { Edit, Delete, Add, ArrowBack, DeleteForever, RestartAlt } from '@mui/icons-material';
-import type { PlanLimits } from '../../lib/plans';
+import { Edit, Delete, ArrowBack, DeleteForever, RestartAlt } from '@mui/icons-material';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.32.05'; // Show plan usage in admin users table
@@ -46,22 +45,18 @@ interface User {
   is_admin: boolean;
   is_guest?: boolean;
   created_at: string;
-  credits_remaining?: number;
-  credits_reset_date?: string | null;
+  bypass_indexing_limits?: boolean;
   usage_files?: number;
   usage_frames?: number;
   max_projects?: number | null;
   max_frames_total?: number | null;
 }
 
-type PlanMap = Record<string, PlanLimits>;
-
 export default function AdminUsers() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
-  const [planMap, setPlanMap] = useState<PlanMap>({});
   const [error, setError] = useState('');
   const [editDialog, setEditDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -69,16 +64,9 @@ export default function AdminUsers() {
     full_name: '',
     is_active: true,
     is_admin: false,
-    plan: 'free'
+    plan: 'free',
+    bypass_indexing_limits: false
   });
-  
-  // Credits management state
-  const [grantCreditsAmount, setGrantCreditsAmount] = useState<string>('');
-  const [grantCreditsReason, setGrantCreditsReason] = useState<string>('');
-  const [resetDate, setResetDate] = useState<string>('');
-  const [grantingCredits, setGrantingCredits] = useState(false);
-  const [updatingResetDate, setUpdatingResetDate] = useState(false);
-  const [currentUserCredits, setCurrentUserCredits] = useState<{current: number; base: number | null} | null>(null);
 
   const derivePlanValue = (plan?: string, isAdmin?: boolean) => {
     if (plan === 'guest') return 'guest';
@@ -143,11 +131,6 @@ export default function AdminUsers() {
       const data = await response.json();
       if (response.ok && data.success) {
         setUsers(data.users || []);
-        const nextPlanMap: PlanMap = {};
-        (data.plans || []).forEach((plan: PlanLimits) => {
-          if (plan?.id) nextPlanMap[plan.id] = plan;
-        });
-        setPlanMap(nextPlanMap);
         setError('');
       } else {
         setError(data.error || data.message || `Failed to load users (${response.status})`);
@@ -164,22 +147,9 @@ export default function AdminUsers() {
       full_name: user.full_name || '',
       is_active: user.is_active,
       is_admin: user.is_admin || false,
-      plan: user.is_admin ? (user.plan || 'unlimited') : (user.plan || 'free')
+      plan: user.is_admin ? (user.plan || 'unlimited') : (user.plan || 'free'),
+      bypass_indexing_limits: Boolean(user.bypass_indexing_limits)
     });
-    
-    // Reset credits form
-    setGrantCreditsAmount('');
-    setGrantCreditsReason('');
-    setResetDate(user.credits_reset_date || '');
-    
-    // Set current user credits
-    const normalizedPlanId = user.is_admin ? 'unlimited' : ((user.plan || 'free').toLowerCase());
-    const planLimits = planMap[normalizedPlanId];
-    setCurrentUserCredits({
-      current: user.credits_remaining || 0,
-      base: planLimits ? planLimits.creditsPerMonth : null
-    });
-    
     setEditDialog(true);
   };
 
@@ -194,96 +164,6 @@ export default function AdminUsers() {
         plan: fallbackPlan
       };
     });
-  };
-
-  const handleGrantCredits = async () => {
-    if (!selectedUser || !grantCreditsAmount || !grantCreditsReason.trim()) return;
-    
-    const amount = parseInt(grantCreditsAmount);
-    if (isNaN(amount) || amount === 0) {
-      alert('Please enter a valid non-zero number (positive to grant, negative to deduct)');
-      return;
-    }
-    
-    try {
-      setGrantingCredits(true);
-      const userData = localStorage.getItem('figma_web_user');
-      const apiKey = userData ? JSON.parse(userData).api_key : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      
-      const response = await fetch('/api/admin/credits/grant', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          amount,
-          reason: grantCreditsReason.trim()
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        const isGrant = amount > 0;
-        const absoluteAmount = Math.abs(amount);
-        alert(
-          `Successfully ${isGrant ? 'granted' : 'deducted'} ${absoluteAmount} credits. ` +
-          `New balance: ${data.newBalance}. Email notifications sent to user and admin.`
-        );
-        setGrantCreditsAmount('');
-        setGrantCreditsReason('');
-        // Update current user credits
-        if (currentUserCredits) {
-          setCurrentUserCredits({
-            ...currentUserCredits,
-            current: data.newBalance
-          });
-        }
-        // Reload users to update the table
-        await loadUsers();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (error: any) {
-      console.error('Error granting credits:', error);
-      alert(`Error granting credits: ${error.message}`);
-    } finally {
-      setGrantingCredits(false);
-    }
-  };
-
-  const handleUpdateResetDate = async () => {
-    if (!selectedUser || !resetDate) return;
-    
-    try {
-      setUpdatingResetDate(true);
-      const userData = localStorage.getItem('figma_web_user');
-      const apiKey = userData ? JSON.parse(userData).api_key : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      
-      const response = await fetch('/api/admin/credits/reset-date', {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          resetDate
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        alert('Reset date updated successfully');
-        await loadUsers();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (error: any) {
-      console.error('Error updating reset date:', error);
-      alert(`Error updating reset date: ${error.message}`);
-    } finally {
-      setUpdatingResetDate(false);
-    }
   };
 
   const handleSaveEdit = async () => {
@@ -372,7 +252,7 @@ export default function AdminUsers() {
     const entityLabel = isGuest ? `guest ${email}` : `user ${email}`;
     const impactLabel = isGuest
       ? 'This will remove all guest indices and reset guest usage stats.'
-      : 'This will remove all indices and usage stats, but keep the account, plan and credits.';
+      : 'This will remove all indices and usage stats, but keep the account and plan.';
     const confirmed = confirm(`Reset indices for ${entityLabel}? ${impactLabel}`);
     if (!confirmed) return;
 
@@ -495,11 +375,16 @@ export default function AdminUsers() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={(user.plan_label || derivePlanValue(user.plan, user.is_admin)).toUpperCase()}
-                    color={getPlanChipColor(user.plan, user.is_admin)}
-                    size="small"
-                  />
+                  <Stack spacing={0.5} alignItems="flex-start">
+                    <Chip
+                      label={(user.plan_label || derivePlanValue(user.plan, user.is_admin)).toUpperCase()}
+                      color={getPlanChipColor(user.plan, user.is_admin)}
+                      size="small"
+                    />
+                    {user.bypass_indexing_limits && (
+                      <Chip label="Bypass limits" color="warning" variant="outlined" size="small" />
+                    )}
+                  </Stack>
                 </TableCell>
                 <TableCell>
                   <Stack spacing={0.25}>
@@ -611,90 +496,16 @@ export default function AdminUsers() {
               }
               label="Admin"
             />
-
-            {/* Credits Management Section */}
             {!editForm.is_admin && (
-              <>
-                <Box sx={{ borderTop: '1px solid #e0e0e0', pt: 2, mt: 2 }}>
-                  <Typography variant="h6" sx={{ mb: 2 }}>Credits Management</Typography>
-                  
-                  {currentUserCredits && (
-                    <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Current Balance:
-                        </Typography>
-                        <Typography variant="body2" fontWeight={600}>
-                          {currentUserCredits.current.toLocaleString()}
-                        </Typography>
-                      </Box>
-                      {currentUserCredits.base !== null && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Base Credits:
-                          </Typography>
-                          <Typography variant="body2">
-                            {currentUserCredits.base.toLocaleString()}
-                          </Typography>
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-
-                  <TextField
-                    label="Add/Deduct Credits"
-                    type="number"
-                    value={grantCreditsAmount}
-                    onChange={(e) => setGrantCreditsAmount(e.target.value)}
-                    fullWidth
-                    sx={{ mb: 2 }}
-                    helperText="Enter positive number to grant credits, negative number to deduct (e.g., -100 to deduct 100 credits)"
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={editForm.bypass_indexing_limits}
+                    onChange={(e) => setEditForm({ ...editForm, bypass_indexing_limits: e.target.checked })}
                   />
-                  
-                  <TextField
-                    label="Reason"
-                    value={grantCreditsReason}
-                    onChange={(e) => setGrantCreditsReason(e.target.value)}
-                    fullWidth
-                    multiline
-                    rows={2}
-                    sx={{ mb: 2 }}
-                    helperText="Reason for granting credits (required)"
-                    placeholder="e.g., Customer support - account issue"
-                  />
-                  
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={handleGrantCredits}
-                    disabled={grantingCredits || !grantCreditsAmount || !grantCreditsReason.trim()}
-                    fullWidth
-                    sx={{ mb: 2 }}
-                  >
-                    {grantingCredits ? 'Processing...' : (parseInt(grantCreditsAmount) < 0 ? 'Deduct Credits' : 'Grant Credits')}
-                  </Button>
-
-                  <TextField
-                    label="Reset Date"
-                    type="date"
-                    value={resetDate}
-                    onChange={(e) => setResetDate(e.target.value)}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ mb: 2 }}
-                    helperText="Date when credits will reset to base amount"
-                  />
-                  
-                  <Button
-                    variant="outlined"
-                    onClick={handleUpdateResetDate}
-                    disabled={updatingResetDate || !resetDate}
-                    fullWidth
-                  >
-                    {updatingResetDate ? 'Updating...' : 'Update Reset Date'}
-                  </Button>
-                </Box>
-              </>
+                }
+                label="Bypass indexing cooldown & limits"
+              />
             )}
           </Box>
         </DialogContent>

@@ -22,6 +22,7 @@ export interface CanCreateIndexResult {
 
 // Temporarily disable daily index limits until they are counted per logical file.
 const DAILY_INDEX_LIMITS_ENABLED = false;
+const REINDEX_COOLDOWN_MS = 3 * 60 * 1000;
 
 /**
  * Get user's effective limits (base plan + addons)
@@ -126,6 +127,79 @@ export async function canCreateIndex(
     allowed: true,
     currentCount,
     maxCount: limits.maxIndexesPerDay
+  };
+}
+
+export async function checkFileIndexCooldown(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  userId: string,
+  fileKey: string,
+  bypassIndexingLimits?: boolean,
+  isAdmin?: boolean
+): Promise<CanCreateIndexResult> {
+  if (bypassIndexingLimits || isAdmin) {
+    return { allowed: true };
+  }
+
+  const normalizedFileKey = typeof fileKey === 'string' ? fileKey.trim() : '';
+  if (!normalizedFileKey) {
+    return { allowed: true };
+  }
+
+  let lastIndexedAt: string | null = null;
+
+  const { data: normalizedRow } = await supabaseAdmin
+    .from('indexed_files')
+    .select('updated_at')
+    .eq('user_id', userId)
+    .eq('figma_file_key', normalizedFileKey)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (normalizedRow?.updated_at) {
+    lastIndexedAt = normalizedRow.updated_at;
+  } else {
+    const { data: legacyRow } = await supabaseAdmin
+      .from('index_files')
+      .select('uploaded_at')
+      .eq('user_id', userId)
+      .eq('figma_file_key', normalizedFileKey)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (legacyRow?.uploaded_at) {
+      lastIndexedAt = legacyRow.uploaded_at;
+    }
+  }
+
+  if (!lastIndexedAt) {
+    return { allowed: true };
+  }
+
+  const lastIndexMs = new Date(lastIndexedAt).getTime();
+  if (Number.isNaN(lastIndexMs)) {
+    return { allowed: true };
+  }
+
+  const nowMs = Date.now();
+  const remainingMs = REINDEX_COOLDOWN_MS - (nowMs - lastIndexMs);
+  if (remainingMs <= 0) {
+    return { allowed: true };
+  }
+
+  const waitUntil = new Date(nowMs + remainingMs);
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const remainingMinutes = Math.ceil(remainingSeconds / 60);
+  const reason = remainingSeconds < 60
+    ? `This file was indexed a few moments ago. Please wait ${remainingSeconds} seconds before indexing it again.`
+    : `This file was indexed recently. Please wait about ${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'} before indexing it again.`;
+
+  return {
+    allowed: false,
+    reason,
+    waitUntil,
   };
 }
 

@@ -43,7 +43,6 @@ interface Plan {
   max_uploads_per_month: number | null;
   max_frames_per_month: number | null;
   max_indexes_per_day: number | null;
-  credits_per_month: number | null;
   is_subscribable: boolean;
   sort_order: number;
   enabled: boolean;
@@ -61,7 +60,6 @@ const emptyForm = () => ({
   max_uploads_per_month: '',
   max_frames_per_month: '',
   max_indexes_per_day: '',
-  credits_per_month: '',
   is_subscribable: false,
   enabled: true,
   sort_order: 0
@@ -78,7 +76,6 @@ function toForm(plan: Plan) {
     max_uploads_per_month: plan.max_uploads_per_month == null ? '' : String(plan.max_uploads_per_month),
     max_frames_per_month: plan.max_frames_per_month == null ? '' : String(plan.max_frames_per_month),
     max_indexes_per_day: plan.max_indexes_per_day == null ? '' : String(plan.max_indexes_per_day),
-    credits_per_month: plan.credits_per_month == null ? '' : String(plan.credits_per_month),
     is_subscribable: plan.is_subscribable,
     enabled: plan.enabled,
     sort_order: plan.sort_order
@@ -164,7 +161,7 @@ export default function AdminPlans() {
       const numericFields = [
         'max_projects', 'max_frames_total', 'max_index_size_bytes', 'retention_days',
         'max_uploads_per_day', 'max_uploads_per_month', 'max_frames_per_month',
-        'max_indexes_per_day', 'credits_per_month'
+        'max_indexes_per_day'
       ] as const;
       for (const f of numericFields) {
         const v = formData[f];
@@ -255,7 +252,6 @@ export default function AdminPlans() {
               <TableCell align="right">Index Size</TableCell>
               <TableCell align="right">Retention</TableCell>
               <TableCell align="right">Indexes/Day</TableCell>
-              <TableCell align="right">Credits/mo</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -279,7 +275,6 @@ export default function AdminPlans() {
                 <TableCell align="right">{fmtBytes(plan.max_index_size_bytes)}</TableCell>
                 <TableCell align="right">{plan.retention_days == null ? '∞' : `${plan.retention_days}d`}</TableCell>
                 <TableCell align="right">{fmtNum(plan.max_indexes_per_day)}</TableCell>
-                <TableCell align="right">{fmtNum(plan.credits_per_month)}</TableCell>
                 <TableCell>
                   <Chip
                     label={plan.enabled ? 'Enabled' : 'Disabled'}
@@ -372,15 +367,6 @@ export default function AdminPlans() {
               value={formData.max_frames_per_month}
               onChange={(e) => setFormData({ ...formData, max_frames_per_month: e.target.value })}
               placeholder="Empty = no limit"
-              inputProps={{ min: 0 }}
-            />
-            <TextField
-              label="Credits Per Month (deprecated)"
-              type="number"
-              fullWidth
-              value={formData.credits_per_month}
-              onChange={(e) => setFormData({ ...formData, credits_per_month: e.target.value })}
-              placeholder="Empty = unlimited"
               inputProps={{ min: 0 }}
             />
             <TextField

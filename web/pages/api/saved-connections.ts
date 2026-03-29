@@ -92,14 +92,22 @@ export default async function handler(
       // Only check file limit for new connections (not updates)
       if (!isUpdate) {
         // Get user info to check plan
-        const { data: user } = await supabaseAdmin
+        let userQuery: any = await supabaseAdmin
           .from('users')
-          .select('plan, is_admin')
+          .select('plan, is_admin, bypass_indexing_limits')
           .eq('id', userId)
           .single();
+        if (userQuery.error && String(userQuery.error.message || '').includes('bypass_indexing_limits')) {
+          userQuery = await supabaseAdmin
+            .from('users')
+            .select('plan, is_admin')
+            .eq('id', userId)
+            .single();
+        }
+        const { data: user } = userQuery;
 
         // Skip check for unlimited users/admins
-        if (user && user.plan !== 'unlimited' && !user.is_admin) {
+        if (user && user.plan !== 'unlimited' && !user.is_admin && !(user as any).bypass_indexing_limits) {
           // Get effective limits (plan + addons)
           const limits = await getUserEffectiveLimits(
             supabaseAdmin,
@@ -444,4 +452,3 @@ export default async function handler(
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
-

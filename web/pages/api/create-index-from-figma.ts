@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { resolvePlanId, getPlanLimits, getPlanLimitsFromDb } from '../../lib/plans';
-import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getCurrentTotalFrames, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount } from '../../lib/subscription-helpers';
+import { getUserEffectiveLimits, canCreateIndex, incrementDailyIndexCount, getCurrentFileCount, getCurrentTotalFrames, getGuestIndexFileCount, getGuestTotalFrames, getGuestDistinctFileCount, checkFileIndexCooldown } from '../../lib/subscription-helpers';
 import {
   fetchFigmaFile,
   collectFrameNodes,
@@ -25,6 +25,11 @@ export const config = {
 
 const ALLOWED_FRAME_PARENTS = new Set(['PAGE', 'CANVAS', 'SECTION']);
 const INDEX_DATA_INLINE_MAX_BYTES = 700 * 1024;
+
+function isMissingColumnError(error: any, columnName: string): boolean {
+  const message = String(error?.message || '');
+  return message.includes(columnName) || message.includes(`column ${columnName}`) || message.includes(`"${columnName}"`);
+}
 
 function normalizePageName(name?: string): string {
   const trimmed = (name || '').trim();
@@ -627,12 +632,23 @@ export default async function handler(
     }
 
     // Find user by API key
-    const { data: userRows, error: userError } = await supabaseAdmin
+    let userQuery: any = await supabaseAdmin
       .from('users')
-      .select('id, email, full_name, api_key, plan, is_admin, created_at, credits_remaining')
+      .select('id, email, full_name, api_key, plan, is_admin, created_at, bypass_indexing_limits')
       .eq('api_key', apiKey)
       .order('created_at', { ascending: true, nullsFirst: false })
       .limit(1);
+
+    if (userQuery.error && isMissingColumnError(userQuery.error, 'bypass_indexing_limits')) {
+      userQuery = await supabaseAdmin
+        .from('users')
+        .select('id, email, full_name, api_key, plan, is_admin, created_at')
+        .eq('api_key', apiKey)
+        .order('created_at', { ascending: true, nullsFirst: false })
+        .limit(1);
+    }
+
+    const { data: userRows, error: userError } = userQuery;
 
     const user = Array.isArray(userRows) ? userRows[0] : null;
 
@@ -670,7 +686,7 @@ export default async function handler(
     let framesThisMonth = 0;
     let monthlyFramesError: any = null;
 
-    if (planLimits.maxUploadsPerMonth !== null) {
+    if (!user?.bypass_indexing_limits && planLimits.maxUploadsPerMonth !== null) {
       const { count: uploadsThisMonth, error: monthlyError } = await supabaseAdmin
         .from('index_files')
         .select('id', { count: 'exact', head: true })
@@ -696,7 +712,7 @@ export default async function handler(
       }
     }
 
-    if (planLimits.maxFramesPerMonth !== null) {
+    if (!user?.bypass_indexing_limits && planLimits.maxFramesPerMonth !== null) {
       const monthlyFramesQuery = await supabaseAdmin
         .from('index_files')
         .select('frame_count')
@@ -767,7 +783,7 @@ export default async function handler(
           });
         }
 
-        if (!hasExistingForFile && limits.maxFiles !== null) {
+        if (!user.bypass_indexing_limits && !hasExistingForFile && limits.maxFiles !== null) {
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
           if (currentFiles >= limits.maxFiles) {
           return res.status(403).json({
@@ -779,7 +795,7 @@ export default async function handler(
         }
         }
 
-        if (limits.maxFrames !== null) {
+        if (!user.bypass_indexing_limits && limits.maxFrames !== null) {
           const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
           if (currentTotalFrames + estimatedFrameCount > limits.maxFrames) {
           return res.status(403).json({
@@ -845,7 +861,7 @@ export default async function handler(
           const hasAuthExistingForFile = normalizedExisting.hasExistingForFile || authExistingByPageId.size > 0 || authExistingRows.length > 0;
           const isNewFile = !hasAuthExistingForFile;
 
-          if (isNewFile && limits.maxFiles !== null) {
+          if (!user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
             const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
             if (currentFiles >= limits.maxFiles) {
             return res.status(403).json({
@@ -856,7 +872,7 @@ export default async function handler(
             });
           }
           }
-          if (limits.maxFrames !== null) {
+          if (!user.bypass_indexing_limits && limits.maxFrames !== null) {
             const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
             if (currentTotalFrames + framesInPayload > limits.maxFrames) {
             return res.status(403).json({
@@ -867,6 +883,22 @@ export default async function handler(
             });
           }
           }
+          const cooldownCheck = await checkFileIndexCooldown(
+            supabaseAdmin,
+            user.id,
+            fileKeyTrim,
+            Boolean(user.bypass_indexing_limits),
+            Boolean(user.is_admin)
+          );
+          if (!cooldownCheck.allowed) {
+            return res.status(429).json({
+              success: false,
+              error: cooldownCheck.reason || 'Please wait before indexing this file again.',
+              code: 'INDEX_COOLDOWN_ACTIVE',
+              waitUntil: cooldownCheck.waitUntil?.toISOString(),
+            });
+          }
+
           const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
           if (!canIndex.allowed) {
             return res.status(429).json({
@@ -875,7 +907,9 @@ export default async function handler(
               code: 'RATE_LIMIT_EXCEEDED',
             });
           }
-          await incrementDailyIndexCount(supabaseAdmin, user.id);
+          if (!user.bypass_indexing_limits) {
+            await incrementDailyIndexCount(supabaseAdmin, user.id);
+          }
 
           const coverImageDataUrl = typeof coverImageDataUrlBody === 'string' ? coverImageDataUrlBody : null;
           const now = new Date();
@@ -1010,7 +1044,7 @@ export default async function handler(
 
     // Check subscription limits (files, frames, rate limiting)
     // Skip for unlimited/admin
-    if (user.plan !== 'unlimited' && !user.is_admin) {
+    if (user.plan !== 'unlimited' && !user.is_admin && !user.bypass_indexing_limits) {
       // Get effective limits (plan + addons)
       const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
       
@@ -1040,6 +1074,22 @@ export default async function handler(
       }
 
       // Check rate limiting (daily index count)
+      const cooldownCheck = await checkFileIndexCooldown(
+        supabaseAdmin,
+        user.id,
+        fileKey,
+        Boolean(user.bypass_indexing_limits),
+        Boolean(user.is_admin)
+      );
+      if (!cooldownCheck.allowed) {
+        return res.status(429).json({
+          success: false,
+          error: cooldownCheck.reason || 'Please wait before indexing this file again.',
+          code: 'INDEX_COOLDOWN_ACTIVE',
+          waitUntil: cooldownCheck.waitUntil?.toISOString()
+        });
+      }
+
       const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
       if (!canIndex.allowed) {
         return res.status(429).json({
@@ -1059,7 +1109,8 @@ export default async function handler(
         maxFiles: limits.maxFiles,
         currentIndexesToday: canIndex.currentCount,
         maxIndexesPerDay: canIndex.maxCount,
-        plan: user.plan
+        plan: user.plan,
+        bypassIndexingLimits: Boolean(user.bypass_indexing_limits)
       });
     }
 
@@ -1287,7 +1338,7 @@ export default async function handler(
     }
 
     // Check monthly frames limit (estimate based on totalFramesCount)
-    if (!monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
+    if (!user?.bypass_indexing_limits && !monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
       const framesThisMonthAfter = framesThisMonth + totalFramesCount;
       if (framesThisMonthAfter > planLimits.maxFramesPerMonth) {
         return res.status(403).json({
@@ -1384,7 +1435,7 @@ export default async function handler(
         console.log(`[${requestId}] ✅ Job inserted successfully:`, jobRow?.id);
         
         // Increment daily index count AFTER job is created successfully (skip for unlimited/admin)
-        if (user.plan !== 'unlimited' && !user.is_admin && jobRow?.id) {
+        if (user.plan !== 'unlimited' && !user.is_admin && !user.bypass_indexing_limits && jobRow?.id) {
           try {
             const newCount = await incrementDailyIndexCount(supabaseAdmin, user.id);
             console.log(`[${requestId}] ✅ Daily index count incremented: ${newCount}`);

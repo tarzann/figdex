@@ -13,13 +13,21 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!userId) return res.status(400).json({ success: false, error: 'Missing user id' });
 
   if (req.method === 'PUT') {
-    const { full_name, is_active, is_admin, plan } = req.body || {};
+    const { full_name, is_active, is_admin, plan, bypass_indexing_limits } = req.body || {};
 
-    const { data: existingUser, error: existingError } = await supabaseAdmin
+    let existingQuery: any = await supabaseAdmin
       .from('users')
-      .select('plan, is_admin')
+      .select('plan, is_admin, bypass_indexing_limits')
       .eq('id', userId)
       .maybeSingle();
+    if (existingQuery.error && String(existingQuery.error.message || '').includes('bypass_indexing_limits')) {
+      existingQuery = await supabaseAdmin
+        .from('users')
+        .select('plan, is_admin')
+        .eq('id', userId)
+        .maybeSingle();
+    }
+    const { data: existingUser, error: existingError } = existingQuery;
     if (existingError || !existingUser) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
@@ -46,6 +54,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (typeof full_name === 'string') updatePayload.full_name = full_name;
     if (typeof is_active === 'boolean') updatePayload.is_active = is_active;
     if (typeof is_admin === 'boolean') updatePayload.is_admin = is_admin;
+    if (typeof bypass_indexing_limits === 'boolean') updatePayload.bypass_indexing_limits = bypass_indexing_limits;
     if (planToSave) updatePayload.plan = planToSave;
 
     if (Object.keys(updatePayload).length === 0) {
@@ -74,5 +83,3 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default requireAdmin(handler);
-
-

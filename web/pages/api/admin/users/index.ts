@@ -11,10 +11,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(500).json({ success: false, error: 'Missing Supabase credentials' });
   }
   const supabaseAdmin = createClient(serviceUrl, serviceKey);
-  const { data, error } = await supabaseAdmin
+  let userQuery: any = await supabaseAdmin
     .from('users')
-    .select('id, email, full_name, api_key, plan, is_active, is_admin, created_at, credits_remaining, credits_reset_date')
+    .select('id, email, full_name, api_key, plan, is_active, is_admin, created_at, bypass_indexing_limits')
     .order('created_at', { ascending: false });
+  if (userQuery.error && String(userQuery.error.message || '').includes('bypass_indexing_limits')) {
+    userQuery = await supabaseAdmin
+      .from('users')
+      .select('id, email, full_name, api_key, plan, is_active, is_admin, created_at')
+      .order('created_at', { ascending: false });
+  }
+  const { data, error } = userQuery;
   if (error) return res.status(500).json({ success: false, error: error.message });
 
   const { data: usageRows, error: usageError } = await supabaseAdmin
@@ -34,6 +41,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ...u,
       api_key: u.api_key ? (u.api_key as string).slice(0, 8) + '••••••••' : null,
       plan: u.is_admin ? 'unlimited' : (u.plan || 'free'),
+      bypass_indexing_limits: Boolean((u as any).bypass_indexing_limits),
       projects: 0,
       indices: 0,
       storageBytes: 0,
@@ -58,8 +66,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         is_admin: false,
         is_guest: true,
         created_at: uploadedAt,
-        credits_remaining: 0,
-        credits_reset_date: null,
+        bypass_indexing_limits: false,
         projects: row.figma_file_key ? 1 : 0,
         indices: 1,
         storageBytes: 0,

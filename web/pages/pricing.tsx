@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Box, Container, Card, CardContent, Typography, Button, List, ListItem, ListItemIcon, ListItemText, Chip, Divider, Stack, IconButton, Avatar, Menu, MenuItem, CircularProgress } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { CREDIT_PACKAGES, dbPlanRowToPlanLimits, type DbPlanRow, type PlanLimits } from '../lib/plans';
+import { dbPlanRowToPlanLimits, type DbPlanRow, type PlanLimits } from '../lib/plans';
 import { usePaddleCheckout } from '../components/PaddleCheckout';
 import {
   AccountCircle as AccountCircleIcon,
@@ -174,23 +173,14 @@ export default function Pricing({ publicPlans }: PricingProps) {
     const highlights = [
       plan.limits.maxProjects == null ? 'Unlimited files' : `${plan.limits.maxProjects.toLocaleString()} files`,
       plan.limits.maxFramesTotal == null ? 'Unlimited frames' : `${plan.limits.maxFramesTotal.toLocaleString()} frames`,
-      plan.limits.creditsPerMonth == null ? 'Custom monthly credits' : `${plan.limits.creditsPerMonth.toLocaleString()} credits / month`,
       plan.planId === 'free' ? 'Basic search' : 'Advanced search & filters',
       plan.planId === 'team' ? 'Public galleries and team sharing' : 'Private galleries',
-      plan.planId === 'team' ? 'Faster processing queue' : 'Standard processing priority',
+      plan.planId === 'team' ? 'Priority processing and team review' : 'Priority-safe indexing and re-indexing',
     ];
-
-    const creditNotes =
-      plan.planId === 'free'
-        ? ['1 re-index = 50 credits']
-        : plan.planId === 'team'
-          ? ['1 index = 100 credits', '+1 file = 150 credits/month', '+1,000 frames = 120 credits/month']
-          : ['1 index = 100 credits', '+1 file = 200 credits/month', '+1,000 frames = 150 credits/month'];
 
     return {
       ...plan,
       highlights,
-      creditNotes,
       cta:
         plan.planId === 'free'
           ? 'Index your first file'
@@ -368,7 +358,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
             Start free, move to Pro when you need room to work, and use Team when gallery sharing becomes part of the workflow.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ flexWrap: 'wrap' }}>
-            {['Start free with no credit card', 'Upgrade only when file and frame limits matter', 'Credits let you scale without changing plans immediately'].map((item) => (
+            {['Start free with no credit card', 'Upgrade only when file and frame limits matter', 'Built-in fair use protection keeps indexing reliable'].map((item) => (
               <Chip key={item} label={item} variant="outlined" sx={{ bgcolor: '#fff' }} />
             ))}
           </Stack>
@@ -414,16 +404,6 @@ export default function Pricing({ publicPlans }: PricingProps) {
                       </ListItem>
                     ))}
                   </List>
-                  <Box sx={{ mt: 2.5, p: 2, bgcolor: '#f8fafc', borderRadius: 3, border: '1px solid #eaecf0' }}>
-                    <Typography variant="caption" fontWeight={700} display="block" sx={{ mb: 0.75, color: '#344054' }}>
-                      Credit costs
-                    </Typography>
-                    {plan.creditNotes.map((note) => (
-                      <Typography key={note} variant="caption" display="block" sx={{ color: '#667085', lineHeight: 1.6 }}>
-                        • {note}
-                      </Typography>
-                    ))}
-                  </Box>
                   {plan.planId === 'free' ? (
                     <Link href="/register" passHref>
                       <Button variant="outlined" fullWidth sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}>
@@ -468,45 +448,6 @@ export default function Pricing({ publicPlans }: PricingProps) {
           ))}
         </Box>
 
-        {/* Credits Section */}
-        <Box sx={{ mt: 6 }}>
-          <Card sx={{ borderRadius: 3, boxShadow: 3, bgcolor: 'white' }}>
-            <CardContent sx={{ p: 4 }}>
-              <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
-                Purchase Additional Credits
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Need more credits? Purchase them anytime. Credits never expire and can be used for files, frames, or indexes.
-              </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
-                {CREDIT_PACKAGES.map((pkg) => (
-                  <Card key={pkg.priceId} variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography variant="h6" fontWeight={700}>
-                      {pkg.credits.toLocaleString()} Credits
-                    </Typography>
-                    <Typography variant="h5" fontWeight={800} color="primary" sx={{ mt: 1 }}>
-                      ${pkg.price}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                      ${(pkg.price / pkg.credits * 100).toFixed(2)} per 100 credits
-                    </Typography>
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      fullWidth 
-                      sx={{ mt: 2 }}
-                      disabled
-                    >
-                      Coming Soon
-                    </Button>
-                  </Card>
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
-        </Box>
-
-        {/* Enterprise Section */}
         <Box sx={{ mt: 4 }}>
           <Card sx={{ borderRadius: 3, boxShadow: 3, bgcolor: 'white' }}>
             <CardContent sx={{ p: 4, textAlign: 'center' }}>
@@ -519,7 +460,6 @@ export default function Pricing({ publicPlans }: PricingProps) {
               <List dense sx={{ maxWidth: 600, mx: 'auto', mb: 3 }}>
                 {[
                   'Unlimited files & frames',
-                  '5,000+ credits / month',
                   'On-demand re-index',
                   'Dedicated processing capacity',
                   'SLA & priority support',
@@ -560,7 +500,7 @@ export const getServerSideProps: GetServerSideProps<PricingProps> = async () => 
         label: 'Free',
         max_projects: 2,
         max_frames_total: 500,
-        credits_per_month: 100,
+        credits_per_month: null,
         max_uploads_per_day: null,
         max_uploads_per_month: null,
         max_frames_per_month: 500,
@@ -584,7 +524,7 @@ export const getServerSideProps: GetServerSideProps<PricingProps> = async () => 
         label: 'Pro',
         max_projects: 10,
         max_frames_total: 5000,
-        credits_per_month: 1000,
+        credits_per_month: null,
         max_uploads_per_day: null,
         max_uploads_per_month: null,
         max_frames_per_month: null,
@@ -608,7 +548,7 @@ export const getServerSideProps: GetServerSideProps<PricingProps> = async () => 
         label: 'Team',
         max_projects: 20,
         max_frames_total: 15000,
-        credits_per_month: 2000,
+        credits_per_month: null,
         max_uploads_per_day: null,
         max_uploads_per_month: null,
         max_frames_per_month: null,

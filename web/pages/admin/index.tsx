@@ -188,22 +188,6 @@ export default function AdminDashboard() {
 
           <Card 
             sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
-            onClick={() => router.push('/admin/credit-packages')}
-          >
-            <Settings sx={{ mb: 1 }} />
-            <Typography variant="body1">Credit Packages</Typography>
-          </Card>
-
-          <Card 
-            sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
-            onClick={() => router.push('/admin/credit-pricing')}
-          >
-            <Settings sx={{ mb: 1 }} />
-            <Typography variant="body1">Credit Pricing</Typography>
-          </Card>
-
-          <Card 
-            sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
             onClick={() => router.push('/admin/plans')}
           >
             <Settings sx={{ mb: 1 }} />
@@ -239,4 +223,3 @@ export default function AdminDashboard() {
     </Container>
   );
 }
-

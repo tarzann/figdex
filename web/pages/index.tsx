@@ -894,20 +894,20 @@ const HomePageV2 = () => {
               name: 'Free', 
               price: '$0', 
               desc: 'For exploring Figdex',
-              features: ['1 Figma file', 'Up to 300 frames', '100 credits / month', 'Basic search']
+              features: ['1 Figma file', 'Up to 300 frames', 'Basic search', 'Private gallery']
             },
             { 
               name: 'Pro', 
               price: '$29', 
               desc: 'For designers working on real projects',
-              features: ['10 files (quota)', '5,000 frames (quota)', '1,000 credits / month', 'Advanced search & filters'],
+              features: ['10 files (quota)', '5,000 frames (quota)', 'Advanced search & filters', 'Reliable re-indexing'],
               highlight: true
             },
             { 
               name: 'Team', 
               price: '$49', 
               desc: 'For teams that need shared clarity',
-              features: ['20 files (quota)', '15,000 frames (quota)', '2,000 credits / month', 'Team sharing']
+              features: ['20 files (quota)', '15,000 frames (quota)', 'Team sharing', 'Priority processing']
             },
           ].map((plan, idx) => (
             <Box key={idx}>
