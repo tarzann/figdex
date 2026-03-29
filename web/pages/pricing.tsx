@@ -150,19 +150,67 @@ export default function Pricing() {
       alert('Failed to copy API key');
     }
   };
+
+  const planCards = [
+    {
+      id: 'free',
+      title: 'Free',
+      price: '$0',
+      suffix: '/mo',
+      eyebrow: 'Best for exploring the product',
+      summary: 'Start indexing your first file and get a clean feel for the workflow.',
+      highlights: ['1 Figma file', 'Up to 300 frames', '100 credits / month', 'Basic search', 'Private access only'],
+      creditNotes: ['1 re-index = 50 credits'],
+      cta: 'Index your first file',
+      variant: 'outlined' as const,
+      emphasized: false,
+    },
+    {
+      id: 'pro',
+      title: 'Pro',
+      price: '$29',
+      suffix: '/mo',
+      eyebrow: 'Best for individual product designers',
+      summary: 'Use FigDex on real projects with enough quota, stronger search, and better day-to-day workflow.',
+      highlights: ['10 files', '5,000 frames', '1,000 credits / month', 'Advanced search & filters', 'Private galleries', 'Standard processing priority'],
+      creditNotes: ['1 index = 100 credits', '+1 file = 200 credits/month', '+1,000 frames = 150 credits/month'],
+      cta: isLoggedIn ? 'Subscribe to Pro' : 'Start Pro trial',
+      variant: 'contained' as const,
+      emphasized: true,
+    },
+    {
+      id: 'team',
+      title: 'Team',
+      price: '$49',
+      suffix: '/mo',
+      eyebrow: 'Best for shared review and handoff',
+      summary: 'Give teams a shared gallery, larger quotas, and faster processing for collaborative work.',
+      highlights: ['20 files', '15,000 frames', '2,000 credits / month', 'Team sharing', 'Public galleries', 'Faster job queue', 'Team-level visibility'],
+      creditNotes: ['1 index = 100 credits', '+1 file = 150 credits/month', '+1,000 frames = 120 credits/month'],
+      cta: isLoggedIn ? 'Subscribe to Team' : 'Choose Team',
+      variant: 'outlined' as const,
+      emphasized: false,
+    }
+  ];
   
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: '#f5f7fb',
+        backgroundImage: 'radial-gradient(circle at top left, rgba(102,126,234,0.12), transparent 32%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 22%)'
+      }}
+    >
       {/* Header */}
       <Container maxWidth="lg">
-        <Box sx={{ py: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+        <Box sx={{ py: 3.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', gap: 3 }}>
           <Typography 
             variant="h4" 
             sx={{ 
-              fontWeight: 300,
-              letterSpacing: 3,
+              fontWeight: 700,
+              letterSpacing: 1.5,
               color: '#1a1a1a',
-              fontSize: '1.5rem',
+              fontSize: '1.25rem',
               cursor: 'pointer'
             }}
             onClick={() => router.push('/')}
@@ -172,9 +220,9 @@ export default function Pricing() {
           <Typography 
             variant="h5" 
             sx={{ 
-              fontWeight: 300,
+              fontWeight: 500,
               color: '#1a1a1a',
-              fontSize: '1.25rem',
+              fontSize: '1.05rem',
               position: 'absolute',
               left: '50%',
               transform: 'translateX(-50%)'
@@ -277,200 +325,137 @@ export default function Pricing() {
         </Box>
       </Container>
 
-      {/* Content */}
       <Container maxWidth="lg">
-        <Box sx={{ textAlign: 'center', mb: 6, py: { xs: 4, md: 6 } }}>
+        <Box sx={{ textAlign: 'center', mb: 6, py: { xs: 4, md: 7 } }}>
+          <Chip
+            label="Simple pricing for indexing, search, and sharing"
+            sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+          />
+          <Typography
+            variant="h2"
+            sx={{
+              fontWeight: 700,
+              color: '#111827',
+              letterSpacing: -1.5,
+              mb: 2,
+              fontSize: { xs: '2.3rem', md: '3.75rem' }
+            }}
+          >
+            Pick the plan that matches how your team reviews design.
+          </Typography>
           <Typography 
             variant="body1" 
             sx={{ 
-              color: '#666', 
-              mb: 4,
-              fontWeight: 300
+              color: '#667085', 
+              mb: 3,
+              fontWeight: 400,
+              fontSize: { xs: '1rem', md: '1.15rem' },
+              maxWidth: 760,
+              mx: 'auto',
+              lineHeight: 1.7
             }}
           >
-            Start free. Upgrade to Pro when you need more. Pay only for what you use.
+            Start free, move to Pro when you need room to work, and use Team when gallery sharing becomes part of the workflow.
           </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ flexWrap: 'wrap' }}>
+            {['Start free with no credit card', 'Upgrade only when file and frame limits matter', 'Credits let you scale without changing plans immediately'].map((item) => (
+              <Chip key={item} label={item} variant="outlined" sx={{ bgcolor: '#fff' }} />
+            ))}
+          </Stack>
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 4, mb: 6 }}>
-          {/* Free Plan */}
-          <Box>
-            <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-              <CardContent sx={{ p: 4 }}>
-                <Typography variant="h5" fontWeight={700}>Free</Typography>
-                <Typography variant="h3" fontWeight={800} sx={{ mt: 1 }}>
-                  $0 <Typography component="span" variant="subtitle2" color="text.secondary">/mo</Typography>
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                  For exploring Figdex
-                </Typography>
-                <List dense sx={{ mt: 2 }}>
-                  {[
-                    '1 Figma file',
-                    'Up to 300 frames',
-                    '100 credits / month',
-                    'Basic search',
-                    'Private access only',
-                  ].map((f) => (
-                    <ListItem key={f} sx={{ py: 0.5 }}>
-                      <ListItemIcon sx={{ minWidth: 32 }}><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                      <ListItemText primaryTypographyProps={{ variant: 'body2' }} primary={f} />
-                    </ListItem>
-                  ))}
-                </List>
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
-                  <Typography variant="caption" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
-                    Credit costs:
-                  </Typography>
-                  <Typography variant="caption" display="block">• 1 re-index = 50 credits</Typography>
-                </Box>
-                <Link href="/register" passHref>
-                  <Button variant="outlined" fullWidth sx={{ mt: 2 }}>
-                    Index your first file
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </Box>
-
-          {/* Pro Plan */}
-          <Box>
-            <Card sx={{ borderRadius: 3, border: '2px solid #667eea', boxShadow: 4, position: 'relative' }}>
-              <Chip 
-                label="Most Popular" 
-                color="primary" 
-                size="small" 
-                sx={{ position: 'absolute', top: 16, right: 16 }}
-              />
-              <CardContent sx={{ p: 4 }}>
-                <Typography variant="h5" fontWeight={700}>Pro</Typography>
-                <Typography variant="h3" fontWeight={800} sx={{ mt: 1 }}>
-                  $29 <Typography component="span" variant="subtitle2" color="text.secondary">/mo</Typography>
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                  For designers working on real projects
-                </Typography>
-                <List dense sx={{ mt: 2 }}>
-                  {[
-                    '10 files (quota)',
-                    '5,000 frames (quota)',
-                    '1,000 credits / month',
-                    'Advanced search & filters',
-                    'Private galleries',
-                    'Standard processing priority',
-                  ].map((f) => (
-                    <ListItem key={f} sx={{ py: 0.5 }}>
-                      <ListItemIcon sx={{ minWidth: 32 }}><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                      <ListItemText primaryTypographyProps={{ variant: 'body2' }} primary={f} />
-                    </ListItem>
-                  ))}
-                </List>
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
-                  <Typography variant="caption" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
-                    Credit costs:
-                  </Typography>
-                  <Typography variant="caption" display="block">• 1 index = 100 credits</Typography>
-                  <Typography variant="caption" display="block">• +1 file = 200 credits/month</Typography>
-                  <Typography variant="caption" display="block">• +1,000 frames = 150 credits/month</Typography>
-                </Box>
-                {isLoggedIn ? (
-                  <Button 
-                    variant="contained" 
-                    color="primary" 
-                    fullWidth 
-                    sx={{ mt: 2 }}
-                    onClick={() => handleSubscribe('pro')}
-                    disabled={!paddleReady || paddleInitializing}
-                  >
-                    {paddleInitializing ? (
-                      <>
-                        <CircularProgress size={20} sx={{ mr: 1 }} />
-                        Initializing...
-                      </>
-                    ) : paddleReady ? (
-                      'Subscribe to Pro'
-                    ) : (
-                      'Loading...'
-                    )}
-                  </Button>
-                ) : (
-                  <Link href="/register" passHref>
-                    <Button variant="contained" color="primary" fullWidth sx={{ mt: 2 }}>
-                      Sign Up for Pro
-                    </Button>
-                  </Link>
+          {planCards.map((plan) => (
+            <Box key={plan.id}>
+              <Card
+                sx={{
+                  borderRadius: 4,
+                  border: plan.emphasized ? '2px solid #667eea' : '1px solid #d0d5dd',
+                  boxShadow: plan.emphasized ? '0 18px 40px rgba(102,126,234,0.18)' : '0 8px 24px rgba(16,24,40,0.06)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  height: '100%'
+                }}
+              >
+                {plan.emphasized && (
+                  <Chip
+                    label="Most popular"
+                    color="primary"
+                    size="small"
+                    sx={{ position: 'absolute', top: 16, right: 16 }}
+                  />
                 )}
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-                  14-day free trial included
-                </Typography>
-              </CardContent>
-            </Card>
-          </Box>
-
-          {/* Team Plan */}
-          <Box>
-            <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-              <CardContent sx={{ p: 4 }}>
-                <Typography variant="h5" fontWeight={700}>Team</Typography>
-                <Typography variant="h3" fontWeight={800} sx={{ mt: 1 }}>
-                  $49 <Typography component="span" variant="subtitle2" color="text.secondary">/mo</Typography>
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                  For teams that need shared clarity
-                </Typography>
-                <List dense sx={{ mt: 2 }}>
-                  {[
-                    '20 files (quota)',
-                    '15,000 frames (quota)',
-                    '2,000 credits / month',
-                    'Team sharing',
-                    'Public galleries',
-                    'Faster job queue',
-                    'Team-level visibility',
-                  ].map((f) => (
-                    <ListItem key={f} sx={{ py: 0.5 }}>
-                      <ListItemIcon sx={{ minWidth: 32 }}><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                      <ListItemText primaryTypographyProps={{ variant: 'body2' }} primary={f} />
-                    </ListItem>
-                  ))}
-                </List>
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
-                  <Typography variant="caption" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
-                    Credit costs (discounted):
+                <CardContent sx={{ p: 4 }}>
+                  <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em' }}>
+                    {plan.eyebrow}
                   </Typography>
-                  <Typography variant="caption" display="block">• 1 index = 100 credits</Typography>
-                  <Typography variant="caption" display="block">• +1 file = 150 credits/month</Typography>
-                  <Typography variant="caption" display="block">• +1,000 frames = 120 credits/month</Typography>
-                </Box>
-                {isLoggedIn ? (
-                  <Button 
-                    variant="outlined" 
-                    fullWidth 
-                    sx={{ mt: 2 }}
-                    onClick={() => handleSubscribe('team')}
-                    disabled={!paddleReady || paddleInitializing}
-                  >
-                    {paddleInitializing ? (
-                      <>
-                        <CircularProgress size={20} sx={{ mr: 1 }} />
-                        Initializing...
-                      </>
-                    ) : paddleReady ? (
-                      'Subscribe to Team'
-                    ) : (
-                      'Loading...'
-                    )}
-                  </Button>
-                ) : (
-                  <Link href="/register" passHref>
-                    <Button variant="outlined" fullWidth sx={{ mt: 2 }}>
-                      Sign Up for Team
+                  <Typography variant="h5" fontWeight={700}>{plan.title}</Typography>
+                  <Typography variant="h3" fontWeight={800} sx={{ mt: 1 }}>
+                    {plan.price} <Typography component="span" variant="subtitle2" color="text.secondary">{plan.suffix}</Typography>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1.25, mb: 2.5, minHeight: 48, lineHeight: 1.65 }}>
+                    {plan.summary}
+                  </Typography>
+                  <List dense sx={{ mt: 1 }}>
+                    {plan.highlights.map((f) => (
+                      <ListItem key={f} sx={{ py: 0.5 }}>
+                        <ListItemIcon sx={{ minWidth: 32 }}><CheckIcon color="success" fontSize="small" /></ListItemIcon>
+                        <ListItemText primaryTypographyProps={{ variant: 'body2' }} primary={f} />
+                      </ListItem>
+                    ))}
+                  </List>
+                  <Box sx={{ mt: 2.5, p: 2, bgcolor: '#f8fafc', borderRadius: 3, border: '1px solid #eaecf0' }}>
+                    <Typography variant="caption" fontWeight={700} display="block" sx={{ mb: 0.75, color: '#344054' }}>
+                      Credit costs
+                    </Typography>
+                    {plan.creditNotes.map((note) => (
+                      <Typography key={note} variant="caption" display="block" sx={{ color: '#667085', lineHeight: 1.6 }}>
+                        • {note}
+                      </Typography>
+                    ))}
+                  </Box>
+                  {plan.id === 'free' ? (
+                    <Link href="/register" passHref>
+                      <Button variant="outlined" fullWidth sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}>
+                        {plan.cta}
+                      </Button>
+                    </Link>
+                  ) : isLoggedIn ? (
+                    <Button
+                      variant={plan.variant}
+                      color="primary"
+                      fullWidth
+                      sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}
+                      onClick={() => handleSubscribe(plan.id as 'pro' | 'team')}
+                      disabled={!paddleReady || paddleInitializing}
+                    >
+                      {paddleInitializing ? (
+                        <>
+                          <CircularProgress size={20} sx={{ mr: 1 }} />
+                          Initializing...
+                        </>
+                      ) : paddleReady ? (
+                        plan.cta
+                      ) : (
+                        'Loading...'
+                      )}
                     </Button>
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
-          </Box>
+                  ) : (
+                    <Link href="/register" passHref>
+                      <Button variant={plan.variant} color="primary" fullWidth sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}>
+                        {plan.cta}
+                      </Button>
+                    </Link>
+                  )}
+                  {plan.id === 'pro' && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
+                      14-day free trial included
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </Box>
+          ))}
         </Box>
 
         {/* Credits Section */}
@@ -547,5 +532,4 @@ export default function Pricing() {
     </Box>
   );
 }
-
 
