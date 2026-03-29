@@ -67,6 +67,10 @@ const resolveFramePreview = (frameRow: any, payload: any) => {
     return { thumbUrl: existingThumb, listImage: existingThumb };
   }
 
+  if (typeof sourceImage === 'string' && sourceImage.startsWith('data:image/')) {
+    return { thumbUrl: null, listImage: null };
+  }
+
   return {
     thumbUrl: null,
     listImage: sourceImage || null,
@@ -240,13 +244,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const { data: normalizedFrames } = await svc
           .from('indexed_frames')
-          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
+          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order')
           .eq('page_id', normalizedPage.id)
           .range(offset, offset + limit - 1)
           .order('sort_order', { ascending: true });
 
         for (const frame of normalizedFrames || []) {
-          const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const payload: any = {};
           const preview = resolveFramePreview({ ...frame, page_id: normalizedPage.id }, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
@@ -314,14 +318,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pattern = `%${query.trim()}%`;
         const { data: searchFrames } = await svc
           .from('indexed_frames')
-          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, frame_payload, sort_order')
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order')
           .in('page_id', pageIds)
           .or(`frame_name.ilike.${pattern},search_text.ilike.${pattern}`)
           .order('sort_order', { ascending: true })
           .limit(500);
 
         for (const frame of searchFrames || []) {
-          const payload = frame.frame_payload && typeof frame.frame_payload === 'object' ? frame.frame_payload : {};
+          const payload: any = {};
           const preview = resolveFramePreview(frame, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
