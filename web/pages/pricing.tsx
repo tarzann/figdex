@@ -45,7 +45,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [paddleConfig, setPaddleConfig] = useState<any>(null);
-  const { openCheckout, isReady: paddleReady, isInitializing: paddleInitializing } = usePaddleCheckout();
+  const { openCheckout, isReady: paddleReady, isInitializing: paddleInitializing, initError: paddleInitError } = usePaddleCheckout();
 
   useEffect(() => {
     const checkLogin = () => {
@@ -182,9 +182,12 @@ export default function Pricing({ publicPlans }: PricingProps) {
       plan.planId === 'team' ? 'Priority processing and team review' : 'Priority-safe indexing and re-indexing',
     ];
 
+    const checkoutUnavailable = !isCurrentPlan && !paddleReady && !paddleInitializing;
+
     return {
       ...plan,
       isCurrentPlan,
+      checkoutUnavailable,
       highlights,
       cta:
         isCurrentPlan
@@ -429,7 +432,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
                       fullWidth
                       sx={{ mt: 2.5, borderRadius: 999, fontWeight: 600 }}
                       onClick={() => handleSubscribe(plan.planId as 'pro' | 'team')}
-                      disabled={plan.isCurrentPlan || !paddleReady || paddleInitializing}
+                      disabled={plan.isCurrentPlan || paddleInitializing || plan.checkoutUnavailable}
                     >
                       {plan.isCurrentPlan ? (
                         plan.cta
@@ -441,7 +444,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
                       ) : paddleReady ? (
                         plan.cta
                       ) : (
-                        'Loading...'
+                        'Checkout unavailable'
                       )}
                     </Button>
                   ) : (
@@ -454,6 +457,11 @@ export default function Pricing({ publicPlans }: PricingProps) {
                   {plan.planId === 'pro' && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
                       14-day free trial included
+                    </Typography>
+                  )}
+                  {plan.checkoutUnavailable && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
+                      {paddleInitError ? 'Payment setup is temporarily unavailable.' : 'Checkout is not ready right now.'}
                     </Typography>
                   )}
                 </CardContent>

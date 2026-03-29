@@ -65,12 +65,14 @@ export async function initializePaddle(): Promise<any> {
 export function usePaddleCheckout() {
   const [isReady, setIsReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize Paddle on mount
     const init = async () => {
       if (paddleInstance) {
         setIsReady(true);
+        setInitError(null);
         return;
       }
 
@@ -78,8 +80,10 @@ export function usePaddleCheckout() {
       try {
         await initializePaddle();
         setIsReady(true);
+        setInitError(null);
       } catch (error) {
         console.error('Failed to initialize Paddle:', error);
+        setInitError(error instanceof Error ? error.message : 'Failed to initialize checkout');
       } finally {
         setIsInitializing(false);
       }
@@ -156,6 +160,5 @@ export function usePaddleCheckout() {
     }
   }, []);
 
-  return { openCheckout, isReady, isInitializing };
+  return { openCheckout, isReady, isInitializing, initError };
 }
-
