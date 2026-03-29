@@ -175,14 +175,15 @@
       }
 
       .pages-action-btn {
-        font-size: 0.68em;
+        font-size: 0.64em;
         color: #1976d2;
         background: #fff;
         border: 1px solid #d5deea;
         border-radius: 999px;
-        padding: 3px 9px;
+        padding: 2px 8px;
         cursor: pointer;
         line-height: 1.1;
+        white-space: nowrap;
         transition: background 0.2s, border-color 0.2s, color 0.2s;
       }
 
@@ -475,25 +476,26 @@
       #pagesHeader { 
         display: flex; 
         align-items: center;
+        gap: 6px;
         width: 100%; 
         border-bottom: 1px solid #0d99ff; 
         margin-bottom: 6px; 
         padding: 4px 0;
       }
       #pagesHeader > div:first-child {
-        flex: 0 0 auto;
-      }
-      #pagesHeader > div:nth-child(2) {
         flex: 1 1 auto;
         min-width: 0;
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
+      }
+      #pagesHeader > div:nth-child(2) {
+        flex: 0 0 auto;
+        display: flex;
         align-items: center;
         gap: 6px;
       }
       #pagesHeader > div:last-child {
         flex: 0 0 auto;
-        margin-left: auto;
       }
       
       /* Animation for collapsible sections */
@@ -777,7 +779,7 @@
     <!-- Header -->
     <div class="app-header">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <div class="version" id="pluginVersionLabel">v1.32.34</div>
+        <div class="version" id="pluginVersionLabel">v1.32.35</div>
         <button type="button" id="debugClearStorageBtn" class="debug-clear-btn" title="Clear saved data (debug)" onclick="typeof __figdexClearData === 'function' && __figdexClearData();">Clear data</button>
       </div>
       <div style="flex: 1;"></div>
@@ -934,7 +936,7 @@
           <div id="pagesHeader">
             <div>
               <input type="checkbox" id="toggleSelectCheckbox" style="accent-color: #2897FB; width: 12px; height: 12px; margin-right: 8px; margin-left: 8px; vertical-align: middle;">
-              <span style="font-size: 0.7em; display: inline-block; width: 270px;">Page Name</span>
+              <span style="font-size: 0.7em; display: inline-block; min-width: 0; flex: 1 1 auto;">Page Name</span>
             </div>
             <div>
               <button type="button" id="selectAllPagesBtn" class="pages-action-btn">Select all</button>
@@ -980,14 +982,17 @@
           </div>
         </div>
         <!-- INDEXING: simple overlay -->
-        <div id="indexingBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
-          <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
-            <span class="spinner" style="margin-left:0; width:18px; height:18px; border-width:3px;"></span>
-            <div id="indexingBlockText" style="font-size: 0.9em; color: #333; font-weight: 500;">Updating index…</div>
+        <div id="indexingBlock" style="display: none; text-align: left; margin-top: 8px; padding: 14px; background: linear-gradient(180deg, #f8fbff 0%, #f4f8fd 100%); border: 1px solid #d7e6fb; border-radius: 10px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span class="spinner" style="margin-left:0; width:18px; height:18px; border-width:3px; flex:0 0 auto;"></span>
+              <div id="indexingBlockStage" style="font-size: 0.68em; color: #1976d2; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">Working</div>
+            </div>
+            <div style="font-size:0.68em; color:#5b6b7f; background:#fff; border:1px solid #d7e6fb; border-radius:999px; padding:3px 8px;">Live status</div>
           </div>
-          <div id="indexingBlockSubtext" style="font-size: 0.8em; color: #666; margin-top: 4px;">Your existing gallery is being updated with the selected pages.</div>
-          <div id="indexingBlockHint" style="display:none; font-size:0.72em; color:#8d6e63; margin-top:8px;">This is taking longer than usual. Large or very long frames may need extra time.</div>
-          <button type="button" id="indexingDismissBtn" style="margin-top:10px; font-size:0.75em; background:transparent; color:#666; border:1px solid #ccc; border-radius:6px; cursor:pointer; padding:8px 12px;">Close status</button>
+          <div id="indexingBlockText" style="font-size: 0.92em; color: #1f2937; font-weight: 600; line-height:1.35;">Updating index…</div>
+          <div id="indexingBlockSubtext" style="font-size: 0.76em; color: #667085; margin-top: 6px; line-height:1.45;">Your existing gallery is being updated with the selected pages.</div>
+          <div id="indexingBlockHint" style="display:none; font-size:0.72em; color:#8d6e63; margin-top:10px;">This is taking longer than usual. Large or very long frames may need extra time.</div>
         </div>
         <!-- DONE: simple section + View in FigDex Web -->
         <div id="doneBlock" style="display: none; text-align: center; margin-top: 8px; padding: 16px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -1175,7 +1180,7 @@
               
               <!-- Plugin Version -->
               <div style="padding: 8px 12px; text-align: center; color: #888;">
-                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.34</span></span>
+                <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.35</span></span>
               </div>
 
               <!-- Debug: Clear Local Data -->
@@ -1240,7 +1245,7 @@
         
         <!-- Plugin Version -->
         <div style="padding: 8px 12px; text-align: center; color: #888;">
-          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.34</span></span>
+          <span style="font-size: 0.7em;">Plugin version: <span class="menuVersionText">v1.32.35</span></span>
         </div>
         
         <!-- Disconnect Button (shown when connected) -->
@@ -1985,6 +1990,17 @@
         };
       }
 
+      function getIndexingPresentation(statusText) {
+        var raw = (statusText || 'Updating index…').toString();
+        var lower = raw.toLowerCase();
+        if (lower.indexOf('prepar') !== -1) return { stage: 'Preparing', detail: 'Checking the selected pages and getting the index ready.' };
+        if (lower.indexOf('export') !== -1) return { stage: 'Exporting', detail: 'Rendering frames from Figma before upload.' };
+        if (lower.indexOf('retry') !== -1) return { stage: 'Retrying', detail: 'A temporary issue was detected. FigDex is trying again automatically.' };
+        if (lower.indexOf('upload') !== -1) return { stage: 'Uploading', detail: 'Sending your selected pages to FigDex.' };
+        if (lower.indexOf('final') !== -1 || lower.indexOf('complete') !== -1) return { stage: 'Finalizing', detail: 'Finishing the gallery update on the server.' };
+        return { stage: 'Working', detail: 'Processing your selected pages and preparing the gallery.' };
+      }
+
       function render(stateOrControllerState, model) {
         if (!model) return;
         var uiState = (typeof stateOrControllerState === 'string') ? (window.__figdexUIState || { step1Expanded: false }) : stateOrControllerState;
@@ -2171,8 +2187,18 @@
           var indexingTextEl = document.getElementById('indexingBlockText');
           var indexingSubEl = document.getElementById('indexingBlockSubtext');
           var indexingHintEl = document.getElementById('indexingBlockHint');
-          if (indexingTextEl && isIndexing) indexingTextEl.textContent = state.indexingStatusText || 'Updating index…';
-          if (indexingSubEl) indexingSubEl.style.display = isIndexing ? 'block' : 'none';
+          var indexingStageEl = document.getElementById('indexingBlockStage');
+          if (isIndexing) {
+            var indexingPresentation = getIndexingPresentation(state.indexingStatusText);
+            if (indexingTextEl) indexingTextEl.textContent = state.indexingStatusText || 'Updating index…';
+            if (indexingSubEl) {
+              indexingSubEl.style.display = 'block';
+              indexingSubEl.textContent = indexingPresentation.detail;
+            }
+            if (indexingStageEl) indexingStageEl.textContent = indexingPresentation.stage;
+          } else {
+            if (indexingSubEl) indexingSubEl.style.display = 'none';
+          }
           if (indexingHintEl) {
             var isSlow = false;
             if (isIndexing && state.indexingStartedAt) {
@@ -2494,20 +2520,6 @@
         var doneUpdateAgainBtn = document.getElementById('doneUpdateAgainBtn');
         if (doneUpdateAgainBtn) {
           doneUpdateAgainBtn.addEventListener('click', function() {
-            if (controller && controller.dispatch) {
-              controller.dispatch('reset');
-              if (typeof notifyStateChange === 'function') notifyStateChange(controller.getState());
-              var model = { fileKey: state.fileKey, pages: state.pages, selectedPages: state.selectedPages, identity: identityStore ? identityStore.getIdentity() : null };
-              render(state, model);
-            }
-          });
-        }
-        var indexingDismissBtn = document.getElementById('indexingDismissBtn');
-        if (indexingDismissBtn) {
-          indexingDismissBtn.addEventListener('click', function() {
-            state.indexingStatusText = 'Updating index…';
-            state.indexingStartedAt = 0;
-            state.indexingLastProgressAt = 0;
             if (controller && controller.dispatch) {
               controller.dispatch('reset');
               if (typeof notifyStateChange === 'function') notifyStateChange(controller.getState());
