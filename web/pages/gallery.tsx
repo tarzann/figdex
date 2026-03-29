@@ -3535,31 +3535,84 @@ export default function Home() {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
-            {/* Create new share */}
-            <Typography variant="h6" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 0.75 }}>
               Create Share Link
             </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-              <Button
-                variant={selectedShareType === 'all_indices' ? 'contained' : 'outlined'}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+              Choose what people should see when they open this link.
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+                mb: 3
+              }}
+            >
+              <Box
                 onClick={() => setSelectedShareType('all_indices')}
-                disabled={creatingShare}
-                fullWidth
+                sx={{
+                  p: 2,
+                  borderRadius: 3,
+                  border: selectedShareType === 'all_indices' ? '2px solid #667eea' : '1px solid #d0d5dd',
+                  bgcolor: selectedShareType === 'all_indices' ? '#eef4ff' : '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.18s ease',
+                  '&:hover': {
+                    borderColor: '#98a2ff',
+                    boxShadow: '0 6px 18px rgba(16,24,40,0.06)'
+                  }
+                }}
               >
-                Share All Indices
-              </Button>
-              <Button
-                variant={selectedShareType === 'search_results' ? 'contained' : 'outlined'}
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Share full gallery
+                  </Typography>
+                  <Chip size="small" label="Recommended" sx={{ bgcolor: '#eef4ff', color: '#3538cd' }} />
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  People can browse all your indexed files and keep using search and filters.
+                </Typography>
+                <Chip size="small" label="Name: Full gallery" variant="outlined" />
+              </Box>
+
+              <Box
                 onClick={() => setSelectedShareType('search_results')}
-                disabled={creatingShare}
-                fullWidth
+                sx={{
+                  p: 2,
+                  borderRadius: 3,
+                  border: selectedShareType === 'search_results' ? '2px solid #667eea' : '1px solid #d0d5dd',
+                  bgcolor: selectedShareType === 'search_results' ? '#eef4ff' : '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.18s ease',
+                  '&:hover': {
+                    borderColor: '#98a2ff',
+                    boxShadow: '0 6px 18px rgba(16,24,40,0.06)'
+                  }
+                }}
               >
-                Share Current Search Results
-              </Button>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                  Share current results
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  People will only see the current search or filtered result set you prepared.
+                </Typography>
+                <Chip
+                  size="small"
+                  label={`Name: ${buildShareName('search_results', {
+                    textSearch: search,
+                    sizeTags: selectedSizeTags,
+                    customTags: selectedCustomTags
+                  })}`}
+                  variant="outlined"
+                />
+              </Box>
             </Box>
+
             {selectedShareType && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="body2" sx={{ mb: 1, color: '#666' }}>
+              <Box sx={{ mb: 4, p: 2, borderRadius: 3, bgcolor: '#f8fafc', border: '1px solid #eaecf0' }}>
+                <Typography variant="body2" sx={{ mb: 1, color: '#475467' }}>
                   {selectedShareType === 'all_indices' 
                     ? 'Share link will allow viewing all your indices with search and filters enabled.'
                     : 'Share link will show only the current filtered/search results. Viewers cannot search or filter.'}
@@ -3577,21 +3630,22 @@ export default function Home() {
                   variant="contained"
                   onClick={() => handleCreateShare(selectedShareType)}
                   disabled={creatingShare}
-                  fullWidth
+                  sx={{ borderRadius: 999, px: 2.5 }}
                 >
                   {creatingShare ? 'Creating...' : 'Create Share Link'}
                 </Button>
               </Box>
             )}
 
-            {/* Existing shares */}
             <Typography variant="h6" sx={{ mb: 2, mt: 4 }}>
               Existing Share Links
             </Typography>
             {sharedViews.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                No share links created yet.
-              </Typography>
+              <Box sx={{ p: 2.5, borderRadius: 3, border: '1px dashed #d0d5dd', bgcolor: '#fcfcfd' }}>
+                <Typography variant="body2" color="text.secondary">
+                  No share links created yet.
+                </Typography>
+              </Box>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {sharedViews.map((view) => (
@@ -3599,11 +3653,12 @@ export default function Home() {
                     key={view.id}
                     sx={{
                       p: 2,
-                      border: '1px solid #e0e0e0',
-                      borderRadius: 1,
+                      border: '1px solid #e4e7ec',
+                      borderRadius: 3,
+                      bgcolor: '#fff',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 1
+                      gap: 1.25
                     }}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
@@ -3676,10 +3731,19 @@ export default function Home() {
                         />
                       </Box>
                     </Box>
-                    {!editingName && view.share_type && (
-                      <Typography variant="caption" color="text.secondary">
-                        {view.share_type === 'all_indices' ? 'All Indices' : 'Search Results'}
-                      </Typography>
+                    {!editingName && (
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip
+                          size="small"
+                          label={view.share_type === 'all_indices' ? 'Full gallery' : 'Filtered results'}
+                          variant="outlined"
+                        />
+                        <Chip
+                          size="small"
+                          label={view.created_at ? `Created ${formatDate(view.created_at)}` : 'Created recently'}
+                          sx={{ bgcolor: '#f8fafc', color: '#667085' }}
+                        />
+                      </Stack>
                     )}
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <TextField
