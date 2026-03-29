@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Container, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, Divider, LinearProgress } from '@mui/material';
+import { Box, Container, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
 import { useRouter } from 'next/router';
 import {
   ArrowBack as ArrowBackIcon,
@@ -251,6 +251,30 @@ export default function AccountPage() {
     return '#1570EF';
   };
 
+  const renderUsageBar = (current?: number, max?: number | null) => {
+    const progress = getUsageProgress(current, max);
+    return (
+      <Box
+        sx={{
+          height: 8,
+          borderRadius: 999,
+          bgcolor: '#EEF2F6',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            height: '100%',
+            width: `${progress}%`,
+            bgcolor: getUsageColor(progress),
+            borderRadius: 999,
+            transition: 'width 180ms ease',
+          }}
+        />
+      </Box>
+    );
+  };
+
   return (
     <Box sx={{ bgcolor: '#FFFFFF', minHeight: '100vh' }}>
       {/* Header */}
@@ -456,20 +480,7 @@ export default function AccountPage() {
                         {(data.usage.files || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFiles)}
                       </Typography>
                     </Stack>
-                    <LinearProgress
-                      variant="determinate"
-                      value={getUsageProgress(data.usage.files, data.usage.maxFiles)}
-                      sx={{
-                        height: 8,
-                        borderRadius: 999,
-                        direction: 'ltr',
-                        bgcolor: '#EEF2F6',
-                        '& .MuiLinearProgress-bar': {
-                          borderRadius: 999,
-                          bgcolor: getUsageColor(getUsageProgress(data.usage.files, data.usage.maxFiles)),
-                        },
-                      }}
-                    />
+                    {renderUsageBar(data.usage.files, data.usage.maxFiles)}
                   </Box>
                   <Box>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
@@ -478,20 +489,7 @@ export default function AccountPage() {
                         {(data.usage.frames || data.usage.framesApprox || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFrames)}
                       </Typography>
                     </Stack>
-                    <LinearProgress
-                      variant="determinate"
-                      value={getUsageProgress(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
-                      sx={{
-                        height: 8,
-                        borderRadius: 999,
-                        direction: 'ltr',
-                        bgcolor: '#EEF2F6',
-                        '& .MuiLinearProgress-bar': {
-                          borderRadius: 999,
-                          bgcolor: getUsageColor(getUsageProgress(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)),
-                        },
-                      }}
-                    />
+                    {renderUsageBar(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
                   </Box>
                 </Stack>
                 <Typography variant="body2" sx={{ mt: 2 }}>Indexed files: {data.usage.indices}</Typography>
