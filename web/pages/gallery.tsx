@@ -2247,6 +2247,38 @@ export default function Home() {
     }
   };
 
+  const gallerySectionTitle =
+    viewMode === 'file'
+      ? (selectedFile?.fileName || 'File View')
+      : viewMode === 'allFrames'
+        ? 'All Frames'
+        : 'Gallery';
+
+  const gallerySectionSubtitle =
+    viewMode === 'file'
+      ? (fileModeSearchActive
+          ? `Searching across ${filePages.length} pages in this file`
+          : `${filePages.length || 0} pages available in this file`)
+      : viewMode === 'allFrames'
+        ? `${allGalleryThumbs.length.toLocaleString()} frames across your indexed files`
+        : `${indexFiles.length.toLocaleString()} indexed files ready to browse`;
+
+  const searchPlaceholder =
+    viewMode === 'file'
+      ? 'Search this file'
+      : viewMode === 'allFrames'
+        ? 'Search all frames'
+        : 'Search across your gallery';
+
+  const resultsSummary =
+    viewMode === 'lobby'
+      ? `${visibleThumbs.length.toLocaleString()} files shown`
+      : viewMode === 'allFrames'
+        ? `${visibleThumbs.length.toLocaleString()} frames shown`
+        : fileModeSearchActive
+          ? `${visibleThumbs.length.toLocaleString()} search results`
+          : `${selectedFilePageFrameCount.toLocaleString()} frames in selected page`;
+
   return (
     <Box sx={{ direction: 'ltr', bgcolor: '#f7f9fa', minHeight: '100vh' }}>
       {/* Filter Sidebar */}
@@ -2719,7 +2751,7 @@ export default function Home() {
         }}
       >
         {/* Top Header with Logo and User Menu */}
-        <Box sx={{ px: 4, pt: 2, pb: 1 }}>
+        <Box sx={{ px: 4, pt: 2, pb: 1.5 }}>
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box display="flex" alignItems="center" gap={2}>
               <IconButton
@@ -2734,10 +2766,15 @@ export default function Home() {
                 <FilterListIcon />
               </IconButton>
               <Box>
-                <Typography variant="h3" fontWeight={700} sx={{ letterSpacing: 1 }}>
+                <Typography variant="h3" fontWeight={700} sx={{ letterSpacing: 1, lineHeight: 1 }}>
                   FigDex
                 </Typography>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75, flexWrap: 'wrap' }}>
+                  <Chip
+                    label={viewMode === 'file' ? 'File View' : viewMode === 'allFrames' ? 'All Frames' : 'Gallery'}
+                    size="small"
+                    sx={{ fontSize: '0.7rem', height: '22px', bgcolor: '#eef2ff', color: '#4050b5' }}
+                  />
                   {currentIndexFile === 'guest' && (
                     <Chip 
                       label={(guestPlan || 'guest').charAt(0).toUpperCase() + (guestPlan || 'guest').slice(1)} 
@@ -2760,6 +2797,19 @@ export default function Home() {
             </Box>
             
             <Box display="flex" alignItems="center" gap={2}>
+              <Button
+                variant="outlined"
+                startIcon={<ShareIcon />}
+                onClick={handleShareGallery}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 999,
+                  bgcolor: 'white',
+                  display: { xs: 'none', md: 'inline-flex' }
+                }}
+              >
+                Share
+              </Button>
               <IconButton
                 onClick={handleUserMenuOpen}
                 sx={{ 
@@ -2843,17 +2893,45 @@ export default function Home() {
               </Menu>
             </Box>
           </Box>
+
+          <Box
+            sx={{
+              mt: 2,
+              px: 2,
+              py: 1.5,
+              borderRadius: 3,
+              bgcolor: '#ffffff',
+              border: '1px solid #e3e8ef',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)'
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#18212f', lineHeight: 1.2 }}>
+              {gallerySectionTitle}
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
+              {gallerySectionSubtitle}
+            </Typography>
+          </Box>
         </Box>
       
         {/* Search and Filter Bar */}
-        <Box sx={{ px: 4, pb: 1 }}>
-          <Box sx={{ mb: 1 }}>
+        <Box sx={{ px: 4, pb: 1.5 }}>
+          <Box
+            sx={{
+              px: 2,
+              py: 1.5,
+              borderRadius: 3,
+              bgcolor: '#ffffff',
+              border: '1px solid #e3e8ef',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)'
+            }}
+          >
             <Box display="flex" alignItems="flex-end" gap={2} sx={{ width: '100%', flexWrap: 'nowrap', overflowX: 'auto' }}>
-              <Box sx={{ flex: '1 1 260px', minWidth: 180, maxWidth: 600 }}>
+              <Box sx={{ flex: '1 1 260px', minWidth: 180, maxWidth: 720 }}>
                 <TextField
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder={viewMode === 'lobby' ? "Search all frames..." : viewMode === 'allFrames' ? "Search all frames..." : "Search frames..."}
+                  placeholder={searchPlaceholder}
                   size="medium"
                   fullWidth
                   InputProps={{
@@ -2867,6 +2945,15 @@ export default function Home() {
                 />
               </Box>
             </Box>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+              {viewMode === 'file' && selectedFile && (
+                <Chip size="small" label={`Gallery / ${selectedFile.fileName}`} variant="outlined" />
+              )}
+              <Chip size="small" label={resultsSummary} sx={{ bgcolor: '#f8fafc', color: '#475467' }} />
+              {search.trim() && (
+                <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
+              )}
+            </Stack>
           </Box>
         </Box>
       </Box>
