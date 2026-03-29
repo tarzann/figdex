@@ -6,6 +6,32 @@ import { getUserIdFromApiKey } from '../../../lib/api-auth';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
+function buildShareName(shareType: string, searchParams?: any, explicitName?: string | null) {
+  const manualName = typeof explicitName === 'string' ? explicitName.trim() : '';
+  if (manualName) return manualName;
+
+  if (shareType === 'all_indices') {
+    return 'Full gallery';
+  }
+
+  const parts: string[] = [];
+  const textSearch = typeof searchParams?.textSearch === 'string' ? searchParams.textSearch.trim() : '';
+  const sizeTags = Array.isArray(searchParams?.sizeTags) ? searchParams.sizeTags : [];
+  const customTags = Array.isArray(searchParams?.customTags) ? searchParams.customTags : [];
+
+  if (textSearch) {
+    parts.push(`Search: ${textSearch}`);
+  }
+  if (sizeTags.length > 0) {
+    parts.push(`Size: ${sizeTags.slice(0, 2).join(', ')}`);
+  }
+  if (customTags.length > 0) {
+    parts.push(`Tags: ${customTags.slice(0, 2).join(', ')}`);
+  }
+
+  return (parts.length > 0 ? parts.join(' | ') : 'Filtered results').slice(0, 120);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!supabaseUrl || !supabaseServiceKey) {
     return res.status(500).json({
@@ -62,7 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           share_token: shareToken,
           enabled: true,
           search_params: shareType === 'search_results' ? searchParams : null,
-          share_name: shareName || null
+          share_name: buildShareName(shareType, searchParams, shareName)
         })
         .select()
         .single();
@@ -222,4 +248,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-

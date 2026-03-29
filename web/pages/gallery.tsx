@@ -1336,6 +1336,33 @@ export default function Home() {
     loadSharedViews();
   };
 
+  const buildShareName = (shareType: 'all_indices' | 'search_results', searchParams?: any) => {
+    if (shareType === 'all_indices') {
+      return 'Full gallery';
+    }
+
+    const parts: string[] = [];
+    const textSearch = typeof searchParams?.textSearch === 'string' ? searchParams.textSearch.trim() : '';
+    const sizeTags = Array.isArray(searchParams?.sizeTags) ? searchParams.sizeTags : [];
+    const customTags = Array.isArray(searchParams?.customTags) ? searchParams.customTags : [];
+
+    if (textSearch) {
+      parts.push(`Search: ${textSearch}`);
+    }
+    if (sizeTags.length > 0) {
+      parts.push(`Size: ${sizeTags.slice(0, 2).join(', ')}`);
+    }
+    if (customTags.length > 0) {
+      parts.push(`Tags: ${customTags.slice(0, 2).join(', ')}`);
+    }
+
+    if (parts.length === 0) {
+      return 'Filtered results';
+    }
+
+    return parts.join(' | ').slice(0, 120);
+  };
+
   // Create share link
   const handleCreateShare = async (shareType: 'all_indices' | 'search_results') => {
     try {
@@ -1366,7 +1393,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           shareType,
-          searchParams: shareType === 'search_results' ? searchParams : undefined
+          searchParams: shareType === 'search_results' ? searchParams : undefined,
+          shareName: buildShareName(shareType, searchParams)
         })
       });
 
@@ -3536,6 +3564,15 @@ export default function Home() {
                     ? 'Share link will allow viewing all your indices with search and filters enabled.'
                     : 'Share link will show only the current filtered/search results. Viewers cannot search or filter.'}
                 </Typography>
+                <Chip
+                  size="small"
+                  label={`Name: ${buildShareName(selectedShareType, selectedShareType === 'search_results' ? {
+                    textSearch: search,
+                    sizeTags: selectedSizeTags,
+                    customTags: selectedCustomTags
+                  } : undefined)}`}
+                  sx={{ mb: 1.5, bgcolor: '#f8fafc', color: '#475467' }}
+                />
                 <Button
                   variant="contained"
                   onClick={() => handleCreateShare(selectedShareType)}
