@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Box, Container, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, Divider, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Box, Container, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, Divider, LinearProgress } from '@mui/material';
 import { useRouter } from 'next/router';
 import {
   ArrowBack as ArrowBackIcon,
@@ -11,18 +11,26 @@ import {
   ContentCopy as ContentCopyIcon,
   Logout as LogoutIcon,
   Settings as SettingsIcon,
-  FolderOpen as FolderOpenIcon,
-  ShoppingCart as ShoppingCartIcon,
-  Close as CloseIcon
+  FolderOpen as FolderOpenIcon
 } from '@mui/icons-material';
 
 // Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.30.6'; // Updated Add-ons to use packages from database instead of hardcoded values
+const PAGE_VERSION = 'v1.32.06';
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
 type AccountData = {
   user: { id: string; email: string; name?: string | null; plan?: string | null; apiKeyMasked?: string | null; };
-  usage: { projects: number; indices: number; storageBytes: number; lastUploadedAt: number | null; };
+  usage: {
+    projects: number;
+    indices: number;
+    storageBytes: number;
+    lastUploadedAt: number | null;
+    framesApprox?: number;
+    files?: number;
+    frames?: number;
+    maxFiles?: number | null;
+    maxFrames?: number | null;
+  };
 };
 
 export default function AccountPage() {
@@ -37,13 +45,6 @@ export default function AccountPage() {
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [copied, setCopied] = useState(false);
-  
-  // Add-ons state
-  const [addons, setAddons] = useState<any[]>([]);
-  const [addonsLoading, setAddonsLoading] = useState(false);
-  const [addonsDialogOpen, setAddonsDialogOpen] = useState(false);
-  const [addonPackages, setAddonPackages] = useState<any[]>([]);
-  const [packagesLoading, setPackagesLoading] = useState(false);
 
   useEffect(() => {
     const loadAccount = async () => {
@@ -114,11 +115,6 @@ export default function AccountPage() {
         setIsLoggedIn(true);
         const adminEmails = ['ranmor01@gmail.com'];
         setIsAdmin(adminEmails.includes(accountJson.user.email));
-        
-        // Load add-ons
-        loadAddons(key);
-        // Load addon packages
-        loadAddonPackages();
       } catch (e: any) {
         console.error('[account] unexpected error', e);
         setError(e.message || 'Failed to load account');
@@ -239,114 +235,21 @@ export default function AccountPage() {
     return 'default';
   };
 
-  const loadAddons = async (apiKey: string) => {
-    try {
-      setAddonsLoading(true);
-      const res = await fetch('/api/user/addons', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      const json = await res.json();
-      if (json.success && json.addons) {
-        setAddons(json.addons);
-      }
-    } catch (error) {
-      console.error('Error loading add-ons:', error);
-    } finally {
-      setAddonsLoading(false);
-    }
+  const formatLimitValue = (value?: number | null) => {
+    if (value === null || value === undefined) return 'Unlimited';
+    return value.toLocaleString();
   };
 
-  const loadAddonPackages = async () => {
-    try {
-      setPackagesLoading(true);
-      const res = await fetch('/api/addon-packages');
-      const json = await res.json();
-      if (json.success && json.packages) {
-        setAddonPackages(json.packages);
-      }
-    } catch (error) {
-      console.error('Error loading addon packages:', error);
-    } finally {
-      setPackagesLoading(false);
-    }
+  const getUsageProgress = (current?: number, max?: number | null) => {
+    if (max === null || max === undefined || max <= 0) return 0;
+    return Math.min(100, Math.round(((current || 0) / max) * 100));
   };
 
-  const getCurrentUser = () => {
-    try {
-      const stored = localStorage.getItem('figma_web_user');
-      if (!stored) return null;
-      return JSON.parse(stored);
-    } catch {
-      return null;
-    }
+  const getUsageColor = (progress: number) => {
+    if (progress >= 90) return '#D92D20';
+    if (progress >= 75) return '#F79009';
+    return '#1570EF';
   };
-
-  const handlePurchaseAddon = async (addonType: string, addonValue: number, price: number) => {
-    try {
-      const user = getCurrentUser();
-      if (!user || !user.api_key) {
-        alert('User not authenticated');
-        return;
-      }
-
-      const res = await fetch('/api/user/addons', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.api_key}`
-        },
-        body: JSON.stringify({
-          addon_type: addonType,
-          addon_value: addonValue,
-          price_usd: price
-        })
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        alert(`Add-on added to your subscription. It will be included in your next monthly billing cycle. Payment integration coming soon.`);
-        await loadAddons(user.api_key);
-        setAddonsDialogOpen(false);
-      } else {
-        alert(`Failed to add add-on: ${json.error}`);
-      }
-    } catch (error: any) {
-      console.error('Error purchasing add-on:', error);
-      alert(`Error: ${error.message || 'Failed to purchase add-on'}`);
-    }
-  };
-
-  const handleCancelAddon = async (addonId: string) => {
-    if (!confirm('Are you sure you want to cancel this add-on? It will remain active until the end of the current billing cycle, and you will not be charged for it in the next cycle.')) {
-      return;
-    }
-
-    try {
-      const user = getCurrentUser();
-      if (!user || !user.api_key) {
-        alert('User not authenticated');
-        return;
-      }
-
-      const res = await fetch(`/api/user/addons?id=${addonId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${user.api_key}`
-        }
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        await loadAddons(user.api_key);
-      } else {
-        alert(`Failed to cancel add-on: ${json.error}`);
-      }
-    } catch (error: any) {
-      console.error('Error cancelling add-on:', error);
-      alert(`Error: ${error.message || 'Failed to cancel add-on'}`);
-    }
-  };
-
 
   return (
     <Box sx={{ bgcolor: '#FFFFFF', minHeight: '100vh' }}>
@@ -507,85 +410,14 @@ export default function AccountPage() {
                     color={getPlanColor(data.user.plan)}
                   />
                 </Typography>
-              </CardContent>
-            </Card>
-
-            {/* Add-ons Card */}
-            <Card>
-              <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <FolderOpenIcon color="primary" />
-                    <Box>
-                      <Typography variant="h6" fontWeight={600}>Monthly Add-ons</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Add-ons are billed monthly as part of your subscription
-                      </Typography>
-                    </Box>
-                  </Stack>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<ShoppingCartIcon />}
-                    onClick={() => setAddonsDialogOpen(true)}
-                  >
-                    Add Monthly Add-on
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
+                  <Button variant="contained" onClick={() => router.push('/pricing')}>
+                    {data.user.plan === 'free' ? 'Upgrade to Pro' : 'Manage plan'}
+                  </Button>
+                  <Button variant="outlined" onClick={() => router.push('/gallery')}>
+                    Open gallery
                   </Button>
                 </Stack>
-                
-                {addonsLoading ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                    <CircularProgress size={24} />
-                  </Box>
-                ) : addons.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                    No active add-ons. Purchase add-ons to increase your limits.
-                  </Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {addons.map((addon: any) => (
-                      <Box
-                        key={addon.id}
-                        sx={{
-                          p: 2,
-                          border: '1px solid #e0e0e0',
-                          borderRadius: 1,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="body1" fontWeight={600}>
-                            {addon.addon_type === 'files' && `+${addon.addon_value} Files`}
-                            {addon.addon_type === 'frames' && `+${addon.addon_value.toLocaleString()} Frames`}
-                            {addon.addon_type === 'rate_limit' && `+${addon.addon_value} Indexes/Day`}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            ${parseFloat(addon.price_usd).toFixed(2)}/month
-                            {addon.end_date && ` • Expires: ${new Date(addon.end_date).toLocaleDateString()}`}
-                            {!addon.end_date && ' • Recurring monthly charge'}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          label={addon.status}
-                          color={addon.status === 'active' ? 'success' : addon.status === 'pending' ? 'warning' : 'default'}
-                          size="small"
-                        />
-                        {addon.status === 'active' && (
-                          <Button
-                            size="small"
-                            color="error"
-                            onClick={() => handleCancelAddon(addon.id)}
-                            sx={{ ml: 1 }}
-                          >
-                            Cancel (Ends Next Month)
-                          </Button>
-                        )}
-                      </Box>
-                    ))}
-                  </Stack>
-                )}
               </CardContent>
             </Card>
 
@@ -612,9 +444,55 @@ export default function AccountPage() {
 
             <Card>
               <CardContent>
-                <Typography variant="h6" fontWeight={600}>Usage</Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>Projects: {data.usage.projects}</Typography>
-                <Typography variant="body2">Indices: {data.usage.indices}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <FolderOpenIcon color="primary" />
+                  <Typography variant="h6" fontWeight={600}>Usage</Typography>
+                </Stack>
+                <Stack spacing={2.5}>
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
+                      <Typography variant="body2" fontWeight={600}>Files</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {(data.usage.files || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFiles)}
+                      </Typography>
+                    </Stack>
+                    <LinearProgress
+                      variant="determinate"
+                      value={getUsageProgress(data.usage.files, data.usage.maxFiles)}
+                      sx={{
+                        height: 8,
+                        borderRadius: 999,
+                        bgcolor: '#EEF2F6',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 999,
+                          bgcolor: getUsageColor(getUsageProgress(data.usage.files, data.usage.maxFiles)),
+                        },
+                      }}
+                    />
+                  </Box>
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
+                      <Typography variant="body2" fontWeight={600}>Frames</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {(data.usage.frames || data.usage.framesApprox || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFrames)}
+                      </Typography>
+                    </Stack>
+                    <LinearProgress
+                      variant="determinate"
+                      value={getUsageProgress(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
+                      sx={{
+                        height: 8,
+                        borderRadius: 999,
+                        bgcolor: '#EEF2F6',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 999,
+                          bgcolor: getUsageColor(getUsageProgress(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)),
+                        },
+                      }}
+                    />
+                  </Box>
+                </Stack>
+                <Typography variant="body2" sx={{ mt: 2 }}>Indexed files: {data.usage.indices}</Typography>
                 <Typography variant="body2">Storage: {((data.usage.storageBytes || 0) / (1024*1024)).toFixed(2)} MB</Typography>
                 {data.usage.lastUploadedAt && (
                   <Typography variant="body2">Last upload: {new Date(data.usage.lastUploadedAt).toLocaleString()}</Typography>
@@ -628,129 +506,25 @@ export default function AccountPage() {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   Create indices directly from Figma files using the Figma REST API. This feature is available for Pro and Unlimited plans.
                 </Typography>
-                <Button
-                  variant="contained"
-                  onClick={() => router.push('/api-index')}
-                  disabled={data.user.plan === 'free'}
-                >
-                  Create Index from Figma API
-                </Button>
-                {data.user.plan === 'free' && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    Upgrade to Pro or Unlimited to use this feature.
-                  </Typography>
-                )}
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  <Button
+                    variant="contained"
+                    onClick={() => router.push('/api-index')}
+                    disabled={data.user.plan === 'free'}
+                  >
+                    Create index from Figma API
+                  </Button>
+                  {data.user.plan === 'free' && (
+                    <Button variant="outlined" onClick={() => router.push('/pricing')}>
+                      Upgrade to unlock
+                    </Button>
+                  )}
+                </Stack>
               </CardContent>
             </Card>
           </Stack>
         )}
       </Container>
-
-      {/* Purchase Add-ons Dialog */}
-      <Dialog open={addonsDialogOpen} onClose={() => setAddonsDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6">Add Monthly Add-on</Typography>
-            <IconButton onClick={() => setAddonsDialogOpen(false)} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity="info" sx={{ mb: 3 }}>
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-              Add-ons are monthly subscription additions
-            </Typography>
-            <Typography variant="body2">
-              Add-ons are charged monthly as part of your subscription. They will be added to your monthly bill and can be cancelled at any time (effective next billing cycle).
-            </Typography>
-          </Alert>
-          
-          {packagesLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Stack spacing={2}>
-              {/* Files Add-on */}
-              {addonPackages.filter(pkg => pkg.addon_type === 'files').length > 0 && (
-                <Card variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Additional Files
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                    Increase your file limit. Billed monthly.
-                  </Typography>
-                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                    {addonPackages
-                      .filter(pkg => pkg.addon_type === 'files')
-                      .map((pkg) => (
-                        <Button
-                          key={pkg.id}
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handlePurchaseAddon(pkg.addon_type, pkg.addon_value, parseFloat(pkg.price_usd))}
-                        >
-                          {pkg.display_name || `+${pkg.addon_value} File${pkg.addon_value > 1 ? 's' : ''}`}
-                          <Typography component="span" sx={{ ml: 0.5, fontWeight: 600, fontSize: '0.75rem' }}>
-                            +${parseFloat(pkg.price_usd).toFixed(2)}/mo
-                          </Typography>
-                        </Button>
-                      ))}
-                  </Stack>
-                </Card>
-              )}
-
-              {/* Frames Add-on */}
-              {addonPackages.filter(pkg => pkg.addon_type === 'frames').length > 0 && (
-                <Card variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Additional Frames
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                    Increase your frame limit. Billed monthly.
-                  </Typography>
-                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                    {addonPackages
-                      .filter(pkg => pkg.addon_type === 'frames')
-                      .map((pkg) => (
-                        <Button
-                          key={pkg.id}
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handlePurchaseAddon(pkg.addon_type, pkg.addon_value, parseFloat(pkg.price_usd))}
-                        >
-                          {pkg.display_name || `+${pkg.addon_value.toLocaleString()} Frames`}
-                          <Typography component="span" sx={{ ml: 0.5, fontWeight: 600, fontSize: '0.75rem' }}>
-                            +${parseFloat(pkg.price_usd).toFixed(2)}/mo
-                          </Typography>
-                        </Button>
-                      ))}
-                  </Stack>
-                </Card>
-              )}
-
-              {addonPackages.filter(pkg => pkg.addon_type !== 'rate_limit').length === 0 && (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  No add-on packages available at this time.
-                </Typography>
-              )}
-            </Stack>
-          )}
-
-          <Alert severity="warning" sx={{ mt: 3 }}>
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-              Payment integration coming soon
-            </Typography>
-            <Typography variant="body2">
-              Add-ons will be activated after payment confirmation and will be included in your monthly subscription billing.
-            </Typography>
-          </Alert>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAddonsDialogOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

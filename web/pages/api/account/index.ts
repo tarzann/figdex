@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentFileCount, getCurrentFrameCount, getUserEffectiveLimits } from '../../../lib/subscription-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -171,23 +172,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const effectivePlan = user.is_admin ? 'unlimited' : (user.plan || 'free');
 
-    // Usage aggregation
-    const { data: files, error: filesErr } = await supabaseAdmin
-      .from('index_files')
-      .select('project_id, uploaded_at')
-      .eq('user_id', user.id);
-    if (filesErr) {
-      console.error('Account usage fetch error:', filesErr);
-      return res.status(500).json({ success: false, error: 'Failed to fetch usage' });
+    const [totalFiles, totalFrames, limits] = await Promise.all([
+      getCurrentFileCount(supabaseAdmin, user.id),
+      getCurrentFrameCount(supabaseAdmin, user.id),
+      getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin),
+    ]);
+
+    let filesQuery: any = await supabaseAdmin
+      .from('indexed_files')
+      .select('updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (filesQuery.error) {
+      filesQuery = await supabaseAdmin
+        .from('index_files')
+        .select('uploaded_at')
+        .eq('user_id', user.id)
+        .order('uploaded_at', { ascending: false })
+        .limit(1);
     }
-    const totalFramesApprox = 0; // optional placeholder (we can compute from index_data if needed)
-    const totalFiles = files?.length || 0;
-    // No dedicated storage column in schema; report 0 for now
-    const totalSize = 0;
-    const projects = new Set((files || []).map((f: any) => f.project_id).filter(Boolean));
-    const lastUploadedAt = (files || [])
-      .map((f: any) => new Date(f.uploaded_at || 0).getTime())
-      .reduce((a: number, b: number) => Math.max(a, b), 0);
+
+    const latestRow = Array.isArray(filesQuery.data) && filesQuery.data[0] ? filesQuery.data[0] : null;
+    const latestTs = latestRow?.updated_at || latestRow?.uploaded_at || null;
+
     return res.status(200).json({
       success: true,
       user: {
@@ -200,11 +209,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         createdAt: user.created_at || null,
       },
       usage: {
-        projects: projects.size,
+        projects: totalFiles,
         indices: totalFiles,
-        storageBytes: totalSize,
-        lastUploadedAt: lastUploadedAt || null,
-        framesApprox: totalFramesApprox,
+        storageBytes: 0,
+        lastUploadedAt: latestTs ? new Date(latestTs).getTime() : null,
+        framesApprox: totalFrames,
+        files: totalFiles,
+        frames: totalFrames,
+        maxFiles: limits.maxFiles,
+        maxFrames: limits.maxFrames,
       },
     });
   } catch (e: any) {
@@ -217,5 +230,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-
 
