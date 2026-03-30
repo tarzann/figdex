@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Container, Typography, Card, Paper, CircularProgress, Alert, Button } from '@mui/material';
-import { People, Description, TrendingUp, Settings, Home, History, AddBox, Notifications } from '@mui/icons-material';
+import { People, Description, TrendingUp, Settings, Home, History, AddBox, Notifications, Route } from '@mui/icons-material';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -184,6 +184,14 @@ export default function AdminDashboard() {
           >
             <History sx={{ mb: 1 }} />
             <Typography variant="body1">Index Jobs Log</Typography>
+          </Card>
+
+          <Card 
+            sx={{ p: 2, cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
+            onClick={() => router.push('/admin/user-flow')}
+          >
+            <Route sx={{ mb: 1 }} />
+            <Typography variant="body1">User Flow</Typography>
           </Card>
 
           <Card 
