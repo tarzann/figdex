@@ -23,6 +23,7 @@ import {
   IconButton,
   FormControlLabel,
   Switch,
+  MenuItem,
 } from '@mui/material';
 import {
   Home,
@@ -393,109 +394,82 @@ export default function AdminJobs() {
 
       {/* Filters and Stats */}
       <Paper sx={{ p: 2, mb: 3 }}>
-        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" flexWrap="wrap">
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            size="small"
-            placeholder="Search by email, file name, file key..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-          />
-          
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label={`All (${statusCounts.all})`}
-              onClick={() => setStatusFilter('all')}
-              color={statusFilter === 'all' ? 'primary' : 'default'}
-              variant={statusFilter === 'all' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Pending (${statusCounts.pending})`}
-              onClick={() => setStatusFilter('pending')}
-              color={statusFilter === 'pending' ? 'primary' : 'default'}
-              variant={statusFilter === 'pending' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Processing (${statusCounts.processing})`}
-              onClick={() => setStatusFilter('processing')}
-              color={statusFilter === 'processing' ? 'primary' : 'default'}
-              variant={statusFilter === 'processing' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Completed (${statusCounts.completed})`}
-              onClick={() => setStatusFilter('completed')}
-              color={statusFilter === 'completed' ? 'primary' : 'default'}
-              variant={statusFilter === 'completed' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Failed (${statusCounts.failed})`}
-              onClick={() => setStatusFilter('failed')}
-              color={statusFilter === 'failed' ? 'primary' : 'default'}
-              variant={statusFilter === 'failed' ? 'filled' : 'outlined'}
-            />
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label={`Everything (${categoryCounts.all})`}
-              onClick={() => setCategoryFilter('all')}
-              color={categoryFilter === 'all' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'all' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Indexing (${categoryCounts.indexing})`}
-              onClick={() => setCategoryFilter('indexing')}
-              color={categoryFilter === 'indexing' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'indexing' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Share (${categoryCounts.share})`}
-              onClick={() => setCategoryFilter('share')}
-              color={categoryFilter === 'share' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'share' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Claim (${categoryCounts.claim})`}
-              onClick={() => setCategoryFilter('claim')}
-              color={categoryFilter === 'claim' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'claim' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Usage (${categoryCounts.usage})`}
-              onClick={() => setCategoryFilter('usage')}
-              color={categoryFilter === 'usage' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'usage' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Admin (${categoryCounts.admin})`}
-              onClick={() => setCategoryFilter('admin')}
-              color={categoryFilter === 'admin' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'admin' ? 'filled' : 'outlined'}
-            />
-            <Chip
-              label={`Limits (${categoryCounts.limits})`}
-              onClick={() => setCategoryFilter('limits')}
-              color={categoryFilter === 'limits' ? 'secondary' : 'default'}
-              variant={categoryFilter === 'limits' ? 'filled' : 'outlined'}
-            />
-          </Box>
-          </Stack>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
+        <Stack spacing={2}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            alignItems={{ xs: 'stretch', md: 'center' }}
+            justifyContent="space-between"
+          >
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ flex: 1 }}>
+              <TextField
+                size="small"
+                placeholder="Search by email, file name, file key..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ minWidth: { xs: '100%', sm: 320 }, flex: 1 }}
               />
-            }
-            label="Auto-refresh every 15s"
-          />
+              <TextField
+                select
+                size="small"
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                sx={{ minWidth: 180 }}
+              >
+                <MenuItem value="all">All ({statusCounts.all})</MenuItem>
+                <MenuItem value="pending">Pending ({statusCounts.pending})</MenuItem>
+                <MenuItem value="processing">Processing ({statusCounts.processing})</MenuItem>
+                <MenuItem value="completed">Completed ({statusCounts.completed})</MenuItem>
+                <MenuItem value="failed">Failed ({statusCounts.failed})</MenuItem>
+              </TextField>
+              <TextField
+                select
+                size="small"
+                label="Category"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                sx={{ minWidth: 190 }}
+              >
+                <MenuItem value="all">Everything ({categoryCounts.all})</MenuItem>
+                <MenuItem value="indexing">Indexing ({categoryCounts.indexing})</MenuItem>
+                <MenuItem value="share">Share ({categoryCounts.share})</MenuItem>
+                <MenuItem value="claim">Claim ({categoryCounts.claim})</MenuItem>
+                <MenuItem value="usage">Usage ({categoryCounts.usage})</MenuItem>
+                <MenuItem value="admin">Admin ({categoryCounts.admin})</MenuItem>
+                <MenuItem value="limits">Limits ({categoryCounts.limits})</MenuItem>
+              </TextField>
+            </Stack>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                />
+              }
+              label="Auto-refresh every 15s"
+              sx={{ ml: { md: 1 } }}
+            />
+          </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip size="small" label={`${filteredJobs.length} shown`} color="primary" variant="outlined" />
+            {statusFilter !== 'all' && (
+              <Chip size="small" label={`Status: ${statusFilter}`} onDelete={() => setStatusFilter('all')} />
+            )}
+            {categoryFilter !== 'all' && (
+              <Chip size="small" label={`Category: ${categoryFilter}`} onDelete={() => setCategoryFilter('all')} />
+            )}
+            {searchTerm && (
+              <Chip size="small" label={`Search: ${searchTerm}`} onDelete={() => setSearchTerm('')} />
+            )}
+          </Stack>
         </Stack>
       </Paper>
 
