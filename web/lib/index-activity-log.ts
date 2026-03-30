@@ -2,23 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 type IndexActivityInput = {
   requestId?: string | null;
-  source: 'plugin' | 'api' | 'job' | 'system';
-  eventType:
-    | 'index_started'
-    | 'index_completed'
-    | 'index_failed'
-    | 'job_started'
-    | 'job_completed'
-    | 'job_failed'
-    | 'share_created'
-    | 'share_updated'
-    | 'share_deleted'
-    | 'claim_started'
-    | 'claim_completed'
-    | 'claim_failed'
-    | 'reset_indices'
-    | 'index_deleted'
-    | 'index_rate_limited';
+  source: 'plugin' | 'api' | 'job' | 'system' | 'web';
+  eventType: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   userId?: string | null;
   ownerAnonId?: string | null;

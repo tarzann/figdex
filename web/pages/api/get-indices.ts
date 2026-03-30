@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 const signStorageLikeUrl = async (svc: any, value: string | null | undefined): Promise<string | null> => {
   if (!value || typeof value !== 'string') return null;
@@ -140,9 +141,24 @@ export default async function handler(
           file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
         }));
       }
+      const guestData = mergeIndexLists(normalizedGuestList, legacyGuestList);
+      await logIndexActivity(svc, {
+        requestId: `gallery_guest_${anonId}_${Date.now()}`,
+        source: 'web',
+        eventType: 'gallery_loaded',
+        status: 'completed',
+        ownerAnonId: anonId,
+        message: 'Guest gallery loaded',
+        metadata: {
+          resultCount: guestData.length,
+          mode: normalizedGuestList.length > 0 ? 'normalized' : 'legacy',
+          userType: 'guest',
+        },
+      });
+
       return res.status(200).json({
         success: true,
-        data: mergeIndexLists(normalizedGuestList, legacyGuestList),
+        data: guestData,
         user: null,
         isGuest: true,
         plan: 'guest',
@@ -379,6 +395,21 @@ export default async function handler(
         warning: `Could not fetch indices by user_id: ${indicesQueryError}`
       });
     }
+
+    await logIndexActivity(svc, {
+      requestId: `gallery_${user.id}_${Date.now()}`,
+      source: 'web',
+      eventType: 'gallery_loaded',
+      status: 'completed',
+      userId: user.id,
+      userEmail: user.email || null,
+      message: 'User gallery loaded',
+      metadata: {
+        resultCount: (indices || []).length,
+        mode: normalizedList.length > 0 ? 'normalized' : 'legacy',
+        warning: indicesQueryError || null,
+      },
+    });
 
     res.status(200).json({ success: true, data: indices || [], user: user || null });
   } catch (error) {

@@ -171,6 +171,7 @@ export default function AdminJobs() {
       const eventType = job.eventType || '';
       if (eventType.startsWith('share_')) return 'share';
       if (eventType.startsWith('claim_')) return 'claim';
+      if (eventType.startsWith('gallery_') || eventType.startsWith('file_') || eventType.startsWith('plugin_') || eventType.startsWith('telemetry_')) return 'usage';
       if (eventType === 'reset_indices' || eventType === 'index_deleted') return 'admin';
       if (eventType === 'index_rate_limited') return 'limits';
       if (eventType.startsWith('index_') || eventType.startsWith('job_') || job.source === 'plugin' || job.source === 'job' || job.source === 'api') return 'indexing';
@@ -288,6 +289,10 @@ export default function AdminJobs() {
     }).length,
     share: jobs.filter((job) => (job.eventType || '').startsWith('share_')).length,
     claim: jobs.filter((job) => (job.eventType || '').startsWith('claim_')).length,
+    usage: jobs.filter((job) => {
+      const eventType = job.eventType || '';
+      return eventType.startsWith('gallery_') || eventType.startsWith('file_') || eventType.startsWith('plugin_') || eventType.startsWith('telemetry_');
+    }).length,
     admin: jobs.filter((job) => ['reset_indices', 'index_deleted'].includes(job.eventType || '')).length,
     limits: jobs.filter((job) => (job.eventType || '') === 'index_rate_limited').length,
   };
@@ -308,7 +313,7 @@ export default function AdminJobs() {
   const activeJobs = jobs.filter((job) => ['pending', 'processing'].includes(job.status)).length;
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom>
@@ -461,6 +466,12 @@ export default function AdminJobs() {
               onClick={() => setCategoryFilter('claim')}
               color={categoryFilter === 'claim' ? 'secondary' : 'default'}
               variant={categoryFilter === 'claim' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Usage (${categoryCounts.usage})`}
+              onClick={() => setCategoryFilter('usage')}
+              color={categoryFilter === 'usage' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'usage' ? 'filled' : 'outlined'}
             />
             <Chip
               label={`Admin (${categoryCounts.admin})`}

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getUserIdFromApiKey } from '../../../lib/api-auth';
 import { set as setPluginConnect } from '../../../lib/plugin-connect-store';
+import { logIndexActivity } from '../../../lib/index-activity-log';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -81,5 +82,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   setPluginConnect(nonce, token, connectedUser!);
+  await logIndexActivity(supabase, {
+    requestId: nonce,
+    source: 'plugin',
+    eventType: 'plugin_connected',
+    status: 'completed',
+    userId: connectedUser?.id || null,
+    userEmail: connectedUser?.email || null,
+    message: 'Plugin connection completed',
+    metadata: {
+      plan: connectedUser?.plan || null,
+    },
+  });
   return res.status(200).json({ ok: true });
 }

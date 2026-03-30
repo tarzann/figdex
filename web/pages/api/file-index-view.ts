@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
@@ -162,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const indexId of indexIds) {
       const { data: normalized } = await svc
         .from('indexed_files')
-        .select('id, file_name, total_frames')
+        .select('id, user_id, file_name, total_frames')
         .eq('id', indexId)
         .maybeSingle();
 
@@ -173,7 +174,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const { data: legacy } = await svc
         .from('index_files')
-        .select('id, file_name, index_data, frame_count')
+        .select('id, user_id, file_name, index_data, frame_count')
         .eq('id', indexId)
         .maybeSingle();
 
@@ -226,6 +227,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         });
       }
+
+      await logIndexActivity(svc, {
+        requestId: `file_summary_${indexIds.join(',')}_${Date.now()}`,
+        source: 'web',
+        eventType: 'file_opened',
+        status: 'completed',
+        userId: normalizedFiles[0]?.user_id || legacyFiles[0]?.user_id || null,
+        fileName: normalizedFiles[0]?.file_name || legacyFiles[0]?.file_name || 'Untitled',
+        message: 'File summary loaded',
+        metadata: {
+          pageCount: pagesMap.size,
+          fileCount: indexIds.length,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -303,6 +318,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const pageFrames = hasSingleNormalizedSource ? dedupedFrames : dedupedFrames.slice(0, limit);
       const safeTotalFrames = hasSingleNormalizedSource ? totalFrames : Math.max(totalFrames, dedupedFrames.length);
 
+      await logIndexActivity(svc, {
+        requestId: `file_page_${indexIds.join(',')}_${pageId}_${Date.now()}`,
+        source: 'web',
+        eventType: 'file_page_viewed',
+        status: 'completed',
+        userId: normalizedFiles[0]?.user_id || legacyFiles[0]?.user_id || null,
+        fileName: normalizedFiles[0]?.file_name || legacyFiles[0]?.file_name || 'Untitled',
+        frameCount: safeTotalFrames,
+        message: 'File page loaded',
+        metadata: {
+          pageId,
+          offset,
+          limit,
+          returnedFrames: pageFrames.length,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         data: {
@@ -374,10 +406,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         frames.push(...filterLegacyFrames(getPagesFromIndexPayload(file.index_data), query));
       }
 
+      const dedupedFrames = dedupeFrames(frames);
+      await logIndexActivity(svc, {
+        requestId: `file_search_${indexIds.join(',')}_${Date.now()}`,
+        source: 'web',
+        eventType: 'file_search',
+        status: 'completed',
+        userId: normalizedFiles[0]?.user_id || legacyFiles[0]?.user_id || null,
+        fileName: normalizedFiles[0]?.file_name || legacyFiles[0]?.file_name || 'Untitled',
+        message: 'File search executed',
+        metadata: {
+          query,
+          resultCount: dedupedFrames.length,
+          fileCount: indexIds.length,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         data: {
-          frames: dedupeFrames(frames),
+          frames: dedupedFrames,
         },
       });
     }
