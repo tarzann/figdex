@@ -21,7 +21,6 @@ import {
   Security as SecurityIcon,
   Api as ApiIcon,
   Person as PersonIcon,
-  PlayArrow as PlayIcon,
   Storage as StorageIcon,
   FilterList as FilterIcon,
   Share as ShareIcon,
@@ -38,8 +37,6 @@ import RegisterDialog from '../components/RegisterDialog';
 import PublicSiteLayout from '../components/PublicSiteLayout';
 import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
-  FIGDEX_IDEAL_CUSTOMER_PROFILE,
-  FIGDEX_PLUGIN_WEB_RELATIONSHIP,
   FIGDEX_PRIMARY_HERO_MESSAGE,
   FIGDEX_PRIMARY_SUPPORT_MESSAGE
 } from '../lib/marketing-messaging';
@@ -122,11 +119,11 @@ const HomePageV2 = () => {
               variant="h5" 
               sx={{ 
                 color: '#475467', 
-                mb: 4, 
-                lineHeight: 1.6,
-                fontSize: { xs: '1.1rem', md: '1.5rem' },
+                mb: 3, 
+                lineHeight: 1.55,
+                fontSize: { xs: '1.05rem', md: '1.32rem' },
                 fontWeight: 400,
-                maxWidth: 620
+                maxWidth: 560
               }}
             >
               {FIGDEX_PRIMARY_SUPPORT_MESSAGE}
@@ -134,7 +131,7 @@ const HomePageV2 = () => {
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={1.5}
-              sx={{ mb: 2, flexWrap: 'wrap', alignItems: { xs: 'stretch', sm: 'center' } }}
+              sx={{ mb: 2.5, flexWrap: 'wrap', alignItems: { xs: 'stretch', sm: 'center' } }}
             >
               <Button
                 variant="contained"
@@ -179,34 +176,19 @@ const HomePageV2 = () => {
                 Download Plugin
               </Button>
             </Stack>
-            <Button
-              variant="text"
-              startIcon={<PlayIcon />}
-              sx={{
-                color: '#475467',
-                fontWeight: 600,
-                textTransform: 'none',
-                px: 0,
-                minWidth: 0,
-                '&:hover': { bgcolor: 'transparent', color: '#111827' }
-              }}
-            >
-              Watch 60-second demo
-            </Button>
             <Typography
               variant="body1"
               sx={{
-                color: '#475467',
-                maxWidth: 680,
+                color: '#667085',
+                maxWidth: 560,
                 lineHeight: 1.7,
                 fontWeight: 500,
-                mt: 1.5
               }}
             >
-              {FIGDEX_PLUGIN_WEB_RELATIONSHIP}
+              Use the plugin to capture pages from Figma. Use FigDex Web to search, review, and share them.
             </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3, flexWrap: 'wrap' }}>
-              {['No credit card required', 'Works with large multi-page files', FIGDEX_IDEAL_CUSTOMER_PROFILE].map((item) => (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2.5, flexWrap: 'wrap', maxWidth: 620 }}>
+              {['No credit card required', 'Works with large multi-page files'].map((item) => (
                 <Stack key={item} direction="row" spacing={1} alignItems="center">
                   <CheckCircleIcon sx={{ fontSize: 18, color: '#027a48' }} />
                   <Typography variant="body2" sx={{ color: '#667085', fontWeight: 500 }}>
@@ -215,7 +197,7 @@ const HomePageV2 = () => {
                 </Stack>
               ))}
             </Stack>
-            <Typography variant="caption" sx={{ color: '#667085', display: 'block', mt: 1 }}>
+            <Typography variant="caption" sx={{ color: '#98a2b3', display: 'block', mt: 1.25 }}>
               Public plugin package available now: {FIGDEX_PLUGIN_VERSION}
             </Typography>
           </Box>
