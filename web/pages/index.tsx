@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import LoginDialog from '../components/LoginDialog';
 import RegisterDialog from '../components/RegisterDialog';
+import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.28.0'; // Fix: Email notifications now sent even when job already completed, added comprehensive email logging
@@ -407,6 +408,29 @@ const HomePageV2 = () => {
                 Start Free
               </Button>
               <Button
+                component="a"
+                href={FIGDEX_PLUGIN_DOWNLOAD_PATH}
+                variant="outlined"
+                size="large"
+                startIcon={<PluginIcon />}
+                sx={{
+                  color: '#1a1a1a',
+                  borderColor: '#cbd5e1',
+                  py: 1.5,
+                  px: 4,
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderRadius: 999,
+                  '&:hover': {
+                    borderColor: '#111827',
+                    bgcolor: '#fff'
+                  }
+                }}
+              >
+                Download Plugin
+              </Button>
+              <Button
                 variant="outlined"
                 size="large"
                 startIcon={<PlayIcon />}
@@ -438,6 +462,9 @@ const HomePageV2 = () => {
                 </Stack>
               ))}
             </Stack>
+            <Typography variant="caption" sx={{ color: '#667085', display: 'block', mt: 1 }}>
+              Public plugin package available now: {FIGDEX_PLUGIN_VERSION}
+            </Typography>
           </Box>
           <Box>
             <Box 
