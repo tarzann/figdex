@@ -2285,6 +2285,17 @@ export default function Home() {
 
   const selectedPageInfo = filePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
   const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
+  const showFirstUseEmptyState =
+    !loading &&
+    !error &&
+    viewMode === 'lobby' &&
+    indexFiles.length === 0 &&
+    allGalleryThumbs.length === 0 &&
+    !search.trim();
+  const showGenericNoResults =
+    !showFirstUseEmptyState &&
+    !loading &&
+    visibleThumbs.length === 0;
 
   return (
     <Box sx={{ direction: 'ltr', bgcolor: '#f7f9fa', minHeight: '100vh' }}>
@@ -3287,11 +3298,116 @@ export default function Home() {
           />
         </Box>
       </Grid>
-      {allGalleryThumbs.length === 0 && (
-        <Typography sx={{ mt: 6, fontSize: 20 }} color="text.secondary">
-          No results found.
-        </Typography>
-      )}
+        {showFirstUseEmptyState && (
+          <Box
+            sx={{
+              mt: 5,
+              mx: 'auto',
+              maxWidth: 720,
+              bgcolor: '#ffffff',
+              border: '1px solid #e4e7ec',
+              borderRadius: 4,
+              boxShadow: '0 12px 34px rgba(15,23,42,0.06)',
+              p: { xs: 3, md: 4 },
+              textAlign: 'center',
+            }}
+          >
+            <Chip
+              label="First index"
+              sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+            />
+            <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mb: 1.25 }}>
+              Your gallery is ready for its first indexed file
+            </Typography>
+            <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.75, maxWidth: 560, mx: 'auto', mb: 3 }}>
+              Install the FigDex plugin, link a Figma file, and create your first index. Once it finishes, your searchable library will appear here.
+            </Typography>
+
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.5}
+              justifyContent="center"
+              sx={{ mb: 3 }}
+            >
+              <Button
+                variant="contained"
+                startIcon={<StorageIcon />}
+                onClick={() => router.push('/download-plugin')}
+                sx={{
+                  bgcolor: '#111827',
+                  color: '#fff',
+                  textTransform: 'none',
+                  borderRadius: 999,
+                  px: 3,
+                  py: 1.2,
+                  fontWeight: 700,
+                  '&:hover': { bgcolor: '#1f2937' },
+                }}
+              >
+                Download Plugin
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<FolderOpenIcon />}
+                onClick={() => router.push('/help')}
+                sx={{
+                  color: '#111827',
+                  borderColor: '#cbd5e1',
+                  textTransform: 'none',
+                  borderRadius: 999,
+                  px: 3,
+                  py: 1.2,
+                  fontWeight: 600,
+                  '&:hover': { borderColor: '#111827', bgcolor: 'rgba(17,24,39,0.04)' },
+                }}
+              >
+                See Setup Steps
+              </Button>
+            </Stack>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+                gap: 1.5,
+                textAlign: 'left',
+              }}
+            >
+              {[
+                ['1', 'Install the plugin', 'Download the public package and import it into Figma.'],
+                ['2', 'Link a file', 'Open the plugin, paste your Figma file link, and load the pages you want.'],
+                ['3', 'Create your first index', 'Choose the pages to include and open the result in FigDex Web.'],
+              ].map(([step, title, text]) => (
+                <Box
+                  key={step}
+                  sx={{
+                    p: 2,
+                    borderRadius: 3,
+                    bgcolor: '#f8fafc',
+                    border: '1px solid #eaecf0',
+                  }}
+                >
+                  <Chip
+                    label={step}
+                    size="small"
+                    sx={{ mb: 1.25, bgcolor: '#111827', color: '#fff', fontWeight: 700 }}
+                  />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.75, color: '#111827' }}>
+                    {title}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#667085', lineHeight: 1.65 }}>
+                    {text}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+        {showGenericNoResults && (
+          <Typography sx={{ mt: 6, fontSize: 20 }} color="text.secondary">
+            No results found.
+          </Typography>
+        )}
       </Box>
         
       {/* Preview Dialog */}
