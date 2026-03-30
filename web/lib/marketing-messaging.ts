@@ -8,7 +8,7 @@ export const FIGDEX_IDEAL_CUSTOMER_PROFILE =
   'Built for design teams, design ops, and product organizations working across large Figma files.';
 
 export const FIGDEX_PRIMARY_HERO_MESSAGE =
-  'Turn large Figma files into a searchable design library your team can actually use.';
+  'Turn large Figma files into a searchable design library.';
 
 export const FIGDEX_PRIMARY_SUPPORT_MESSAGE =
   'Capture pages from Figma with the plugin, then browse, search, review, and share them in FigDex Web.';
