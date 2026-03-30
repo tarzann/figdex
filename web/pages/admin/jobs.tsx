@@ -76,6 +76,7 @@ export default function AdminJobs() {
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [supportsFailStuckJobs, setSupportsFailStuckJobs] = useState(false);
@@ -87,7 +88,7 @@ export default function AdminJobs() {
 
   useEffect(() => {
     filterJobs();
-  }, [jobs, searchTerm, statusFilter]);
+  }, [jobs, searchTerm, statusFilter, categoryFilter]);
 
   useEffect(() => {
     if (!isAdmin || !autoRefresh) return;
@@ -166,9 +167,23 @@ export default function AdminJobs() {
   const filterJobs = () => {
     let filtered = [...jobs];
 
+    const getCategoryForJob = (job: Job) => {
+      const eventType = job.eventType || '';
+      if (eventType.startsWith('share_')) return 'share';
+      if (eventType.startsWith('claim_')) return 'claim';
+      if (eventType === 'reset_indices' || eventType === 'index_deleted') return 'admin';
+      if (eventType === 'index_rate_limited') return 'limits';
+      if (eventType.startsWith('index_') || eventType.startsWith('job_') || job.source === 'plugin' || job.source === 'job' || job.source === 'api') return 'indexing';
+      return 'other';
+    };
+
     // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(job => job.status === statusFilter);
+    }
+
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter((job) => getCategoryForJob(job) === categoryFilter);
     }
 
     // Search filter
@@ -264,6 +279,17 @@ export default function AdminJobs() {
     processing: jobs.filter(j => j.status === 'processing').length,
     completed: jobs.filter(j => j.status === 'completed').length,
     failed: jobs.filter(j => j.status === 'failed').length,
+  };
+  const categoryCounts = {
+    all: jobs.length,
+    indexing: jobs.filter((job) => {
+      const eventType = job.eventType || '';
+      return eventType.startsWith('index_') || eventType.startsWith('job_') || job.source === 'plugin' || job.source === 'job' || job.source === 'api';
+    }).length,
+    share: jobs.filter((job) => (job.eventType || '').startsWith('share_')).length,
+    claim: jobs.filter((job) => (job.eventType || '').startsWith('claim_')).length,
+    admin: jobs.filter((job) => ['reset_indices', 'index_deleted'].includes(job.eventType || '')).length,
+    limits: jobs.filter((job) => (job.eventType || '') === 'index_rate_limited').length,
   };
 
   const now = Date.now();
@@ -409,6 +435,44 @@ export default function AdminJobs() {
               onClick={() => setStatusFilter('failed')}
               color={statusFilter === 'failed' ? 'primary' : 'default'}
               variant={statusFilter === 'failed' ? 'filled' : 'outlined'}
+            />
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              label={`Everything (${categoryCounts.all})`}
+              onClick={() => setCategoryFilter('all')}
+              color={categoryFilter === 'all' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'all' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Indexing (${categoryCounts.indexing})`}
+              onClick={() => setCategoryFilter('indexing')}
+              color={categoryFilter === 'indexing' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'indexing' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Share (${categoryCounts.share})`}
+              onClick={() => setCategoryFilter('share')}
+              color={categoryFilter === 'share' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'share' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Claim (${categoryCounts.claim})`}
+              onClick={() => setCategoryFilter('claim')}
+              color={categoryFilter === 'claim' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'claim' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Admin (${categoryCounts.admin})`}
+              onClick={() => setCategoryFilter('admin')}
+              color={categoryFilter === 'admin' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'admin' ? 'filled' : 'outlined'}
+            />
+            <Chip
+              label={`Limits (${categoryCounts.limits})`}
+              onClick={() => setCategoryFilter('limits')}
+              color={categoryFilter === 'limits' ? 'secondary' : 'default'}
+              variant={categoryFilter === 'limits' ? 'filled' : 'outlined'}
             />
           </Box>
           </Stack>
