@@ -26,7 +26,6 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 type PublicSiteHeaderProps = {
   activeNav?: 'pricing' | 'plugin' | null;
-  showPageVersion?: string | null;
   isLoggedIn?: boolean;
   isAdmin?: boolean;
   userMenuAnchor?: HTMLElement | null;
@@ -41,7 +40,6 @@ type PublicSiteHeaderProps = {
 
 export default function PublicSiteHeader({
   activeNav = null,
-  showPageVersion = null,
   isLoggedIn: isLoggedInProp,
   isAdmin = false,
   userMenuAnchor = null,
@@ -70,9 +68,11 @@ export default function PublicSiteHeader({
     fontWeight: active ? 700 : 500,
     textTransform: 'none',
     fontSize: '0.95rem',
-    bgcolor: active ? '#eef2ff' : 'transparent',
+    borderRadius: 999,
+    px: 1.75,
+    bgcolor: active ? 'rgba(17,24,39,0.06)' : 'transparent',
     '&:hover': {
-      bgcolor: '#eef2ff',
+      bgcolor: 'rgba(17,24,39,0.06)',
     },
   });
 
@@ -99,11 +99,6 @@ export default function PublicSiteHeader({
           >
             FIGDEX
           </Typography>
-          {showPageVersion ? (
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
-              {showPageVersion}
-            </Typography>
-          ) : null}
         </Box>
 
         <Stack direction="row" spacing={1.5} alignItems="center">
@@ -127,8 +122,15 @@ export default function PublicSiteHeader({
               <Button
                 variant="contained"
                 startIcon={
-                  <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.18)', width: 22, height: 22 }}>
-                    <AccountCircleIcon sx={{ fontSize: 16 }} />
+                  <Avatar
+                    sx={{
+                      bgcolor: 'rgba(255,255,255,0.12)',
+                      width: 24,
+                      height: 24,
+                      border: '1px solid rgba(255,255,255,0.14)',
+                    }}
+                  >
+                    <AccountCircleIcon sx={{ fontSize: 16, color: '#f8fafc' }} />
                   </Avatar>
                 }
                 sx={{
@@ -136,7 +138,16 @@ export default function PublicSiteHeader({
                   color: '#fff',
                   textTransform: 'none',
                   borderRadius: 999,
-                  px: 2.25,
+                  px: 2.35,
+                  py: 0.8,
+                  minHeight: 48,
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  letterSpacing: '-0.01em',
+                  boxShadow: '0 12px 30px rgba(15,23,42,0.18)',
+                  '& .MuiButton-startIcon': {
+                    marginRight: '10px',
+                  },
                   '&:hover': { bgcolor: '#1f2937' },
                 }}
                 onClick={() => router.push('/gallery')}

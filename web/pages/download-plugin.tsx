@@ -20,9 +20,9 @@ export default function DownloadPluginPage() {
       <Box
         sx={{
           minHeight: '100vh',
-          bgcolor: '#f7f8fc',
+          bgcolor: '#f5f7fb',
           backgroundImage:
-            'radial-gradient(circle at top left, rgba(17,24,39,0.08), transparent 30%), radial-gradient(circle at top right, rgba(37,99,235,0.12), transparent 34%)',
+            'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
           py: { xs: 3.5, md: 4 },
         }}
       >

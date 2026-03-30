@@ -58,9 +58,6 @@ import {
   FIGDEX_PRIMARY_SUPPORT_MESSAGE
 } from '../lib/marketing-messaging';
 
-// Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.28.0'; // Fix: Email notifications now sent even when job already completed, added comprehensive email logging
-
 const HomePageV2 = () => {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -172,7 +169,6 @@ const HomePageV2 = () => {
         copied={copied}
         onLoginClick={() => setLoginDialogOpen(true)}
         onRegisterClick={() => setRegisterDialogOpen(true)}
-        showPageVersion={`Page ${PAGE_VERSION}`}
       />
 
       {/* SECTION 1 — HERO */}
@@ -308,7 +304,7 @@ const HomePageV2 = () => {
               ))}
             </Stack>
             <Typography variant="caption" sx={{ color: '#667085', display: 'block', mt: 1 }}>
-              Public plugin package available now: {FIGDEX_PLUGIN_VERSION} • Page {PAGE_VERSION}
+              Public plugin package available now: {FIGDEX_PLUGIN_VERSION}
             </Typography>
           </Box>
           <Box>

@@ -136,7 +136,14 @@ const HelpCenter = () => {
   })).filter(category => category.questions.length > 0);
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: '#f5f7fb',
+        backgroundImage:
+          'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
+      }}
+    >
       <PublicSiteHeader />
 
       {/* Content */}
@@ -384,4 +391,3 @@ const HelpCenter = () => {
 };
 
 export default HelpCenter;
-
