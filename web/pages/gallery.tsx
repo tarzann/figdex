@@ -94,17 +94,26 @@ import AppleIcon from '@mui/icons-material/Apple';
 import AndroidIcon from '@mui/icons-material/Android';
 import WebIcon from '@mui/icons-material/Web';
 import DevicesIcon from '@mui/icons-material/Devices';
+import {
+  PUBLIC_SITE_BACKGROUND_SX,
+  PUBLIC_SITE_PRIMARY_BUTTON_SX,
+  PUBLIC_SITE_SECONDARY_BUTTON_SX,
+  PUBLIC_SITE_SURFACE_SX,
+} from '../lib/public-site-styles';
 // import Header from '../components/Header';
 
-// Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.32.03'; // Faster lobby load with deferred frame hydration
-const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 const DEBUG_GALLERY = false;
 const galleryDebug = (...args: any[]) => {
   if (DEBUG_GALLERY) console.log(...args);
 };
 const galleryWarn = (...args: any[]) => {
   if (DEBUG_GALLERY) console.warn(...args);
+};
+
+const GALLERY_SURFACE_SX = {
+  ...PUBLIC_SITE_SURFACE_SX,
+  borderRadius: 3,
+  boxShadow: '0 12px 32px rgba(15,23,42,0.05)',
 };
 
 type Thumbnail = {
@@ -2355,7 +2364,7 @@ export default function Home() {
     visibleThumbs.length === 0;
 
   return (
-    <Box sx={{ direction: 'ltr', bgcolor: '#f7f9fa', minHeight: '100vh' }}>
+    <Box sx={{ direction: 'ltr', ...PUBLIC_SITE_BACKGROUND_SX }}>
       {/* Filter Sidebar */}
       <Box
         sx={{
@@ -2367,8 +2376,9 @@ export default function Home() {
           flexShrink: 0,
           transition: 'width 0.3s ease',
           overflow: 'hidden',
-          bgcolor: 'white',
-          borderRight: '1px solid #e0e0e0',
+          bgcolor: 'rgba(255,255,255,0.94)',
+          backdropFilter: 'blur(14px)',
+          borderRight: '1px solid #dbe3f0',
           zIndex: 15
         }}
       >
@@ -2390,8 +2400,8 @@ export default function Home() {
           </Box>
 
           {/* Navigation - Unified */}
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#f9f9f9', borderRadius: 2, border: '1px solid #e0e0e0', maxHeight: 400, overflowY: 'auto' }}>
-            <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: '#1a1a1a' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2, maxHeight: 400, overflowY: 'auto' }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, color: '#111827' }}>
               Navigation
             </Typography>
             <List dense sx={{ p: 0 }}>
@@ -2408,10 +2418,10 @@ export default function Home() {
                   borderRadius: 1,
                   mb: 0.5,
                   '&.Mui-selected': {
-                    bgcolor: '#667eea',
+                    bgcolor: '#111827',
                     color: 'white',
                     '&:hover': {
-                      bgcolor: '#5568d3',
+                      bgcolor: '#1f2937',
                     }
                   }
                 }}
@@ -2433,10 +2443,10 @@ export default function Home() {
                   borderRadius: 1,
                   mb: 0.5,
                   '&.Mui-selected': {
-                    bgcolor: '#667eea',
+                    bgcolor: '#111827',
                     color: 'white',
                     '&:hover': {
-                      bgcolor: '#5568d3',
+                      bgcolor: '#1f2937',
                     }
                   }
                 }}
@@ -2459,10 +2469,10 @@ export default function Home() {
                     mb: 0.5,
                     pl: 4,
                     '&.Mui-selected': {
-                      bgcolor: '#667eea',
+                      bgcolor: '#111827',
                       color: 'white',
                       '&:hover': {
-                        bgcolor: '#5568d3',
+                        bgcolor: '#1f2937',
                       }
                     }
                   }}
@@ -2478,7 +2488,7 @@ export default function Home() {
           </Box>
 
           {/* Results Count - SECOND */}
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
               Results
             </Typography>
@@ -2495,7 +2505,7 @@ export default function Home() {
           </Box>
 
           {/* Images per page - ADDED */}
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
             <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: '#1a1a1a' }}>
               Images per page
             </Typography>
@@ -2520,7 +2530,7 @@ export default function Home() {
           </Box>
 
           {/* Favorites - THIRD */}
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
             <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1a1a1a' }}>
                 Favorites
@@ -2554,7 +2564,7 @@ export default function Home() {
 
           <Divider sx={{ my: 2 }} />
 
-          <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
             <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
               <Box>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1a1a1a' }}>
@@ -2705,7 +2715,7 @@ export default function Home() {
           position: 'sticky',
           top: 0,
           zIndex: 16,
-          backgroundColor: '#f7f9fa',
+          backgroundColor: 'transparent',
           ml: filterDrawerOpen ? '300px' : 0,
           transition: 'margin-left 0.3s ease',
           width: filterDrawerOpen ? 'calc(100% - 300px)' : '100%'
@@ -2717,24 +2727,27 @@ export default function Home() {
             <Box display="flex" alignItems="center" gap={2}>
               <IconButton
                 onClick={() => setFilterDrawerOpen(!filterDrawerOpen)}
-                sx={{ 
-                  bgcolor: filterDrawerOpen ? '#667eea' : 'white',
-                  color: filterDrawerOpen ? 'white' : '#667eea',
-                  boxShadow: 1,
-                  '&:hover': { boxShadow: 2 }
+                sx={{
+                  ...(filterDrawerOpen ? PUBLIC_SITE_PRIMARY_BUTTON_SX : PUBLIC_SITE_SECONDARY_BUTTON_SX),
+                  bgcolor: filterDrawerOpen ? '#111827' : '#fff',
+                  color: filterDrawerOpen ? '#fff' : '#111827',
+                  boxShadow: '0 8px 20px rgba(15,23,42,0.08)',
+                  '&:hover': {
+                    bgcolor: filterDrawerOpen ? '#1f2937' : 'rgba(17,24,39,0.04)',
+                  }
                 }}
               >
                 <FilterListIcon />
               </IconButton>
               <Box>
-                <Typography variant="h3" fontWeight={700} sx={{ letterSpacing: 1, lineHeight: 1 }}>
+                <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.04em', lineHeight: 1, color: '#111827' }}>
                   FigDex
                 </Typography>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75, flexWrap: 'wrap' }}>
                   <Chip
                     label={viewMode === 'file' ? 'File View' : viewMode === 'allFrames' ? 'All Frames' : 'Gallery'}
                     size="small"
-                    sx={{ fontSize: '0.7rem', height: '22px', bgcolor: '#eef2ff', color: '#4050b5' }}
+                    sx={{ fontSize: '0.7rem', height: '22px', bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
                   />
                   {currentIndexFile === 'guest' && (
                     <Chip 
@@ -2743,16 +2756,6 @@ export default function Home() {
                       sx={{ fontSize: '0.65rem', height: '20px', bgcolor: '#e3f2fd', color: '#1565c0' }}
                     />
                   )}
-                  <Chip 
-                    label={PAGE_VERSION} 
-                    color="primary" 
-                    variant="outlined"
-                    size="small"
-                    sx={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.65rem', height: '20px' }}
-                  />
-                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                    {PAGE_VERSION_BUILD_DATE}
-                  </Typography>
                 </Stack>
               </Box>
             </Box>
@@ -2763,8 +2766,7 @@ export default function Home() {
                 startIcon={<ShareIcon />}
                 onClick={handleShareGallery}
                 sx={{
-                  textTransform: 'none',
-                  borderRadius: 999,
+                  ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
                   bgcolor: 'white',
                   display: { xs: 'none', md: 'inline-flex' }
                 }}
@@ -2773,13 +2775,14 @@ export default function Home() {
               </Button>
               <IconButton
                 onClick={handleUserMenuOpen}
-                sx={{ 
-                  bgcolor: 'white',
-                  boxShadow: 1,
-                  '&:hover': { boxShadow: 2 }
+                sx={{
+                  bgcolor: '#111827',
+                  color: '#fff',
+                  boxShadow: '0 10px 24px rgba(15,23,42,0.14)',
+                  '&:hover': { bgcolor: '#1f2937' }
                 }}
               >
-                <Avatar sx={{ bgcolor: '#667eea', width: 32, height: 32 }}>
+                <Avatar sx={{ bgcolor: 'transparent', color: '#fff', width: 32, height: 32 }}>
                   <AccountCircleIcon />
                 </Avatar>
               </IconButton>
@@ -2855,15 +2858,12 @@ export default function Home() {
             </Box>
           </Box>
 
-          <Box
-            sx={{
+            <Box
+              sx={{
               mt: 2,
               px: 2,
               py: 1.5,
-              borderRadius: 3,
-              bgcolor: '#ffffff',
-              border: '1px solid #e3e8ef',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)'
+              ...GALLERY_SURFACE_SX
             }}
           >
             <Typography variant="h6" sx={{ fontWeight: 700, color: '#18212f', lineHeight: 1.2 }}>
@@ -2881,10 +2881,7 @@ export default function Home() {
             sx={{
               px: 2,
               py: 1.5,
-              borderRadius: 3,
-              bgcolor: '#ffffff',
-              border: '1px solid #e3e8ef',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)'
+              ...GALLERY_SURFACE_SX
             }}
           >
             <Box display="flex" alignItems="flex-end" gap={2} sx={{ width: '100%', flexWrap: 'nowrap', overflowX: 'auto' }}>
