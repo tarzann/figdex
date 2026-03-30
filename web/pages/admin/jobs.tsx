@@ -37,7 +37,10 @@ import {
 
 interface Job {
   id: string;
-  userId: string;
+  requestId: string | null;
+  source?: string;
+  eventType?: string;
+  userId: string | null;
   userEmail: string;
   userName: string;
   fileKey: string;
@@ -60,6 +63,9 @@ interface Job {
   processingTimeMinutes: number;
   selectedPages: string[];
   selectedPageIds: string[];
+  message?: string | null;
+  canDebug?: boolean;
+  debugUrl?: string | null;
 }
 
 export default function AdminJobs() {
@@ -72,6 +78,8 @@ export default function AdminJobs() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [supportsFailStuckJobs, setSupportsFailStuckJobs] = useState(false);
+  const [dataMode, setDataMode] = useState<'activity' | 'legacy'>('activity');
 
   useEffect(() => {
     checkAdminStatus();
@@ -122,6 +130,8 @@ export default function AdminJobs() {
         const data = await response.json();
         if (data.success) {
           setJobs(data.jobs || []);
+          setSupportsFailStuckJobs(Boolean(data.supportsFailStuckJobs));
+          setDataMode(data.mode === 'legacy' ? 'legacy' : 'activity');
         }
       }
     } catch (error) {
@@ -276,10 +286,12 @@ export default function AdminJobs() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom>
-            Index Jobs Log
+            Index Activity Log
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            View all indexing jobs with detailed metrics
+            {dataMode === 'activity'
+              ? 'Live activity from active indexing flows'
+              : 'Legacy background jobs with detailed metrics'}
           </Typography>
         </Box>
         <Stack direction="row" spacing={2}>
@@ -287,7 +299,7 @@ export default function AdminJobs() {
             variant="contained"
             color="warning"
             onClick={failStuckJobs}
-            disabled={loading || actionLoading || stuckJobs === 0}
+            disabled={loading || actionLoading || stuckJobs === 0 || !supportsFailStuckJobs}
           >
             Fail stuck jobs
           </Button>
@@ -315,7 +327,7 @@ export default function AdminJobs() {
             <Typography variant="caption" color="text.secondary">Active jobs</Typography>
             <Typography variant="h4" sx={{ mt: 0.5 }}>{activeJobs}</Typography>
             <Typography variant="body2" color="text.secondary">
-              Pending + processing right now
+              {dataMode === 'activity' ? 'Recent active indexing activity' : 'Pending + processing right now'}
             </Typography>
           </Paper>
         </Grid>
@@ -418,6 +430,7 @@ export default function AdminJobs() {
           <TableHead>
             <TableRow>
               <TableCell>Status</TableCell>
+              <TableCell>Source</TableCell>
               <TableCell>User</TableCell>
               <TableCell>File Name</TableCell>
               <TableCell>File Key</TableCell>
@@ -431,9 +444,9 @@ export default function AdminJobs() {
           <TableBody>
             {filteredJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
-                    No jobs found
+                    {dataMode === 'activity' ? 'No index activity found yet' : 'No jobs found'}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -448,18 +461,19 @@ export default function AdminJobs() {
                         color={getStatusColor(job.status) as any}
                         size="small"
                       />
-                      <Tooltip title={`View detailed debug info for job ${job.id}`}>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const url = `/api/admin/debug-job?jobId=${job.id}`;
-                            window.open(url, '_blank');
-                          }}
-                        >
-                          <Info fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {job.canDebug && job.debugUrl ? (
+                        <Tooltip title={`View detailed debug info for job ${job.id}`}>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(job.debugUrl as string, '_blank');
+                            }}
+                          >
+                            <Info fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : null}
                     </Box>
                     {job.parentJobId && (
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
@@ -469,6 +483,20 @@ export default function AdminJobs() {
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5, fontFamily: 'monospace' }}>
                       {job.id.substring(0, 12)}...
                     </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Stack spacing={0.5}>
+                      <Chip
+                        label={job.source || 'system'}
+                        size="small"
+                        variant="outlined"
+                      />
+                      {job.eventType ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {job.eventType}
+                        </Typography>
+                      ) : null}
+                    </Stack>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{job.userEmail}</Typography>
@@ -531,6 +559,12 @@ export default function AdminJobs() {
                       <Tooltip title={job.error}>
                         <Typography variant="body2" color="error" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {job.error.substring(0, 50)}...
+                        </Typography>
+                      </Tooltip>
+                    ) : job.message ? (
+                      <Tooltip title={job.message}>
+                        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {job.message}
                         </Typography>
                       </Tooltip>
                     ) : (

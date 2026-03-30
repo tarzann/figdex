@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getPlanLimitsFromDb, formatBytes } from '../../lib/plans';
 import { archiveExistingIndex } from '../../lib/index-archive';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 // Version tracking - Update this number for each fix/change
 const API_VERSION = 'v1.30.24'; // Cover image signing
@@ -31,6 +32,15 @@ export const config = {
  * Stores a lightweight index where images are referenced by storage URLs/paths
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const requestId = `upload_v2_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const requestStartedAt = Date.now();
+  let activityUserId: string | null = null;
+  let activityUserEmail: string | null = null;
+  let activityFileKey: string | null = null;
+  let activityFileName: string | null = null;
+  let activityLogicalFileId: string | null = null;
+  let activityPageCount: number | null = null;
+  let activityFrameCount: number | null = null;
   console.log(`🚀 [upload-index-v2] Handler called, method: ${req.method}`);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -91,6 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { documentId, fileKey, fileName, pages, uploadedAt, frameTags, customTags, coverImageUrl } = req.body || {};
+    activityFileKey = typeof fileKey === 'string' ? fileKey : null;
     
     console.log(`📥 [upload-index-v2] Request body parsed:`, {
       hasDocumentId: !!documentId,
@@ -124,8 +135,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }).replace(':', '');
       finalFileName = `Figma_Index_${timestamp}_${timeStr}`;
     }
+    activityFileName = finalFileName;
+    activityLogicalFileId = `${documentId || ''}:${fileKey || ''}`;
 
     const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
+    activityUserId = user.id;
+    activityUserEmail = user.email || null;
 
     // Debug: Log incoming data structure
     console.log(`📥 [upload-index-v2] Received request:`, {
@@ -183,6 +198,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     
     const newFrameCount = countFramesFromPages(sanitizedPages);
+    activityPageCount = sanitizedPages.length;
+    activityFrameCount = newFrameCount;
 
     // Lightweight size (bytes)
     const fileSizeBytes = Buffer.byteLength(JSON.stringify(sanitizedPages), 'utf8');
@@ -680,6 +697,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    await logIndexActivity(supabaseAdmin, {
+      requestId,
+      source: 'api',
+      eventType: 'index_completed',
+      status: 'completed',
+      userId: activityUserId,
+      userEmail: activityUserEmail,
+      fileKey: activityFileKey,
+      fileName: activityFileName,
+      logicalFileId: activityLogicalFileId,
+      pageCount: activityPageCount,
+      frameCount: activityFrameCount,
+      durationMs: Date.now() - requestStartedAt,
+      message: 'Legacy API upload completed successfully',
+      metadata: {
+        indexId: data?.id || null,
+        apiVersion: API_VERSION,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Index manifest uploaded successfully',
@@ -690,6 +727,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fileSize: fileSizeBytes
     });
   } catch (error: any) {
+    try {
+      const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
+      if (serviceUrl && serviceKey) {
+        const supabaseAdmin = createClient(serviceUrl, serviceKey);
+        await logIndexActivity(supabaseAdmin, {
+          requestId,
+          source: 'api',
+          eventType: 'index_failed',
+          status: 'failed',
+          userId: activityUserId,
+          userEmail: activityUserEmail,
+          fileKey: activityFileKey,
+          fileName: activityFileName,
+          logicalFileId: activityLogicalFileId,
+          pageCount: activityPageCount,
+          frameCount: activityFrameCount,
+          durationMs: Date.now() - requestStartedAt,
+          error: error?.message || 'Internal server error',
+        });
+      }
+    } catch (logError) {
+      console.warn('⚠️ [upload-index-v2] Failed to write activity log for error:', logError);
+    }
     console.error(`❌ [upload-index-v2] Error in handler:`, {
       message: error?.message,
       stack: error?.stack,

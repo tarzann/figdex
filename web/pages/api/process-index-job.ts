@@ -5,6 +5,7 @@ import { deriveNamingTags, getSizeTag } from '../../lib/tag-utils';
 import { archiveExistingIndex, type ArchiveableIndexRow } from '../../lib/index-archive';
 import { sendJobNotificationEmail, sendJobNotificationToAdmin } from '../../lib/email';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 /**
  * Merge multiple job manifests into a single index
@@ -596,6 +597,12 @@ async function markJobAsFailed(
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const requestStartTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  let activityUserId: string | null = null;
+  let activityUserEmail: string | null = null;
+  let activityFileKey: string | null = null;
+  let activityFileName: string | null = null;
+  let activityLogicalFileId: string | null = null;
+  let activityFrameCount: number | null = null;
   
   console.log(`\n🚀 [${requestId}] ===== process-index-job START =====`);
   console.log(`[${requestId}] Timestamp: ${new Date().toISOString()}`);
@@ -680,6 +687,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error(`[${requestId}] ❌ Job ${jobId} not found`);
       return res.status(404).json({ success: false, error: 'Job not found' });
     }
+    activityUserId = job.user_id || null;
+    activityFileKey = job.file_key || null;
+    activityFileName = job.file_name || null;
+    activityLogicalFileId = job.project_id || job.file_key || null;
+    activityFrameCount = typeof job.total_frames === 'number' ? job.total_frames : null;
+
+    const { data: jobUser } = activityUserId
+      ? await supabaseAdmin
+          .from('users')
+          .select('email')
+          .eq('id', activityUserId)
+          .maybeSingle()
+      : { data: null };
+    activityUserEmail = jobUser?.email || null;
+
+    await logIndexActivity(supabaseAdmin, {
+      requestId,
+      source: 'job',
+      eventType: 'job_started',
+      status: 'processing',
+      userId: activityUserId,
+      userEmail: activityUserEmail,
+      fileKey: activityFileKey,
+      fileName: activityFileName,
+      logicalFileId: activityLogicalFileId,
+      frameCount: activityFrameCount,
+      durationMs: Date.now() - requestStartTime,
+      metadata: {
+        jobId,
+      },
+    });
     
     // Get figmaToken from body (required - column doesn't exist in index_jobs table)
     const figmaToken = bodyFigmaToken;
@@ -2215,12 +2253,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const totalTime = Date.now() - requestStartTime;
+    await logIndexActivity(supabaseAdmin, {
+      requestId,
+      source: 'job',
+      eventType: newStatus === 'completed' ? 'job_completed' : 'job_started',
+      status: newStatus === 'completed' ? 'completed' : 'processing',
+      userId: activityUserId,
+      userEmail: activityUserEmail,
+      fileKey: activityFileKey,
+      fileName: activityFileName,
+      logicalFileId: activityLogicalFileId,
+      frameCount: activityFrameCount,
+      durationMs: totalTime,
+      message: newStatus === 'completed' ? 'Background job completed successfully' : 'Background job heartbeat',
+      metadata: {
+        jobId,
+        nextFrameIndex: responsePayload?.nextFrameIndex ?? null,
+        totalFrames: responsePayload?.totalFrames ?? activityFrameCount,
+      },
+    });
     console.log(`[${requestId}] ✅ Request completed successfully in ${totalTime}ms`);
     console.log(`[${requestId}] ===== process-index-job END (SUCCESS) =====\n`);
 
     return res.status(200).json(responsePayload);
   } catch (error: any) {
     const totalTime = Date.now() - requestStartTime;
+    await logIndexActivity(supabaseAdmin, {
+      requestId,
+      source: 'job',
+      eventType: 'job_failed',
+      status: 'failed',
+      userId: activityUserId,
+      userEmail: activityUserEmail,
+      fileKey: activityFileKey,
+      fileName: activityFileName,
+      logicalFileId: activityLogicalFileId,
+      frameCount: activityFrameCount,
+      durationMs: totalTime,
+      error: error?.message || 'Internal server error',
+      metadata: {
+        jobId: req.body?.jobId || null,
+      },
+    });
     console.error(`[${requestId}] ❌ Error processing index job after ${totalTime}ms:`, error);
     console.error(`[${requestId}] Error stack:`, error.stack);
     

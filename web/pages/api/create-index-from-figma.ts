@@ -13,6 +13,7 @@ import {
   type FigmaNode,
 } from '../../lib/figma-api';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 // Increase body size limit
 export const config = {
@@ -343,6 +344,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const requestStartedAt = Date.now();
   console.log(`\n🚀 [${requestId}] ===== create-index-from-figma START =====`);
   console.log(`[${requestId}] Method: ${req.method}`);
   console.log(`[${requestId}] URL: ${req.url}`);
@@ -395,6 +397,30 @@ export default async function handler(
 
   // Parse body early for guest path (before auth)
   const bodyEarly = typeof req.body === 'object' ? req.body : {};
+  let activityUserId: string | null = null;
+  let activityUserEmail: string | null = null;
+  let activityFileKey: string | null = typeof bodyEarly.fileKey === 'string'
+    ? bodyEarly.fileKey
+    : typeof bodyEarly.file_key === 'string'
+      ? bodyEarly.file_key
+      : null;
+  let activityFileName: string | null = typeof bodyEarly.fileName === 'string'
+    ? bodyEarly.fileName
+    : typeof bodyEarly.file_name === 'string'
+      ? bodyEarly.file_name
+      : null;
+  let activityLogicalFileId: string | null = getLogicalFileId(
+    bodyEarly.projectId ?? bodyEarly.project_id ?? bodyEarly.docId ?? bodyEarly.doc_id,
+    activityFileKey
+  ) || null;
+  let activityPageCount: number | null = Array.isArray(bodyEarly.pageMeta)
+    ? bodyEarly.pageMeta.length
+    : Array.isArray(bodyEarly.pages)
+      ? bodyEarly.pages.length
+      : null;
+  let activityFrameCount: number | null = Array.isArray(bodyEarly.pages)
+    ? countFramesInPages(bodyEarly.pages)
+    : null;
   const galleryOnly = bodyEarly.source === 'figma-plugin' && (bodyEarly.galleryOnly === true || bodyEarly.action === 'gallery_index');
   const fileKeyEarly = bodyEarly.fileKey ?? bodyEarly.file_key;
   const syncIdEarly = typeof bodyEarly.syncId === 'string' ? bodyEarly.syncId.trim().slice(0, 120) : '';
@@ -418,10 +444,15 @@ export default async function handler(
             ? bodyEarly.file_name
             : ''
       );
+      activityFileKey = fileKeyTrim;
+      activityFileName = fileName;
+      activityLogicalFileId = currentLogicalFileId || null;
       const indexPayload = bodyEarly.indexPayload && typeof bodyEarly.indexPayload === 'object' ? bodyEarly.indexPayload : null;
       const hasValidPayload = indexPayload && (Array.isArray((indexPayload as { pages?: unknown }).pages) || Array.isArray(indexPayload));
       let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
       const framesInPayload = Array.isArray(pagesArray) ? pagesArray.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0) : 0;
+      activityPageCount = Array.isArray(pagesArray) ? pagesArray.length : null;
+      activityFrameCount = framesInPayload;
       const guestLimits = await getPlanLimitsFromDb(supabaseAdmin, 'guest', false);
       const maxFrames = guestLimits.maxFramesTotal ?? 50;
       const actionCheckLimit = bodyEarly.action === 'check_limit';
@@ -661,6 +692,8 @@ export default async function handler(
 
     const planId = resolvePlanId(user.plan, user.is_admin);
     const planLimits = await getPlanLimitsFromDb(supabaseAdmin, user.plan, user.is_admin);
+    activityUserId = user.id;
+    activityUserEmail = user.email || null;
 
     // Helper function to check if file already exists (for re-index detection)
     const checkIfFileExists = async (fileKey: string, userId: string): Promise<boolean> => {
@@ -750,6 +783,7 @@ export default async function handler(
       syncId: syncIdBody,
       finalizePageIds: finalizePageIdsBody,
     } = req.body;
+    activityFileKey = typeof fileKeyInput === 'string' ? fileKeyInput : activityFileKey;
     const syncId = typeof syncIdBody === 'string' ? syncIdBody.trim().slice(0, 120) : '';
     const finalizePageIds = Array.isArray(finalizePageIdsBody)
       ? finalizePageIdsBody.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)
@@ -1041,6 +1075,7 @@ export default async function handler(
         error: 'Invalid file key format',
       });
     }
+    activityFileKey = fileKey;
 
     // Check subscription limits (files, frames, rate limiting)
     // Skip for unlimited/admin
@@ -1160,6 +1195,7 @@ export default async function handler(
 
     // Get file name
     const fileName = fileNameInput || figmaFile.name || 'Untitled';
+    activityFileName = fileName;
     const rawPageNodes = (figmaFile.document.children || [])
       .filter((child) => child.type === 'PAGE' || child.type === 'CANVAS');
 
@@ -1206,6 +1242,7 @@ export default async function handler(
         depth: 0,
       };
     });
+    activityPageCount = pageMeta.length;
     console.log(`[${requestId}] ✅ PageMeta created: ${pageMeta.length} pages`);
 
     const availablePages = rawPageNodes.map((page) => normalizePageName(page.name));
@@ -1336,6 +1373,7 @@ export default async function handler(
     } else {
       console.log(`[${requestId}] ✅ Total frames from client counts: ${totalFramesCount}`);
     }
+    activityFrameCount = totalFramesCount;
 
     // Check monthly frames limit (estimate based on totalFramesCount)
     if (!user?.bypass_indexing_limits && !monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
@@ -1355,6 +1393,7 @@ export default async function handler(
     }
 
     const documentId = figmaFile.document.id || '0:0';
+    activityLogicalFileId = getLogicalFileId(documentId, fileKey) || activityLogicalFileId;
     
     // Create empty manifest structure - will be filled during processing
     const emptyManifest: any[] = [];
@@ -1490,7 +1529,22 @@ export default async function handler(
 
     // If insert failed due to missing required columns, return error instead of processing frames
     // Processing frames synchronously would cause timeout for large files
-    if (jobError && (jobError.message?.includes('frame_node_refs') || jobError.message?.includes('document_data') || jobError.code === '42703')) {
+      if (jobError && (jobError.message?.includes('frame_node_refs') || jobError.message?.includes('document_data') || jobError.code === '42703')) {
+      await logIndexActivity(supabaseAdmin, {
+        requestId,
+        source: 'plugin',
+        eventType: 'job_failed',
+        status: 'failed',
+        userId: activityUserId,
+        userEmail: activityUserEmail,
+        fileKey: activityFileKey,
+        fileName: activityFileName,
+        logicalFileId: activityLogicalFileId,
+        pageCount: activityPageCount,
+        frameCount: activityFrameCount,
+        durationMs: Date.now() - requestStartedAt,
+        error: jobError.message || 'Missing required database columns for index job',
+      });
       console.error('❌ Required database columns (frame_node_refs, document_data) are missing. Cannot create index job.');
       return res.status(500).json({
         success: false,
@@ -1500,6 +1554,21 @@ export default async function handler(
     }
 
     if (jobError) {
+      await logIndexActivity(supabaseAdmin, {
+        requestId,
+        source: 'plugin',
+        eventType: 'job_failed',
+        status: 'failed',
+        userId: activityUserId,
+        userEmail: activityUserEmail,
+        fileKey: activityFileKey,
+        fileName: activityFileName,
+        logicalFileId: activityLogicalFileId,
+        pageCount: activityPageCount,
+        frameCount: activityFrameCount,
+        durationMs: Date.now() - requestStartedAt,
+        error: jobError.message || 'Failed to schedule background indexing job',
+      });
       console.error(`[${requestId}] ❌ Failed to enqueue job:`, {
         message: jobError.message,
         code: jobError.code,
@@ -1538,6 +1607,25 @@ export default async function handler(
       return res.status(500).json(errorDetails);
     }
 
+    await logIndexActivity(supabaseAdmin, {
+      requestId,
+      source: 'plugin',
+      eventType: 'job_started',
+      status: 'pending',
+      userId: activityUserId,
+      userEmail: activityUserEmail,
+      fileKey: activityFileKey,
+      fileName: activityFileName,
+      logicalFileId: activityLogicalFileId,
+      pageCount: activityPageCount,
+      frameCount: activityFrameCount,
+      durationMs: Date.now() - requestStartedAt,
+      message: 'Background indexing job scheduled',
+      metadata: {
+        jobId: jobRow?.id || null,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Job scheduled',
@@ -1550,6 +1638,23 @@ export default async function handler(
     });
 
     } catch (error: any) {
+      if (typeof supabaseAdmin !== 'undefined' && supabaseAdmin) {
+        await logIndexActivity(supabaseAdmin, {
+          requestId,
+          source: 'plugin',
+          eventType: 'job_failed',
+          status: 'failed',
+          userId: activityUserId || userIdForLog || null,
+          userEmail: activityUserEmail,
+          fileKey: activityFileKey,
+          fileName: activityFileName,
+          logicalFileId: activityLogicalFileId,
+          pageCount: activityPageCount,
+          frameCount: activityFrameCount,
+          durationMs: Date.now() - requestStartedAt,
+          error: error?.message || 'Internal server error',
+        });
+      }
       console.error('❌ Error creating index from Figma API:', {
         message: error?.message,
         stack: error?.stack,
