@@ -3,6 +3,9 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { Alert, Box, Card, CardContent, Chip, Container, Typography } from '@mui/material';
+import PublicSiteLayout from '../components/PublicSiteLayout';
+import { PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -137,20 +140,43 @@ export default function PluginConnect() {
       <Head>
         <title>FigDex – Connect plugin</title>
       </Head>
-      <div style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 400, margin: '40px auto', textAlign: 'center' }}>
-        {status === 'checking' && <p>Checking…</p>}
-        {status === 'redirecting' && <p>Redirecting to login…</p>}
-        {status === 'connecting' && <p>Connecting your account…</p>}
-        {status === 'success' && (
-          <>
-            <p style={{ color: '#43a047' }}>{message}</p>
-            <p style={{ marginTop: 16 }}>
-              <Link href="/gallery" style={{ color: '#1976d2' }}>Go to gallery</Link>
-            </p>
-          </>
-        )}
-        {status === 'error' && <p style={{ color: '#d32f2f' }}>{message}</p>}
-      </div>
+      <PublicSiteLayout>
+        <Container maxWidth="sm" sx={{ py: { xs: 5, md: 8 } }}>
+          <Card sx={{ ...PUBLIC_SITE_SURFACE_SX, borderRadius: 5 }}>
+            <CardContent sx={{ p: { xs: 3, md: 4 }, textAlign: 'center' }}>
+              <Chip
+                label="Plugin connection"
+                sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+              />
+              <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827', mb: 1.5 }}>
+                Connect FigDex to the plugin
+              </Typography>
+              <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7, mb: 3 }}>
+                We&apos;re verifying your session and connecting your account so you can return to Figma and continue indexing.
+              </Typography>
+
+              {status === 'checking' ? <Typography>Checking your session...</Typography> : null}
+              {status === 'redirecting' ? <Typography>Redirecting you to sign in...</Typography> : null}
+              {status === 'connecting' ? <Typography>Connecting your account...</Typography> : null}
+              {status === 'success' ? (
+                <Box>
+                  <Alert severity="success" sx={{ textAlign: 'left', mb: 2 }}>
+                    {message}
+                  </Alert>
+                  <Typography component={Link} href="/gallery" sx={{ color: '#3538cd', fontWeight: 700, textDecoration: 'none' }}>
+                    Open My FigDex
+                  </Typography>
+                </Box>
+              ) : null}
+              {status === 'error' ? (
+                <Alert severity="error" sx={{ textAlign: 'left' }}>
+                  {message}
+                </Alert>
+              ) : null}
+            </CardContent>
+          </Card>
+        </Container>
+      </PublicSiteLayout>
     </>
   );
 }

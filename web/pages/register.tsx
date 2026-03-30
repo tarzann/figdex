@@ -1,25 +1,30 @@
+import Head from 'next/head';
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import {
+  Alert,
   Box,
-  Container,
-  Paper,
-  Typography,
   Button,
-  Link,
-  TextField,
+  Card,
+  CardContent,
+  Chip,
+  Container,
   Divider,
-  Alert
+  Stack,
+  TextField,
+  Typography,
 } from '@mui/material';
-import { Google as GoogleIcon, ArrowBack as BackIcon, Email as EmailIcon } from '@mui/icons-material';
+import { Google as GoogleIcon, Email as EmailIcon } from '@mui/icons-material';
 import { createClient } from '@supabase/supabase-js';
+import PublicSiteLayout from '../components/PublicSiteLayout';
 import { getOAuthRedirectUrl } from '../lib/env';
+import { PUBLIC_SITE_PRIMARY_BUTTON_SX, PUBLIC_SITE_SECONDARY_BUTTON_SX, PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
-const RegisterPage = () => {
+export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,18 +38,16 @@ const RegisterPage = () => {
     try {
       setError('');
       setLoading(true);
-      if (!supabase) {
-        throw new Error('Supabase configuration error. Please try again later.');
-      }
-      supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: getOAuthRedirectUrl()
-        }
-      }).catch((e) => {
-        setError(e?.message || 'Failed to start Google sign up');
-        setLoading(false);
-      });
+      if (!supabase) throw new Error('Supabase configuration error. Please try again later.');
+      supabase.auth
+        .signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: getOAuthRedirectUrl() },
+        })
+        .catch((e) => {
+          setError(e?.message || 'Failed to start Google sign up');
+          setLoading(false);
+        });
     } catch (e: any) {
       setError(e?.message || 'Failed to start Google sign up');
       setLoading(false);
@@ -54,18 +57,14 @@ const RegisterPage = () => {
   const handleEmailSignUp = async () => {
     try {
       setError('');
-      
-      // Validation
       if (!email || !password || !fullName) {
         setError('Please fill in all required fields');
         return;
       }
-
       if (password.length < 8) {
         setError('Password must be at least 8 characters long');
         return;
       }
-
       if (password !== confirmPassword) {
         setError('Passwords do not match');
         return;
@@ -79,229 +78,192 @@ const RegisterPage = () => {
 
       setLoading(true);
 
-      // Create user profile via API (which will handle both Auth and users table)
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'signup',
           email: email.trim().toLowerCase(),
-          password: password,
-          name: fullName.trim()
-        })
+          password,
+          name: fullName.trim(),
+        }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        // Handle specific error codes
         if (result.code === 'ACCOUNT_EXISTS_GOOGLE') {
-          setError('This email is already registered with Google. Please sign in with Google or use password reset to add a password.');
+          setError('This email is already registered with Google. Please continue with Google or add a password with password reset.');
         } else if (result.code === 'ACCOUNT_EXISTS_EMAIL' || result.code === 'ACCOUNT_EXISTS') {
-          setError('An account with this email already exists. Please sign in instead.');
+          setError('An account with this email already exists. Redirecting you to sign in.');
           setTimeout(() => {
             router.push('/login');
-          }, 2000);
+          }, 1600);
         } else {
-          setError(result.error || 'Failed to create user profile');
+          setError(result.error || 'Failed to create account');
         }
         return;
       }
 
-      // Save user data to localStorage
-      const userData = {
-        email: email.trim().toLowerCase(),
-        api_key: result.user?.api_key,
-        full_name: fullName.trim(),
-        plan: result.user?.plan || 'free'
-      };
+      localStorage.setItem(
+        'figma_web_user',
+        JSON.stringify({
+          email: email.trim().toLowerCase(),
+          api_key: result.user?.api_key,
+          full_name: fullName.trim(),
+          plan: result.user?.plan || 'free',
+        })
+      );
 
-      localStorage.setItem('figma_web_user', JSON.stringify(userData));
-
-      // Redirect to gallery
       router.push('/gallery');
-
     } catch (e: any) {
-      console.error('Email sign up error:', e);
       setError(e?.message || 'Failed to create account. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
-    <Box sx={{ minHeight: '100vh', background: '#fafafa', display: 'flex', alignItems: 'center', py: 6 }}>
-      <Container maxWidth="sm">
-        <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden', p: { xs: 3, md: 4 } }}>
-          <Box sx={{ textAlign: 'center', mb: 2 }}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, color: '#111' }}>
-              Join FigDex
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#666' }}>
-              Create your account and start organizing your Figma designs
-            </Typography>
-          </Box>
-          <Box sx={{ pt: 1 }}>
-            {!showEmailForm ? (
-              <>
-                <Button
-                  variant="contained"
-                  size="large"
-                  fullWidth
-                  startIcon={<GoogleIcon />}
-                  onClick={handleGoogleSignUp}
-                  disabled={loading}
-                  sx={{
-                    py: 1.25,
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    backgroundColor: '#4c5fd7',
-                    mb: 2,
-                    '&:hover': { backgroundColor: '#4255c9' }
-                  }}
-                >
-                  {loading ? 'Redirecting…' : 'Sign up with Google'}
-                </Button>
-                
-                <Divider sx={{ my: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    OR
+    <>
+      <Head>
+        <title>Start Free | FigDex</title>
+      </Head>
+      <PublicSiteLayout onLoginClick={() => router.push('/login')}>
+        <Container maxWidth="sm" sx={{ py: { xs: 5, md: 8 } }}>
+          <Card sx={{ ...PUBLIC_SITE_SURFACE_SX, borderRadius: 5 }}>
+            <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+              <Stack spacing={3}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Chip
+                    label="Start free"
+                    sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+                  />
+                  <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827', mb: 1 }}>
+                    Create your FigDex account
                   </Typography>
-                </Divider>
+                  <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7 }}>
+                    Install the plugin, connect your account, and turn your first large Figma file into a searchable design library.
+                  </Typography>
+                </Box>
 
-                <Button
-                  variant="outlined"
-                  size="large"
-                  fullWidth
-                  startIcon={<EmailIcon />}
-                  onClick={() => setShowEmailForm(true)}
-                  disabled={loading}
-                  sx={{
-                    py: 1.25,
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    borderColor: '#4c5fd7',
-                    color: '#4c5fd7',
-                    '&:hover': { 
-                      borderColor: '#4255c9',
-                      backgroundColor: 'rgba(76, 95, 215, 0.04)'
-                    }
-                  }}
-                >
-                  Sign up with Email
-                </Button>
-              </>
-            ) : (
-              <Box component="form" onSubmit={(e) => { e.preventDefault(); handleEmailSignUp(); }}>
-                <TextField
-                  fullWidth
-                  label="Full Name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  margin="normal"
-                  required
-                  disabled={loading}
-                />
-                <TextField
-                  fullWidth
-                  label="Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  margin="normal"
-                  required
-                  disabled={loading}
-                  autoComplete="email"
-                />
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  margin="normal"
-                  required
-                  disabled={loading}
-                  autoComplete="new-password"
-                  helperText="Must be at least 8 characters"
-                />
-                <TextField
-                  fullWidth
-                  label="Confirm Password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  margin="normal"
-                  required
-                  disabled={loading}
-                  autoComplete="new-password"
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                  fullWidth
-                  disabled={loading}
-                  sx={{
-                    mt: 2,
-                    py: 1.25,
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    backgroundColor: '#4c5fd7',
-                    '&:hover': { backgroundColor: '#4255c9' }
-                  }}
-                >
-                  {loading ? 'Creating Account…' : 'Create Account'}
-                </Button>
-                <Button
-                  variant="text"
-                  fullWidth
-                  onClick={() => {
-                    setShowEmailForm(false);
-                    setError('');
-                    setEmail('');
-                    setPassword('');
-                    setConfirmPassword('');
-                    setFullName('');
-                  }}
-                  disabled={loading}
-                  sx={{ mt: 1 }}
-                >
-                  Back to options
-                </Button>
-              </Box>
-            )}
+                {!showEmailForm ? (
+                  <Stack spacing={2}>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      startIcon={<GoogleIcon />}
+                      onClick={handleGoogleSignUp}
+                      disabled={loading}
+                      sx={{ ...PUBLIC_SITE_PRIMARY_BUTTON_SX, py: 1.35 }}
+                    >
+                      {loading ? 'Redirecting...' : 'Continue with Google'}
+                    </Button>
 
-            {!!error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
-              </Alert>
-            )}
+                    <Divider>
+                      <Typography variant="body2" color="text.secondary">
+                        or
+                      </Typography>
+                    </Divider>
 
-            <Box sx={{ textAlign: 'center', mt: 3 }}>
-              <Typography variant="body2" color="text.secondary">
-                Already have an account?{' '}
-                <Link
-                  component="button"
-                  variant="body2"
-                  onClick={() => router.push('/login')}
-                  sx={{ 
-                    color: '#4c5fd7', 
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    '&:hover': { textDecoration: 'underline' }
-                  }}
-                >
-                  Sign in here
-                </Link>
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
-      </Container>
-    </Box>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      fullWidth
+                      startIcon={<EmailIcon />}
+                      onClick={() => setShowEmailForm(true)}
+                      disabled={loading}
+                      sx={{ ...PUBLIC_SITE_SECONDARY_BUTTON_SX, py: 1.35 }}
+                    >
+                      Continue with email
+                    </Button>
+                  </Stack>
+                ) : (
+                  <Stack spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Full name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      disabled={loading}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={loading}
+                      autoComplete="email"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="new-password"
+                      helperText="Use at least 8 characters."
+                    />
+                    <TextField
+                      fullWidth
+                      label="Confirm password"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="new-password"
+                    />
+                    <Button
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      onClick={handleEmailSignUp}
+                      disabled={loading}
+                      sx={{ ...PUBLIC_SITE_PRIMARY_BUTTON_SX, py: 1.35 }}
+                    >
+                      {loading ? 'Creating account...' : 'Create account'}
+                    </Button>
+                    <Button
+                      variant="text"
+                      fullWidth
+                      onClick={() => {
+                        setShowEmailForm(false);
+                        setError('');
+                        setEmail('');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setFullName('');
+                      }}
+                      disabled={loading}
+                      sx={{ textTransform: 'none', color: '#667085' }}
+                    >
+                      Back to options
+                    </Button>
+                  </Stack>
+                )}
+
+                {error ? <Alert severity="error">{error}</Alert> : null}
+
+                <Typography variant="body2" sx={{ textAlign: 'center', color: '#667085' }}>
+                  Already have an account?{' '}
+                  <Box component="span" sx={inlineLinkSx} onClick={() => router.push('/login')}>
+                    Sign in
+                  </Box>
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Container>
+      </PublicSiteLayout>
+    </>
   );
-};
+}
 
-export default RegisterPage;
+const inlineLinkSx = {
+  color: '#3538cd',
+  cursor: 'pointer',
+  fontWeight: 700,
+  '&:hover': { textDecoration: 'underline' },
+};
