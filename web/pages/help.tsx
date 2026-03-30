@@ -24,7 +24,8 @@ import {
   Share as ShareIcon,
   Settings as SettingsIcon
 } from '@mui/icons-material';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
+import { PUBLIC_SITE_PRIMARY_BUTTON_SX, PUBLIC_SITE_SECONDARY_BUTTON_SX, PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
 
 const HelpCenter = () => {
   const router = useRouter();
@@ -136,16 +137,7 @@ const HelpCenter = () => {
   })).filter(category => category.questions.length > 0);
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: '#f5f7fb',
-        backgroundImage:
-          'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
-      }}
-    >
-      <PublicSiteHeader />
-
+    <PublicSiteLayout>
       {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 }, pb: 12 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
@@ -203,7 +195,7 @@ const HelpCenter = () => {
             <Card 
               elevation={0}
               sx={{ 
-                border: '1px solid #eee',
+                ...PUBLIC_SITE_SURFACE_SX,
                 cursor: 'pointer',
                 '&:hover': { borderColor: '#667eea', boxShadow: 1 }
               }}
@@ -221,7 +213,7 @@ const HelpCenter = () => {
             <Card 
               elevation={0}
               sx={{ 
-                border: '1px solid #eee',
+                ...PUBLIC_SITE_SURFACE_SX,
                 cursor: 'pointer',
                 '&:hover': { borderColor: '#667eea', boxShadow: 1 }
               }}
@@ -264,8 +256,8 @@ const HelpCenter = () => {
               <Accordion 
                 key={faqIdx}
                 elevation={0}
-                sx={{ 
-                  border: '1px solid #eee',
+              sx={{ 
+                  ...PUBLIC_SITE_SURFACE_SX,
                   mb: 1,
                   '&:before': { display: 'none' }
                 }}
@@ -351,15 +343,9 @@ const HelpCenter = () => {
           <Button
             variant="contained"
             sx={{ 
-              bgcolor: '#1a1a1a',
-              color: '#fff',
-              textTransform: 'none',
-              borderRadius: 0,
+              ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
               px: 4,
               py: 1.5,
-              '&:hover': { 
-                bgcolor: '#333'
-              }
             }}
             onClick={() => router.push('/contact')}
           >
@@ -371,14 +357,7 @@ const HelpCenter = () => {
           <Button
             variant="outlined"
             sx={{ 
-              color: '#1a1a1a', 
-              borderColor: '#ddd',
-              textTransform: 'none',
-              borderRadius: 0,
-              '&:hover': { 
-                borderColor: '#1a1a1a',
-                bgcolor: '#fafafa'
-              }
+              ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
             }}
             onClick={() => router.push('/')}
           >
@@ -386,7 +365,7 @@ const HelpCenter = () => {
           </Button>
         </Stack>
       </Container>
-    </Box>
+    </PublicSiteLayout>
   );
 };
 

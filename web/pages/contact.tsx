@@ -15,7 +15,8 @@ import {
   Email as EmailIcon,
   Send as SendIcon
 } from '@mui/icons-material';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
+import { PUBLIC_SITE_PRIMARY_BUTTON_SX, PUBLIC_SITE_SECONDARY_BUTTON_SX, PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
 
 const ContactPage = () => {
   const router = useRouter();
@@ -65,16 +66,7 @@ const ContactPage = () => {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: '#f5f7fb',
-        backgroundImage:
-          'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
-      }}
-    >
-      <PublicSiteHeader />
-
+    <PublicSiteLayout>
       {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 }, pb: 12 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
@@ -92,7 +84,7 @@ const ContactPage = () => {
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 6, mb: 6 }}>
-          <Box>
+          <Box sx={{ ...PUBLIC_SITE_SURFACE_SX, p: { xs: 3, md: 4 } }}>
             <Typography 
               variant="h3" 
               sx={{ 
@@ -161,7 +153,7 @@ const ContactPage = () => {
             </Box>
           </Box>
 
-          <Box>
+          <Box sx={{ ...PUBLIC_SITE_SURFACE_SX, p: { xs: 3, md: 4 } }}>
             <form onSubmit={handleSubmit}>
               {success && (
                 <Alert severity="success" sx={{ mb: 3 }}>
@@ -229,14 +221,8 @@ const ContactPage = () => {
                 startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
                 disabled={loading}
                 sx={{ 
-                  bgcolor: '#1a1a1a',
-                  color: '#fff',
-                  textTransform: 'none',
-                  borderRadius: 0,
+                  ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
                   py: 1.5,
-                  '&:hover': { 
-                    bgcolor: '#333'
-                  }
                 }}
               >
                 {loading ? 'Sending...' : 'Send Message'}
@@ -288,14 +274,7 @@ const ContactPage = () => {
           <Button
             variant="outlined"
             sx={{ 
-              color: '#1a1a1a', 
-              borderColor: '#ddd',
-              textTransform: 'none',
-              borderRadius: 0,
-              '&:hover': { 
-                borderColor: '#1a1a1a',
-                bgcolor: '#fafafa'
-              }
+              ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
             }}
             onClick={() => router.push('/help')}
           >
@@ -304,14 +283,7 @@ const ContactPage = () => {
           <Button
             variant="outlined"
             sx={{ 
-              color: '#1a1a1a', 
-              borderColor: '#ddd',
-              textTransform: 'none',
-              borderRadius: 0,
-              '&:hover': { 
-                borderColor: '#1a1a1a',
-                bgcolor: '#fafafa'
-              }
+              ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
             }}
             onClick={() => router.push('/')}
           >
@@ -319,7 +291,7 @@ const ContactPage = () => {
           </Button>
         </Stack>
       </Container>
-    </Box>
+    </PublicSiteLayout>
   );
 };
 

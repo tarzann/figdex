@@ -8,13 +8,7 @@ import {
   Card,
   CardContent,
   Stack,
-  IconButton,
   Divider,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Avatar,
   Chip
 } from '@mui/material';
 import {
@@ -25,16 +19,8 @@ import {
   AutoAwesome as AutoIcon,
   Speed as SpeedIcon,
   Security as SecurityIcon,
-  GitHub as GitHubIcon,
-  LinkedIn as LinkedInIcon,
-  Email as EmailIcon,
-  AccountCircle as AccountCircleIcon,
-  Person as PersonIcon,
   Api as ApiIcon,
-  FolderOpen as FolderOpenIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
-  ContentCopy as ContentCopyIcon,
+  Person as PersonIcon,
   PlayArrow as PlayIcon,
   Storage as StorageIcon,
   FilterList as FilterIcon,
@@ -49,7 +35,7 @@ import {
 } from '@mui/icons-material';
 import LoginDialog from '../components/LoginDialog';
 import RegisterDialog from '../components/RegisterDialog';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
 import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
   FIGDEX_IDEAL_CUSTOMER_PROFILE,
@@ -61,10 +47,7 @@ import {
 const HomePageV2 = () => {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
-  const [copied, setCopied] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
 
@@ -76,7 +59,6 @@ const HomePageV2 = () => {
           try {
             const user = JSON.parse(userData);
             setIsLoggedIn(true);
-            setUserEmail(user.email || '');
             const adminEmails = ['ranmor01@gmail.com'];
             setIsAdmin(adminEmails.includes(user.email));
           } catch {
@@ -88,89 +70,19 @@ const HomePageV2 = () => {
     checkLogin();
   }, []);
 
-  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserMenuAnchor(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('figma_web_user');
     setIsLoggedIn(false);
-    setUserEmail('');
     setIsAdmin(false);
-    handleUserMenuClose();
     router.push('/');
   };
 
-  // Handle copy API key
-  const handleCopyApiKey = async () => {
-    if (typeof window === 'undefined') return;
-    
-    const userData = localStorage.getItem('figma_web_user');
-    if (!userData) {
-      alert('No user found');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userData);
-      if (user && user.api_key) {
-        try {
-          await navigator.clipboard.writeText(user.api_key);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          alert('API Key copied to clipboard!');
-        } catch (err) {
-          console.error('Failed to copy API key:', err);
-          // Fallback for older browsers
-          const textArea = document.createElement('textarea');
-          textArea.value = user.api_key;
-          document.body.appendChild(textArea);
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            alert('API Key copied to clipboard!');
-          } catch (fallbackErr) {
-            console.error('Fallback copy failed:', fallbackErr);
-            alert('Failed to copy API key');
-          }
-          document.body.removeChild(textArea);
-        }
-      } else {
-        alert('No API key found for this user');
-      }
-    } catch (err) {
-      console.error('Failed to parse user data:', err);
-      alert('Failed to copy API key');
-    }
-  };
-
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: '#f5f7fb',
-        backgroundImage: 'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)'
-      }}
+    <PublicSiteLayout
+      isLoggedIn={isLoggedIn}
+      onLoginClick={() => setLoginDialogOpen(true)}
+      onRegisterClick={() => setRegisterDialogOpen(true)}
     >
-      <PublicSiteHeader
-        isLoggedIn={isLoggedIn}
-        isAdmin={isAdmin}
-        userMenuAnchor={userMenuAnchor}
-        onUserMenuOpen={handleUserMenuOpen}
-        onUserMenuClose={handleUserMenuClose}
-        onLogout={handleLogout}
-        onCopyApiKey={handleCopyApiKey}
-        copied={copied}
-        onLoginClick={() => setLoginDialogOpen(true)}
-        onRegisterClick={() => setRegisterDialogOpen(true)}
-      />
-
       {/* SECTION 1 — HERO */}
       <Container maxWidth="lg" sx={{ py: { xs: 5, md: 8 } }}>
         <Box
@@ -997,223 +909,6 @@ const HomePageV2 = () => {
         </Container>
       </Box>
 
-      {/* Footer */}
-      <Box sx={{ bgcolor: '#FFFFFF', py: 8, borderTop: '1px solid #eee' }}>
-        <Container maxWidth="lg">
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 8, mb: 6 }}>
-            <Box sx={{ flex: 1 }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  fontWeight: 300, 
-                  color: '#1a1a1a', 
-                  mb: 3,
-                  letterSpacing: 2
-                }}
-              >
-                FIGDEX
-              </Typography>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: '#666', 
-                  mb: 4, 
-                  lineHeight: 1.7,
-                  fontWeight: 300
-                }}
-              >
-                The smart way to organize and search your Figma designs. 
-                Built for designers, by designers.
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <IconButton 
-                  sx={{ 
-                    color: '#666',
-                    '&:hover': { color: '#1a1a1a' }
-                  }}
-                >
-                  <GitHubIcon fontSize="small" />
-                </IconButton>
-                <IconButton 
-                  sx={{ 
-                    color: '#666',
-                    '&:hover': { color: '#1a1a1a' }
-                  }}
-                >
-                  <LinkedInIcon fontSize="small" />
-                </IconButton>
-                <IconButton 
-                  sx={{ 
-                    color: '#666',
-                    '&:hover': { color: '#1a1a1a' }
-                  }}
-                >
-                  <EmailIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-            </Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 4 }}>
-              <Box>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#1a1a1a', 
-                    mb: 2, 
-                    fontWeight: 400,
-                    textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Product
-                </Typography>
-                <Stack spacing={1.5}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                  >
-                    Features
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                    onClick={() => router.push('/pricing')}
-                  >
-                    Pricing
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                  >
-                    Documentation
-                  </Typography>
-                </Stack>
-              </Box>
-              <Box>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#1a1a1a', 
-                    mb: 2, 
-                    fontWeight: 400,
-                    textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Support
-                </Typography>
-                <Stack spacing={1.5}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                    onClick={() => router.push('/help')}
-                  >
-                    Help Center
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                    onClick={() => router.push('/contact')}
-                  >
-                    Contact Us
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                  >
-                    Community
-                  </Typography>
-                </Stack>
-              </Box>
-              <Box>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#1a1a1a', 
-                    mb: 2, 
-                    fontWeight: 400,
-                    textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Legal
-                </Typography>
-                <Stack spacing={1.5}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                    onClick={() => router.push('/terms')}
-                  >
-                    Terms of Service
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#666',
-                      cursor: 'pointer',
-                      '&:hover': { color: '#1a1a1a' },
-                      fontWeight: 300
-                    }}
-                    onClick={() => router.push('/privacy')}
-                  >
-                    Privacy Policy
-                  </Typography>
-                </Stack>
-              </Box>
-            </Box>
-          </Box>
-          <Divider sx={{ my: 4, borderColor: '#eee' }} />
-          <Typography 
-            variant="body2" 
-            sx={{ 
-              color: '#999', 
-              textAlign: 'center',
-              fontWeight: 300,
-              fontSize: '0.85rem'
-            }}
-          >
-            © 2024 FigDex. All rights reserved.
-          </Typography>
-        </Container>
-      </Box>
-
       {/* Login Dialog */}
       <LoginDialog
         open={loginDialogOpen}
@@ -1228,7 +923,6 @@ const HomePageV2 = () => {
           if (userData) {
             try {
               const user = JSON.parse(userData);
-              setUserEmail(user.email || '');
               const adminEmails = ['ranmor01@gmail.com'];
               setIsAdmin(adminEmails.includes(user.email));
             } catch {
@@ -1252,7 +946,6 @@ const HomePageV2 = () => {
           if (userData) {
             try {
               const user = JSON.parse(userData);
-              setUserEmail(user.email || '');
               const adminEmails = ['ranmor01@gmail.com'];
               setIsAdmin(adminEmails.includes(user.email));
             } catch {
@@ -1261,7 +954,7 @@ const HomePageV2 = () => {
           }
         }}
       />
-    </Box>
+    </PublicSiteLayout>
   );
 };
 

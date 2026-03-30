@@ -7,7 +7,7 @@ import type { GetServerSideProps } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { dbPlanRowToPlanLimits, type DbPlanRow, type PlanLimits } from '../lib/plans';
 import { usePaddleCheckout } from '../components/PaddleCheckout';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
 
 type PublicPlanConfig = {
   planId: 'free' | 'pro' | 'team';
@@ -131,15 +131,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
   });
   
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: '#f5f7fb',
-        backgroundImage: 'radial-gradient(circle at top left, rgba(102,126,234,0.12), transparent 32%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 22%)'
-      }}
-    >
-      <PublicSiteHeader activeNav="pricing" isLoggedIn={isLoggedIn} />
-
+    <PublicSiteLayout activeNav="pricing" isLoggedIn={isLoggedIn}>
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: 6, py: { xs: 4, md: 7 } }}>
           <Chip
@@ -306,7 +298,7 @@ export default function Pricing({ publicPlans }: PricingProps) {
           </Card>
         </Box>
       </Container>
-    </Box>
+    </PublicSiteLayout>
   );
 }
 

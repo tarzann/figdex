@@ -8,21 +8,13 @@ import {
   Stack,
   Divider
 } from '@mui/material';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
+import { PUBLIC_SITE_PRIMARY_BUTTON_SX, PUBLIC_SITE_SECONDARY_BUTTON_SX } from '../lib/public-site-styles';
 
 const PrivacyPolicy = () => {
   const router = useRouter();
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: '#f5f7fb',
-        backgroundImage:
-          'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
-      }}
-    >
-      <PublicSiteHeader />
-
+    <PublicSiteLayout>
       {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 }, pb: 12 }}>
         
@@ -487,14 +479,7 @@ const PrivacyPolicy = () => {
           <Button
             variant="outlined"
             sx={{ 
-              color: '#1a1a1a', 
-              borderColor: '#ddd',
-              textTransform: 'none',
-              borderRadius: 0,
-              '&:hover': { 
-                borderColor: '#1a1a1a',
-                bgcolor: '#fafafa'
-              }
+              ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
             }}
             onClick={() => router.push('/terms')}
           >
@@ -503,13 +488,7 @@ const PrivacyPolicy = () => {
           <Button
             variant="contained"
             sx={{ 
-              bgcolor: '#1a1a1a',
-              color: '#fff',
-              textTransform: 'none',
-              borderRadius: 0,
-              '&:hover': { 
-                bgcolor: '#333'
-              }
+              ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
             }}
             onClick={() => router.push('/')}
           >
@@ -517,7 +496,7 @@ const PrivacyPolicy = () => {
           </Button>
         </Stack>
       </Container>
-    </Box>
+    </PublicSiteLayout>
   );
 };
 

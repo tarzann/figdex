@@ -4,12 +4,13 @@ import { Box, Button, Card, CardContent, Chip, Container, Stack, Typography } fr
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import PublicSiteHeader from '../components/PublicSiteHeader';
+import PublicSiteLayout from '../components/PublicSiteLayout';
 import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
   FIGDEX_CATEGORY_STATEMENT,
-  FIGDEX_PLUGIN_WEB_RELATIONSHIP
+  FIGDEX_PLUGIN_WEB_RELATIONSHIP,
 } from '../lib/marketing-messaging';
+import { PUBLIC_SITE_SURFACE_SX, PUBLIC_SITE_PRIMARY_BUTTON_SX } from '../lib/public-site-styles';
 
 export default function DownloadPluginPage() {
   return (
@@ -17,18 +18,8 @@ export default function DownloadPluginPage() {
       <Head>
         <title>Download FigDex Plugin</title>
       </Head>
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: '#f5f7fb',
-          backgroundImage:
-            'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)',
-          py: { xs: 3.5, md: 4 },
-        }}
-      >
-        <PublicSiteHeader activeNav="plugin" />
+      <PublicSiteLayout activeNav="plugin">
         <Container maxWidth="lg">
-
           <Stack spacing={4} sx={{ maxWidth: 960, mx: 'auto', pb: { xs: 3, md: 6 } }}>
             <Box sx={{ textAlign: 'center' }}>
               <Chip
@@ -47,7 +38,7 @@ export default function DownloadPluginPage() {
               </Typography>
             </Box>
 
-            <Card sx={{ borderRadius: 5, border: '1px solid #dbe3f0', boxShadow: '0 20px 60px rgba(15,23,42,0.08)' }}>
+            <Card sx={{ ...PUBLIC_SITE_SURFACE_SX, borderRadius: 5 }}>
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 <Stack spacing={3}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between">
@@ -66,13 +57,9 @@ export default function DownloadPluginPage() {
                       size="large"
                       startIcon={<DownloadRoundedIcon />}
                       sx={{
-                        bgcolor: '#111827',
-                        borderRadius: 999,
+                        ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
                         px: 3.5,
                         py: 1.3,
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        '&:hover': { bgcolor: '#1f2937' },
                       }}
                     >
                       Download ZIP
@@ -115,7 +102,7 @@ export default function DownloadPluginPage() {
             </Card>
           </Stack>
         </Container>
-      </Box>
+      </PublicSiteLayout>
     </>
   );
 }
