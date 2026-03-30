@@ -5,6 +5,7 @@ import {
   Container,
   Typography,
   Paper,
+  Grid,
   Table,
   TableBody,
   TableCell,
@@ -20,13 +21,15 @@ import {
   Stack,
   Tooltip,
   IconButton,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   Home,
   Refresh,
   Search,
   CheckCircle,
-  Error,
+  Error as ErrorIcon,
   Schedule,
   HourglassEmpty,
   Info,
@@ -67,6 +70,8 @@ export default function AdminJobs() {
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     checkAdminStatus();
@@ -75,6 +80,14 @@ export default function AdminJobs() {
   useEffect(() => {
     filterJobs();
   }, [jobs, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    if (!isAdmin || !autoRefresh) return;
+    const timer = setInterval(() => {
+      loadJobs(false);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [isAdmin, autoRefresh]);
 
   const checkAdminStatus = async () => {
     try {
@@ -101,9 +114,9 @@ export default function AdminJobs() {
     }
   };
 
-  const loadJobs = async () => {
+  const loadJobs = async (showLoader: boolean = true) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const response = await fetch('/api/admin/jobs');
       if (response.ok) {
         const data = await response.json();
@@ -114,7 +127,29 @@ export default function AdminJobs() {
     } catch (error) {
       console.error('Failed to load jobs:', error);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
+    }
+  };
+
+  const failStuckJobs = async () => {
+    try {
+      setActionLoading(true);
+      const response = await fetch('/api/jobs/fail-stuck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ minutes: 30 }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to mark stuck jobs');
+      }
+      await loadJobs(false);
+    } catch (error) {
+      console.error('Failed to mark stuck jobs:', error);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -160,7 +195,7 @@ export default function AdminJobs() {
       case 'completed':
         return <CheckCircle fontSize="small" />;
       case 'failed':
-        return <Error fontSize="small" />;
+        return <ErrorIcon fontSize="small" />;
       case 'processing':
         return <CircularProgress size={16} />;
       case 'pending':
@@ -221,6 +256,21 @@ export default function AdminJobs() {
     failed: jobs.filter(j => j.status === 'failed').length,
   };
 
+  const now = Date.now();
+  const completedJobs = jobs.filter((job) => job.status === 'completed' && job.processingTimeSeconds > 0);
+  const avgProcessingSeconds = completedJobs.length
+    ? Math.round(completedJobs.reduce((sum, job) => sum + job.processingTimeSeconds, 0) / completedJobs.length)
+    : 0;
+  const failedLast24h = jobs.filter((job) => {
+    if (job.status !== 'failed') return false;
+    return now - new Date(job.updatedAt).getTime() <= 24 * 60 * 60 * 1000;
+  }).length;
+  const stuckJobs = jobs.filter((job) => {
+    if (!['pending', 'processing'].includes(job.status)) return false;
+    return now - new Date(job.updatedAt).getTime() > 30 * 60 * 1000;
+  }).length;
+  const activeJobs = jobs.filter((job) => ['pending', 'processing'].includes(job.status)).length;
+
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
@@ -234,9 +284,17 @@ export default function AdminJobs() {
         </Box>
         <Stack direction="row" spacing={2}>
           <Button
+            variant="contained"
+            color="warning"
+            onClick={failStuckJobs}
+            disabled={loading || actionLoading || stuckJobs === 0}
+          >
+            Fail stuck jobs
+          </Button>
+          <Button
             variant="outlined"
             startIcon={<Refresh />}
-            onClick={loadJobs}
+            onClick={() => loadJobs()}
             disabled={loading}
           >
             Refresh
@@ -251,9 +309,49 @@ export default function AdminJobs() {
         </Stack>
       </Box>
 
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Paper sx={{ p: 2, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Active jobs</Typography>
+            <Typography variant="h4" sx={{ mt: 0.5 }}>{activeJobs}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Pending + processing right now
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Paper sx={{ p: 2, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Failed in last 24h</Typography>
+            <Typography variant="h4" sx={{ mt: 0.5 }}>{failedLast24h}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Useful for spotting recent instability
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Paper sx={{ p: 2, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Avg completed runtime</Typography>
+            <Typography variant="h4" sx={{ mt: 0.5 }}>{avgProcessingSeconds ? formatTime(avgProcessingSeconds) : '—'}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Based on completed jobs in the current list
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Paper sx={{ p: 2, borderRadius: 3, border: stuckJobs > 0 ? '1px solid #f59e0b' : '1px solid transparent' }}>
+            <Typography variant="caption" color="text.secondary">Stuck over 30m</Typography>
+            <Typography variant="h4" sx={{ mt: 0.5, color: stuckJobs > 0 ? '#b45309' : 'inherit' }}>{stuckJobs}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Jobs eligible for operational failover
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
       {/* Filters and Stats */}
       <Paper sx={{ p: 2, mb: 3 }}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" flexWrap="wrap">
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
           <TextField
             size="small"
             placeholder="Search by email, file name, file key..."
@@ -301,6 +399,16 @@ export default function AdminJobs() {
               variant={statusFilter === 'failed' ? 'filled' : 'outlined'}
             />
           </Box>
+          </Stack>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+            }
+            label="Auto-refresh every 15s"
+          />
         </Stack>
       </Paper>
 
@@ -446,4 +554,3 @@ export default function AdminJobs() {
     </Container>
   );
 }
-
