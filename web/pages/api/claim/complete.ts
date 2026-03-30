@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { clearNormalizedOwnerUsage, refreshNormalizedOwnerUsage } from '../../../lib/normalized-index-store';
+import { logIndexActivity } from '../../../lib/index-activity-log';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -86,6 +87,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .update({ consumed_at: new Date().toISOString(), consumed_by_user_id: userId })
             .eq('id', tokenRow.id);
 
+          await logIndexActivity(supabase, {
+            requestId: claimToken,
+            source: 'system',
+            eventType: 'claim_completed',
+            status: 'completed',
+            userId,
+            ownerAnonId: anonId,
+            message: 'Claim token completed successfully',
+            metadata: {
+              claimed,
+              mergedConflicts: 0,
+            },
+          });
+
           return res.status(200).json({
             ok: true,
             claimed,
@@ -95,6 +110,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
     } catch (_) {}
+
+    await logIndexActivity(supabase, {
+      requestId: claimToken,
+      source: 'system',
+      eventType: 'claim_completed',
+      status: 'completed',
+      userId,
+      message: 'Claim token completed with no guest rows to merge',
+      metadata: { claimed: 0, mergedConflicts: 0 },
+    });
 
     return res.status(200).json({ ok: true, claimed: 0, mergedConflicts: 0, figdexKeyMoved: false });
   } catch (e) {

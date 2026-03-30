@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { getUserIdFromApiKey } from '../../../lib/api-auth';
+import { logIndexActivity } from '../../../lib/index-activity-log';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -104,6 +105,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.figdex.com'}/share/${shareToken}`;
 
+      await logIndexActivity(supabase, {
+        requestId: `share_${data.id}`,
+        source: 'system',
+        eventType: 'share_created',
+        status: 'completed',
+        userId,
+        fileName: buildShareName(shareType, searchParams, shareName),
+        message: 'Share created',
+        metadata: {
+          shareId: data.id,
+          shareType,
+          shareToken,
+          shareUrl,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         shareToken,
@@ -195,6 +212,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
+      await logIndexActivity(supabase, {
+        requestId: `share_${data.id}`,
+        source: 'system',
+        eventType: 'share_updated',
+        status: 'completed',
+        userId,
+        fileName: data.share_name || 'Shared view',
+        message: data.enabled === false ? 'Share disabled' : 'Share updated',
+        metadata: {
+          shareId: data.id,
+          shareType: data.share_type,
+          enabled: data.enabled,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         sharedView: data
@@ -212,11 +244,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Verify ownership and delete
-      const { error } = await supabase
+      const { data: deletedRows, error } = await supabase
         .from('shared_views')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('id, share_type, share_name')
+        .limit(1);
 
       if (error) {
         console.error('Error deleting shared view:', error);
@@ -226,6 +260,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           details: error.message
         });
       }
+
+      const deleted = Array.isArray(deletedRows) ? deletedRows[0] : null;
+      await logIndexActivity(supabase, {
+        requestId: deleted?.id ? `share_${deleted.id}` : null,
+        source: 'system',
+        eventType: 'share_deleted',
+        status: 'completed',
+        userId,
+        fileName: deleted?.share_name || 'Shared view',
+        message: 'Share deleted',
+        metadata: {
+          shareId: deleted?.id || id,
+          shareType: deleted?.share_type || null,
+        },
+      });
 
       return res.status(200).json({
         success: true,

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { clearNormalizedOwnerUsage, refreshNormalizedOwnerUsage } from '../../../lib/normalized-index-store';
+import { logIndexActivity } from '../../../lib/index-activity-log';
 
 const MAX_ANON_ID_LEN = 200;
 
@@ -88,6 +89,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await clearNormalizedOwnerUsage(supabase, { type: 'guest', anonId });
     await refreshNormalizedOwnerUsage(supabase, { type: 'user', userId });
+
+    await logIndexActivity(supabase, {
+      requestId: `claim_by_anon_${anonId}`,
+      source: 'system',
+      eventType: 'claim_completed',
+      status: 'completed',
+      userId,
+      ownerAnonId: anonId,
+      message: 'Guest data claimed by anonId',
+      metadata: { claimed },
+    });
 
     return res.status(200).json({
       ok: true,

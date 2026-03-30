@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { logIndexActivity } from '../../../lib/index-activity-log';
 
 const CLAIM_TOKEN_TTL_MIN = 15;
 const MAX_ANON_ID_LEN = 200;
@@ -58,6 +59,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (insertErr) {
       console.error('[claim/start] insert error:', insertErr);
+      await logIndexActivity(supabase, {
+        source: 'system',
+        eventType: 'claim_failed',
+        status: 'failed',
+        ownerAnonId: anonId,
+        message: 'Failed to create claim token',
+        error: insertErr.message,
+        metadata: { claimSource: source },
+      });
       return res.status(500).json({ success: false, error: 'Failed to create claim token' });
     }
 
@@ -78,6 +88,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const root = baseUrl(req);
     const redirectUrl = `${root}/plugin-connect?claimToken=${encodeURIComponent(claimToken)}`;
+
+    await logIndexActivity(supabase, {
+      requestId: claimToken,
+      source: 'system',
+      eventType: 'claim_started',
+      status: 'pending',
+      ownerAnonId: anonId,
+      message: 'Guest claim flow started',
+      metadata: { claimSource: source, redirectUrl },
+    });
 
     return res.status(200).json({
       success: true,

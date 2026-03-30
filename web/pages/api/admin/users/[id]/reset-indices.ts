@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '../../../../../lib/admin-middleware';
+import { logIndexActivity } from '../../../../../lib/index-activity-log';
 
 async function removeStoragePrefix(
   supabaseAdmin: any,
@@ -90,6 +91,15 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
         await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`);
       } catch {}
 
+      await logIndexActivity(supabaseAdmin, {
+        requestId: `reset_guest_${anonId}`,
+        source: 'system',
+        eventType: 'reset_indices',
+        status: 'completed',
+        ownerAnonId: anonId,
+        message: 'Guest indices reset from admin',
+      });
+
       return res.status(200).json({ success: true, resetGuestAnonId: anonId });
     }
 
@@ -114,6 +124,19 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       await removeStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`);
       await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`);
     } catch {}
+
+    await logIndexActivity(supabaseAdmin, {
+      requestId: `reset_user_${userId}`,
+      source: 'system',
+      eventType: 'reset_indices',
+      status: 'completed',
+      userId,
+      userEmail: user.email || null,
+      message: 'User indices reset from admin',
+      metadata: {
+        preservedPlan: user.is_admin ? 'unlimited' : (user.plan || 'free'),
+      },
+    });
 
     return res.status(200).json({
       success: true,

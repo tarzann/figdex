@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { logIndexActivity } from '../../lib/index-activity-log';
 
 export default async function handler(
   req: NextApiRequest,
@@ -85,6 +86,23 @@ export default async function handler(
       });
     }
 
+    await logIndexActivity(supabaseAdmin, {
+      requestId: `delete_index_${indexFile.id}`,
+      source: 'system',
+      eventType: 'index_deleted',
+      status: 'completed',
+      userId: user.id,
+      userEmail: user.email || null,
+      fileKey: indexFile.figma_file_key || null,
+      fileName: indexFile.file_name || null,
+      logicalFileId: indexFile.project_id || indexFile.figma_file_key || null,
+      frameCount: typeof indexFile.frame_count === 'number' ? indexFile.frame_count : null,
+      message: 'Index deleted by user',
+      metadata: {
+        deletedIndexId: indexFile.id,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Index deleted successfully',
@@ -102,5 +120,4 @@ export default async function handler(
     });
   }
 }
-
 

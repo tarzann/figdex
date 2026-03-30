@@ -727,17 +727,20 @@ export default async function handler(
         .gte('uploaded_at', startOfMonthUtc.toISOString());
 
       if (!monthlyError) {
-      const limitError = (code: string, message: string) => res.status(403).json({
-        success: false,
-        error: message,
-        code,
-        plan: planLimits.id,
-        upgradeUrl: 'https://www.figdex.com/pricing',
-      });
+      const limitError = async (code: string, message: string) => {
+        await logRateLimitEvent(code, message, { plan: planLimits.id });
+        return res.status(403).json({
+          success: false,
+          error: message,
+          code,
+          plan: planLimits.id,
+          upgradeUrl: 'https://www.figdex.com/pricing',
+        });
+      };
 
       // Check monthly upload limit
         if ((uploadsThisMonth || 0) >= planLimits.maxUploadsPerMonth) {
-        return limitError(
+        return await limitError(
           'PLAN_MAX_UPLOADS_PER_MONTH',
           `Monthly upload limit reached for the ${planLimits.label} plan (${planLimits.maxUploadsPerMonth} per month). Please upgrade your plan or wait until next month.`
         );
@@ -766,6 +769,28 @@ export default async function handler(
       plan: planId,
     });
     userIdForLog = user.id;
+
+    const logRateLimitEvent = async (code: string, message: string, extra?: Record<string, any>) => {
+      await logIndexActivity(supabaseAdmin, {
+        requestId,
+        source: 'plugin',
+        eventType: 'index_rate_limited',
+        status: 'failed',
+        userId: activityUserId,
+        userEmail: activityUserEmail,
+        fileKey: activityFileKey,
+        fileName: activityFileName,
+        logicalFileId: activityLogicalFileId,
+        pageCount: activityPageCount,
+        frameCount: activityFrameCount,
+        durationMs: Date.now() - requestStartedAt,
+        error: message,
+        metadata: {
+          code,
+          ...extra,
+        },
+      });
+    };
 
     // Get request body
     const {
@@ -820,6 +845,7 @@ export default async function handler(
         if (!user.bypass_indexing_limits && !hasExistingForFile && limits.maxFiles !== null) {
           const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
           if (currentFiles >= limits.maxFiles) {
+          await logRateLimitEvent('FILE_LIMIT_REACHED', `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`, { currentFiles, maxFiles: limits.maxFiles, context: 'check_limit' });
           return res.status(403).json({
             success: false,
             error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
@@ -832,6 +858,7 @@ export default async function handler(
         if (!user.bypass_indexing_limits && limits.maxFrames !== null) {
           const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
           if (currentTotalFrames + estimatedFrameCount > limits.maxFrames) {
+          await logRateLimitEvent('FRAME_LIMIT_REACHED', `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`, { currentTotalFrames, estimatedFrameCount, maxFrames: limits.maxFrames, context: 'check_limit' });
           return res.status(403).json({
             success: false,
             error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
@@ -897,7 +924,8 @@ export default async function handler(
 
           if (!user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
             const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
-            if (currentFiles >= limits.maxFiles) {
+          if (currentFiles >= limits.maxFiles) {
+            await logRateLimitEvent('FILE_LIMIT_REACHED', `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`, { currentFiles, maxFiles: limits.maxFiles, context: 'gallery' });
             return res.status(403).json({
               success: false,
               error: `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`,
@@ -909,6 +937,7 @@ export default async function handler(
           if (!user.bypass_indexing_limits && limits.maxFrames !== null) {
             const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
             if (currentTotalFrames + framesInPayload > limits.maxFrames) {
+              await logRateLimitEvent('FRAME_LIMIT_REACHED', `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`, { currentTotalFrames, framesInPayload, maxFrames: limits.maxFrames, context: 'gallery' });
             return res.status(403).json({
               success: false,
               error: `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`,
@@ -925,6 +954,7 @@ export default async function handler(
             Boolean(user.is_admin)
           );
           if (!cooldownCheck.allowed) {
+            await logRateLimitEvent('INDEX_COOLDOWN_ACTIVE', cooldownCheck.reason || 'Please wait before indexing this file again.', { waitUntil: cooldownCheck.waitUntil?.toISOString(), context: 'gallery' });
             return res.status(429).json({
               success: false,
               error: cooldownCheck.reason || 'Please wait before indexing this file again.',
@@ -935,6 +965,7 @@ export default async function handler(
 
           const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
           if (!canIndex.allowed) {
+            await logRateLimitEvent('RATE_LIMIT_EXCEEDED', canIndex.reason || 'Daily index limit reached', { currentCount: canIndex.currentCount, maxCount: canIndex.maxCount, waitUntil: canIndex.waitUntil?.toISOString(), context: 'gallery' });
             return res.status(429).json({
               success: false,
               error: canIndex.reason || 'Daily index limit reached',
@@ -1098,6 +1129,11 @@ export default async function handler(
       
       // For new files, check if we're within limit
       if (!isReindex && currentFiles >= limits.maxFiles) {
+        await logRateLimitEvent('FILE_LIMIT_REACHED', `File limit reached (${limits.maxFiles} files). You have ${currentFiles} files. Please purchase an add-on to add more files or upgrade your plan.`, {
+          currentFiles,
+          maxFiles: limits.maxFiles,
+          context: 'api',
+        });
         return res.status(400).json({
           success: false,
           error: `File limit reached (${limits.maxFiles} files). You have ${currentFiles} files. Please purchase an add-on to add more files or upgrade your plan.`,
@@ -1117,6 +1153,10 @@ export default async function handler(
         Boolean(user.is_admin)
       );
       if (!cooldownCheck.allowed) {
+        await logRateLimitEvent('INDEX_COOLDOWN_ACTIVE', cooldownCheck.reason || 'Please wait before indexing this file again.', {
+          waitUntil: cooldownCheck.waitUntil?.toISOString(),
+          context: 'api',
+        });
         return res.status(429).json({
           success: false,
           error: cooldownCheck.reason || 'Please wait before indexing this file again.',
@@ -1127,6 +1167,12 @@ export default async function handler(
 
       const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
       if (!canIndex.allowed) {
+        await logRateLimitEvent('RATE_LIMIT_EXCEEDED', canIndex.reason || 'Daily index limit reached', {
+          currentCount: canIndex.currentCount,
+          maxCount: canIndex.maxCount,
+          waitUntil: canIndex.waitUntil?.toISOString(),
+          context: 'api',
+        });
         return res.status(429).json({
           success: false,
           error: canIndex.reason || 'Daily index limit reached',
@@ -1379,6 +1425,17 @@ export default async function handler(
     if (!user?.bypass_indexing_limits && !monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
       const framesThisMonthAfter = framesThisMonth + totalFramesCount;
       if (framesThisMonthAfter > planLimits.maxFramesPerMonth) {
+        await logRateLimitEvent(
+          'PLAN_MAX_FRAMES_PER_MONTH',
+          `Monthly frames limit reached for the ${planLimits.label} plan (${planLimits.maxFramesPerMonth.toLocaleString()} frames per month). This index would add ${totalFramesCount.toLocaleString()} frames, exceeding your monthly limit. Please upgrade your plan or wait until next month.`,
+          {
+            plan: planLimits.id,
+            currentFrames: framesThisMonth,
+            newFrames: totalFramesCount,
+            limit: planLimits.maxFramesPerMonth,
+            context: 'api',
+          }
+        );
         return res.status(403).json({
           success: false,
           error: `Monthly frames limit reached for the ${planLimits.label} plan (${planLimits.maxFramesPerMonth.toLocaleString()} frames per month). This index would add ${totalFramesCount.toLocaleString()} frames, exceeding your monthly limit. Please upgrade your plan or wait until next month.`,
