@@ -116,6 +116,20 @@ const GALLERY_SURFACE_SX = {
   boxShadow: '0 12px 32px rgba(15,23,42,0.05)',
 };
 
+const GALLERY_CARD_SX = {
+  borderRadius: 4,
+  border: '1px solid #dbe3f0',
+  background: '#ffffff',
+  overflow: 'hidden',
+  boxShadow: '0 16px 40px rgba(15,23,42,0.07)',
+  transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+  '&:hover': {
+    transform: 'translateY(-3px)',
+    boxShadow: '0 22px 48px rgba(15,23,42,0.1)',
+    borderColor: '#c7d7fe',
+  },
+};
+
 type Thumbnail = {
   thumbName: string;
   label: string;
@@ -2923,7 +2937,7 @@ export default function Home() {
         px: 4
       }}>
         {viewMode === 'file' && selectedFile && filePages.length > 0 && (
-          <Box sx={{ mb: 3, p: 2.5, bgcolor: '#fff', borderRadius: 3, border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(16,24,40,0.04)' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2.5 }}>
             <Box
               sx={{
                 display: 'grid',
@@ -2934,10 +2948,10 @@ export default function Home() {
             >
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <Box>
-                  <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em' }}>
+                  <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
                     File View
                   </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.15, color: '#111827' }}>
                     {selectedFile.fileName}
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
@@ -2948,19 +2962,19 @@ export default function Home() {
                 </Box>
 
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip size="small" label={`${filePages.length} pages`} sx={{ bgcolor: '#f8fafc', color: '#344054' }} />
+                  <Chip size="small" label={`${filePages.length} pages`} sx={{ bgcolor: '#f8fafc', color: '#344054', fontWeight: 700 }} />
                   {!fileModeSearchActive && selectedPageInfo && (
                     <Chip
                       size="small"
                       label={`${selectedPageInfo.frameCount.toLocaleString()} frames in ${selectedPageInfo.name}`}
-                      sx={{ bgcolor: '#eef4ff', color: '#3538cd' }}
+                      sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
                     />
                   )}
                   {fileModeSearchActive && (
                     <Chip
                       size="small"
                       label={`${visibleThumbs.length.toLocaleString()} search results`}
-                      sx={{ bgcolor: '#eff8ff', color: '#175cd3' }}
+                      sx={{ bgcolor: '#eff8ff', color: '#175cd3', fontWeight: 700 }}
                     />
                   )}
                 </Stack>
@@ -2984,7 +2998,7 @@ export default function Home() {
               </Box>
 
               <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.25 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.25, color: '#111827' }}>
                   Pages
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -3006,6 +3020,7 @@ export default function Home() {
                         }}
                         sx={{
                           borderRadius: '999px',
+                          fontWeight: isSelected ? 700 : 600,
                           '& .MuiChip-label': {
                             px: 1.5,
                           }
@@ -3042,17 +3057,7 @@ export default function Home() {
                     cursor: 'pointer',
                     width: 260,
                     position: 'relative',
-                    borderRadius: 3,
-                    border: '1px solid #e5e7eb',
-                    background: '#fff',
-                    overflow: 'hidden',
-                    boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
-                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
-                    '&:hover': {
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
-                      borderColor: '#c7d7fe'
-                    }
+                    ...GALLERY_CARD_SX,
                   }}
                   onClick={() => loadFileFrames(file)}
                 >
@@ -3100,7 +3105,7 @@ export default function Home() {
                       <Chip
                         size="small"
                         label="Indexed file"
-                        sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 600 }}
+                        sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
                       />
                       <Typography variant="caption" color="text.secondary">
                         {file.uploadedAt ? formatDate(file.uploadedAt) : 'Recently updated'}
@@ -3121,9 +3126,9 @@ export default function Home() {
                       {file.fileName}
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" />
+                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" sx={{ fontWeight: 600 }} />
                       {file.projectId && (
-                        <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5' }} />
+                        <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5', fontWeight: 700 }} />
                       )}
                     </Stack>
                     <Typography variant="caption" sx={{ color: '#667085', fontWeight: 600 }}>
@@ -3152,10 +3157,11 @@ export default function Home() {
                 key={thumb.thumbName + idx}
                 sx={{
                   mb: 2,
-                  textAlign: 'center',
                   cursor: 'pointer',
                   width: 260,
-                  position: 'relative'
+                  position: 'relative',
+                  ...GALLERY_CARD_SX,
+                  p: 1.25
                 }}
               >
                 <img
@@ -3163,10 +3169,10 @@ export default function Home() {
                   alt={thumb.label}
                   loading="lazy"
                   style={{
-                    borderRadius: 10,
-                    border: (modalIndex === originalIndex) ? '3px solid #667eea' : '1.5px solid #e0e0e0',
-                    background: '#fff',
-                    marginBottom: 6,
+                    borderRadius: 14,
+                    border: (modalIndex === originalIndex) ? '3px solid #111827' : '1.5px solid #dbe3f0',
+                    background: '#f8fafc',
+                    marginBottom: 8,
                     width: '100%',
                     height: 'auto',
                     display: 'block',
@@ -3183,15 +3189,15 @@ export default function Home() {
                 <IconButton
                   onClick={() => toggleFavorite(thumb.thumbName)}
                   color="error"
-                  sx={{ position: 'absolute', top: 8, right: 8, background: '#fff8', zIndex: 1 }}
+                  sx={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.92)', zIndex: 1 }}
                   aria-label="Add to favorites"
                 >
                   {favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}
                 </IconButton>
                 
                 {/* Frame name and file/page */}
-                <Box sx={{ px: 0.5, mt: 0.5 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                <Box sx={{ px: 0.5, mt: 0.5, textAlign: 'left' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#111827' }}>
                     {thumb.label}
                   </Typography>
                   {(thumb as any).filePageSubtitle && (
@@ -3221,11 +3227,11 @@ export default function Home() {
                           px: 1.5,
                           py: 0.5,
                           borderRadius: '16px',
-                          bgcolor: '#f5f5f5',
-                          border: 'none',
+                          bgcolor: '#f8fafc',
+                          border: '1px solid #e4e7ec',
                           fontSize: '0.75rem',
-                          fontWeight: 400,
-                          color: '#000',
+                          fontWeight: 500,
+                          color: '#344054',
                           lineHeight: 1.2,
                           whiteSpace: 'nowrap'
                         }}
@@ -3256,17 +3262,7 @@ export default function Home() {
                     cursor: 'pointer',
                     width: 260,
                     position: 'relative',
-                    borderRadius: 3,
-                    border: '1px solid #e5e7eb',
-                    background: '#fff',
-                    overflow: 'hidden',
-                    boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
-                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
-                    '&:hover': {
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
-                      borderColor: '#c7d7fe'
-                    }
+                    ...GALLERY_CARD_SX,
                   }}
                   onClick={() => loadFileFrames(file)}
                 >
@@ -3277,15 +3273,15 @@ export default function Home() {
                   )}
                   <Box sx={{ p: 1.5 }}>
                     <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                      <Chip size="small" label="Indexed file" sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 600 }} />
+                      <Chip size="small" label="Indexed file" sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }} />
                       <Typography variant="caption" color="text.secondary">
                         {file.uploadedAt ? formatDate(file.uploadedAt) : 'Recently updated'}
                       </Typography>
                     </Stack>
                     <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75, minHeight: 40, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{file.fileName}</Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" />
-                      {file.projectId && <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5' }} />}
+                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" sx={{ fontWeight: 600 }} />
+                      {file.projectId && <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5', fontWeight: 700 }} />}
                     </Stack>
                     <Typography variant="caption" sx={{ color: '#667085', fontWeight: 600 }}>Open file gallery</Typography>
                   </Box>
@@ -3297,11 +3293,11 @@ export default function Home() {
             const allTagsFrame = [...(frame.frameTags || []), ...(frame.sizeTags || []), ...(frame.customTags || [])].filter(Boolean);
             const originalIndexFrame = index;
             return (
-              <Box key={thumb.thumbName + idx} sx={{ mb: 2, textAlign: 'center', cursor: 'pointer', width: 260, position: 'relative' }}>
-                <img src={thumb.thumbnail || thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 10, border: (modalIndex === originalIndexFrame) ? '3px solid #667eea' : '1.5px solid #e0e0e0', background: '#fff', marginBottom: 6, width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} onClick={() => { const fi = frameThumbsForModal.findIndex((it: any) => it.index === originalIndexFrame); if (fi !== -1) handleOpenModal(fi); }} />
-                <IconButton onClick={() => toggleFavorite(thumb.thumbName)} color="error" sx={{ position: 'absolute', top: 8, right: 8, background: '#fff8', zIndex: 1 }} aria-label="Add to favorites">{favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}</IconButton>
-                <Box sx={{ px: 0.5, mt: 0.5 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{thumb.label}</Typography>
+              <Box key={thumb.thumbName + idx} sx={{ mb: 2, cursor: 'pointer', width: 260, position: 'relative', ...GALLERY_CARD_SX, p: 1.25 }}>
+                <img src={thumb.thumbnail || thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 14, border: (modalIndex === originalIndexFrame) ? '3px solid #111827' : '1.5px solid #dbe3f0', background: '#f8fafc', marginBottom: 8, width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} onClick={() => { const fi = frameThumbsForModal.findIndex((it: any) => it.index === originalIndexFrame); if (fi !== -1) handleOpenModal(fi); }} />
+                <IconButton onClick={() => toggleFavorite(thumb.thumbName)} color="error" sx={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.92)', zIndex: 1 }} aria-label="Add to favorites">{favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}</IconButton>
+                <Box sx={{ px: 0.5, mt: 0.5, textAlign: 'left' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#111827' }}>{thumb.label}</Typography>
                   {(thumb as any).filePageSubtitle && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{(thumb as any).filePageSubtitle}</Typography>
                   )}
@@ -3309,7 +3305,7 @@ export default function Home() {
                 {allTagsFrame.length > 0 && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'flex-start', mt: 1, px: 0.5 }}>
                     {allTagsFrame.map((tag: string, tagIdx: number) => (
-                      <Box key={tagIdx} sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: '16px', bgcolor: '#f5f5f5', border: 'none', fontSize: '0.75rem', fontWeight: 400, color: '#000', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{tag}</Box>
+                      <Box key={tagIdx} sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: '16px', bgcolor: '#f8fafc', border: '1px solid #e4e7ec', fontSize: '0.75rem', fontWeight: 500, color: '#344054', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{tag}</Box>
                     ))}
                   </Box>
                 )}
