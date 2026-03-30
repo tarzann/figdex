@@ -50,6 +50,12 @@ import {
 import LoginDialog from '../components/LoginDialog';
 import RegisterDialog from '../components/RegisterDialog';
 import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
+import {
+  FIGDEX_IDEAL_CUSTOMER_PROFILE,
+  FIGDEX_PLUGIN_WEB_RELATIONSHIP,
+  FIGDEX_PRIMARY_HERO_MESSAGE,
+  FIGDEX_PRIMARY_SUPPORT_MESSAGE
+} from '../lib/marketing-messaging';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.28.0'; // Fix: Email notifications now sent even when job already completed, added comprehensive email logging
@@ -381,7 +387,7 @@ const HomePageV2 = () => {
           <Box>
             <Chip
               icon={<PluginIcon />}
-              label="Figma plugin + searchable web gallery"
+              label="Figma plugin + searchable design library"
               sx={{
                 mb: 2.5,
                 bgcolor: '#eef4ff',
@@ -401,7 +407,7 @@ const HomePageV2 = () => {
                 lineHeight: 1.1
               }}
             >
-              Turn giant Figma files into a gallery your team can actually use.
+              {FIGDEX_PRIMARY_HERO_MESSAGE}
             </Typography>
             <Typography 
               variant="h5" 
@@ -414,7 +420,7 @@ const HomePageV2 = () => {
                 maxWidth: 620
               }}
             >
-              Index pages from Figma, browse them as a clean visual library, search across thousands of screens, and share the exact views people need.
+              {FIGDEX_PRIMARY_SUPPORT_MESSAGE}
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
               <Button
@@ -481,8 +487,20 @@ const HomePageV2 = () => {
                 Watch 60-Second Demo
               </Button>
             </Stack>
+            <Typography
+              variant="body1"
+              sx={{
+                color: '#475467',
+                maxWidth: 680,
+                lineHeight: 1.7,
+                fontWeight: 500,
+                mt: 1.5
+              }}
+            >
+              {FIGDEX_PLUGIN_WEB_RELATIONSHIP}
+            </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3, flexWrap: 'wrap' }}>
-              {['No credit card required', 'Works with large multi-page files', 'Built for design review and handoff'].map((item) => (
+              {['No credit card required', 'Works with large multi-page files', FIGDEX_IDEAL_CUSTOMER_PROFILE].map((item) => (
                 <Stack key={item} direction="row" spacing={1} alignItems="center">
                   <CheckCircleIcon sx={{ fontSize: 18, color: '#027a48' }} />
                   <Typography variant="body2" sx={{ color: '#667085', fontWeight: 500 }}>

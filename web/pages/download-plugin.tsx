@@ -8,6 +8,10 @@ import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
+import {
+  FIGDEX_CATEGORY_STATEMENT,
+  FIGDEX_PLUGIN_WEB_RELATIONSHIP
+} from '../lib/marketing-messaging';
 
 export default function DownloadPluginPage() {
   const router = useRouter();
@@ -149,10 +153,13 @@ export default function DownloadPluginPage() {
                 sx={{ mb: 2, bgcolor: '#eef4ff', color: '#1d4ed8', fontWeight: 700 }}
               />
               <Typography variant="h2" sx={{ fontWeight: 800, color: '#111827', fontSize: { xs: '2.2rem', md: '3.4rem' }, mb: 2 }}>
-                Download the FigDex Figma plugin
+                Install the FigDex plugin and create your first searchable design library
               </Typography>
               <Typography variant="h6" sx={{ color: '#4b5563', fontWeight: 400, maxWidth: 760, mx: 'auto', lineHeight: 1.6 }}>
-                No signup is required to download the plugin package. Install it in Figma, then connect it to your FigDex account or start with the guest flow.
+                {FIGDEX_CATEGORY_STATEMENT} Download the plugin without signing up, install it in Figma, then connect your account or continue as guest.
+              </Typography>
+              <Typography variant="body1" sx={{ color: '#667085', maxWidth: 760, mx: 'auto', lineHeight: 1.7, mt: 2 }}>
+                {FIGDEX_PLUGIN_WEB_RELATIONSHIP}
               </Typography>
             </Box>
 
@@ -162,10 +169,10 @@ export default function DownloadPluginPage() {
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between">
                     <Box>
                       <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mb: 0.5 }}>
-                        FigDex Plugin Package
+                        Start in Figma. Continue in FigDex Web.
                       </Typography>
                       <Typography variant="body1" sx={{ color: '#6b7280' }}>
-                        Includes `manifest.json`, runtime files, and the latest plugin UI bundle.
+                        The plugin captures and updates designs from Figma. FigDex Web gives you the searchable, review-ready library your team will use.
                       </Typography>
                     </Box>
                     <Button
@@ -190,9 +197,9 @@ export default function DownloadPluginPage() {
 
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
                     {[
-                      ['1', 'Download the zip', 'Save the plugin package locally and extract it to a folder you can keep synced.'],
-                      ['2', 'Import from manifest', 'In Figma open Plugins → Development → Import plugin from manifest and choose `manifest.json`.'],
-                      ['3', 'Connect and index', 'Open the plugin, connect your account or continue as guest, then create your first index.'],
+                      ['1', 'Download and install', 'Save the plugin package locally, extract it, and import it into Figma from `manifest.json`.'],
+                      ['2', 'Connect or continue as guest', 'Open the plugin and choose whether to connect your FigDex account or start with the guest flow.'],
+                      ['3', 'Create your first index', 'Link a Figma file, index the pages you want, and open the result in FigDex Web.'],
                     ].map(([step, title, text]) => (
                       <Box key={step} sx={{ p: 2.5, borderRadius: 4, bgcolor: '#fff', border: '1px solid #e5e7eb' }}>
                         <Chip label={step} size="small" sx={{ mb: 1.5, bgcolor: '#111827', color: '#fff', fontWeight: 700 }} />
