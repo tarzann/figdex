@@ -22,6 +22,10 @@ This file is the recommended entry point for understanding the current FigDex pr
 - [docs/FLOW_TESTING_CHECKLIST.md](/Users/ranmor/Documents/FigDex%20Codex/docs/FLOW_TESTING_CHECKLIST.md)
   Current manual smoke-test checklist and validation areas.
 
+### Launch Readiness
+- [docs/LAUNCH_READINESS_CHECKLIST.md](/Users/ranmor/Documents/FigDex%20Codex/docs/LAUNCH_READINESS_CHECKLIST.md)
+  Structured pre-launch checklist covering blockers, operational readiness, onboarding, payments, and release sequencing.
+
 ### Operations / Runbook
 - [docs/OPERATIONS_RUNBOOK.md](/Users/ranmor/Documents/FigDex%20Codex/docs/OPERATIONS_RUNBOOK.md)
   Practical operational guidance for resets, backfills, load checks, and production verification.
