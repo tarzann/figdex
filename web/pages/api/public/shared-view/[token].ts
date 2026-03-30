@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { logIndexActivity } from '../../../../lib/index-activity-log';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -185,6 +186,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
 
     if (viewError || !sharedView) {
+      await logIndexActivity(supabase, {
+        requestId: typeof token === 'string' ? token : null,
+        source: 'web',
+        eventType: 'share_access_denied',
+        status: 'failed',
+        message: 'Shared view token not found',
+        metadata: {
+          token,
+          reason: 'not_found',
+          shareType: 'shared_view',
+        },
+      });
       return res.status(404).json({
         success: false,
         error: 'Share link not found'
@@ -193,9 +206,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Check if enabled
     if (!sharedView.enabled) {
-      return res.status(403).json({
+      await logIndexActivity(supabase, {
+        requestId: typeof token === 'string' ? token : null,
+        source: 'web',
+        eventType: 'share_access_denied',
+        status: 'failed',
+        userId: sharedView.user_id || null,
+        message: 'Shared view disabled',
+        metadata: {
+          token,
+          reason: 'disabled',
+          shareType: sharedView.share_type,
+        },
+      });
+      return res.status(404).json({
         success: false,
-        error: 'Share link is disabled'
+        error: 'Share link not found'
       });
     }
 
@@ -212,6 +238,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: 'User not found'
       });
     }
+
+    await logIndexActivity(supabase, {
+      requestId: typeof token === 'string' ? token : null,
+      source: 'web',
+      eventType: 'share_opened',
+      status: 'completed',
+      userId: sharedView.user_id || null,
+      userEmail: user.email || null,
+      message: 'Shared view opened',
+      metadata: {
+        token,
+        shareType: sharedView.share_type,
+      },
+    });
 
     // Load indices based on share type
     if (sharedView.share_type === 'all_indices') {

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { logIndexActivity } from '../../../../lib/index-activity-log';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -201,7 +202,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { data: normalizedIndex, error: normalizedError } = await supabase
       .from('indexed_files')
-      .select('id, file_name, last_indexed_at, share_token, project_id, figma_file_key, cover_image_url, total_frames')
+      .select('id, user_id, file_name, last_indexed_at, share_token, project_id, figma_file_key, cover_image_url, total_frames')
       .eq('share_token', token)
       .eq('is_public', true)
       .maybeSingle();
@@ -270,6 +271,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
 
+        await logIndexActivity(supabase, {
+          requestId: token,
+          source: 'web',
+          eventType: 'share_opened',
+          status: 'completed',
+          userId: normalizedIndex.user_id || null,
+          fileName: normalizedIndex.file_name || null,
+          message: 'Public index opened',
+          metadata: {
+            token,
+            shareType: 'public_index',
+            normalized: true,
+          },
+        });
+
         return res.status(200).json({
           success: true,
           data: {
@@ -296,6 +312,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
 
     if (error || !indexData) {
+      await logIndexActivity(supabase, {
+        requestId: token,
+        source: 'web',
+        eventType: 'share_access_denied',
+        status: 'failed',
+        message: 'Public index token not found',
+        metadata: {
+          token,
+          reason: 'not_found',
+          shareType: 'public_index',
+        },
+      });
       return res.status(404).json({
         success: false,
         error: 'Index not found or not public'

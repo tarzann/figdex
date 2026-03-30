@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { getUserIdFromApiKey } from '../../../../lib/api-auth';
+import { logIndexActivity } from '../../../../lib/index-activity-log';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -24,8 +26,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    const userId = await getUserIdFromApiKey(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
     if (req.method === 'POST') {
-      // Make index public and generate share token
+      const { data: existingIndex, error: existingError } = await supabase
+        .from('index_files')
+        .select('id, user_id, file_name')
+        .eq('id', id)
+        .single();
+
+      if (existingError || !existingIndex || existingIndex.user_id !== userId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Index not found'
+        });
+      }
+
       const shareToken = crypto.randomBytes(16).toString('hex');
 
       const { data, error } = await supabase
@@ -46,6 +68,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
+      await logIndexActivity(supabase, {
+        requestId: `legacy_share_${id}`,
+        source: 'api',
+        eventType: 'share_created',
+        status: 'completed',
+        userId,
+        fileName: data.file_name || existingIndex.file_name || 'Shared index',
+        message: 'Legacy index share created',
+        metadata: {
+          shareToken,
+          indexId: id,
+          shareUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.figdex.com'}/share/${shareToken}`,
+          legacy: true,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         shareToken,
@@ -53,7 +91,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
     } else if (req.method === 'DELETE') {
-      // Make index private
+      const { data: existingIndex, error: existingError } = await supabase
+        .from('index_files')
+        .select('id, user_id, file_name')
+        .eq('id', id)
+        .single();
+
+      if (existingError || !existingIndex || existingIndex.user_id !== userId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Index not found'
+        });
+      }
+
       const { data, error } = await supabase
         .from('index_files')
         .update({
@@ -72,13 +122,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
+      await logIndexActivity(supabase, {
+        requestId: `legacy_share_${id}`,
+        source: 'api',
+        eventType: 'share_deleted',
+        status: 'completed',
+        userId,
+        fileName: data.file_name || existingIndex.file_name || 'Shared index',
+        message: 'Legacy index share removed',
+        metadata: {
+          indexId: id,
+          legacy: true,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         message: 'Index is now private'
       });
 
     } else if (req.method === 'GET') {
-      // Get share link if index is public
+      const { data: existingIndex, error: existingError } = await supabase
+        .from('index_files')
+        .select('id, user_id, is_public, share_token')
+        .eq('id', id)
+        .single();
+
+      if (existingError || !existingIndex || existingIndex.user_id !== userId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Index not found'
+        });
+      }
+
       const { data, error } = await supabase
         .from('index_files')
         .select('is_public, share_token')
@@ -123,4 +199,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-

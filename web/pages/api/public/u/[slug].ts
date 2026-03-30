@@ -65,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .ilike('public_slug', slug)
       .single();
     if (userErr || !user) return res.status(404).json({ success: false, error: 'User not found' });
-    if (!user.public_enabled) return res.status(403).json({ success: false, error: 'Public profile disabled' });
+    if (!user.public_enabled) return res.status(404).json({ success: false, error: 'User not found' });
 
     const frames: any[] = [];
     const frameKeys = new Set<string>();
