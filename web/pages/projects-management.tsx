@@ -53,6 +53,7 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import UserAppLayout from '../components/UserAppLayout';
 
 interface Project {
   id: string;
@@ -408,127 +409,8 @@ export default function ProjectsManagement() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
-      {/* Header */}
-      <Container maxWidth="lg">
-        <Box sx={{ py: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 300,
-              letterSpacing: 3,
-              color: '#1a1a1a',
-              fontSize: '1.5rem',
-              cursor: 'pointer'
-            }}
-            onClick={() => router.push('/')}
-          >
-            FIGDEX
-          </Typography>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              fontWeight: 300,
-              color: '#1a1a1a',
-              fontSize: '1.25rem',
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)'
-            }}
-          >
-            Projects Management
-          </Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="text"
-              startIcon={<ArrowBackIcon />}
-              sx={{ 
-                color: '#1a1a1a',
-                fontWeight: 400,
-                textTransform: 'none',
-                fontSize: '0.95rem',
-                '&:hover': { 
-                  bgcolor: '#f5f5f5'
-                }
-              }}
-              onClick={() => router.back()}
-            >
-              Back
-            </Button>
-            {isLoggedIn && (
-              <IconButton
-                onClick={handleUserMenuOpen}
-                sx={{ 
-                  bgcolor: 'transparent',
-                  '&:hover': { bgcolor: '#f5f5f5' }
-                }}
-              >
-                <Avatar sx={{ bgcolor: '#667eea', width: 32, height: 32 }}>
-                  <AccountCircleIcon />
-                </Avatar>
-              </IconButton>
-            )}
-            <Menu
-              anchorEl={userMenuAnchor}
-              open={Boolean(userMenuAnchor)}
-              onClose={handleUserMenuClose}
-              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-              sx={{ mt: 1 }}
-            >
-              {isAdmin && (
-                <MenuItem onClick={() => { router.push('/admin'); handleUserMenuClose(); }}>
-                  <ListItemIcon>
-                    <SettingsIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Admin Panel</ListItemText>
-                </MenuItem>
-              )}
-              <MenuItem onClick={() => { router.push('/gallery'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <SearchIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>My FigDex</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/index-management'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <StorageIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Index Management</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <PersonIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Account Settings</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/api-index'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ApiIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Figma API Integration</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { handleCopyApiKey(); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ContentCopyIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={handleLogout}>
-                <ListItemIcon>
-                  <LogoutIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Logout</ListItemText>
-              </MenuItem>
-            </Menu>
-          </Stack>
-        </Box>
-      </Container>
-
-      {/* Content */}
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 }, pb: 12 }}>
+    <>
+      <UserAppLayout title="Projects Management" contentMaxWidth="lg" contentSx={{ py: { xs: 4, md: 6 } }}>
         {/* Search Bar */}
         <Box sx={{ mb: 3 }}>
           <TextField
@@ -685,8 +567,8 @@ export default function ProjectsManagement() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Container>
-
+      </UserAppLayout>
+      
       {/* Add/Edit Project Dialog */}
       <Dialog 
         open={dialogOpen} 
@@ -879,7 +761,6 @@ export default function ProjectsManagement() {
         onClose={() => setSnackbarOpen(false)}
         message={snackbarMessage}
       />
-    </Box>
+    </>
   );
 }
-

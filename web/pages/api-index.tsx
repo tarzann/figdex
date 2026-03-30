@@ -75,6 +75,7 @@ import {
   Share as ShareIcon,
 } from '@mui/icons-material';
 import { useRouter } from 'next/router';
+import UserAppLayout from '../components/UserAppLayout';
 
 interface PageOption {
   id: string;
@@ -134,10 +135,6 @@ interface IndexFile {
   project_id?: string;
   _updateCount?: number;
 }
-
-// Version tracking - Update this number for each fix/change
-const PAGE_VERSION = 'v1.30.13'; // Remove debug console.log statements from UI
-const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
 const imageQualityMap: Record<'low' | 'med' | 'hi', { label: string; scale: number }> = {
   low: { label: 'Low (30%)', scale: 0.3 },
@@ -2225,144 +2222,7 @@ export default function ApiIndexPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
-      {/* Header */}
-      <Container maxWidth="lg">
-        <Box sx={{ py: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 300,
-              letterSpacing: 3,
-              color: '#1a1a1a',
-              fontSize: '1.5rem',
-              cursor: 'pointer'
-            }}
-            onClick={() => router.push('/')}
-          >
-            FIGDEX
-          </Typography>
-          <Box sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography 
-              variant="h5" 
-              sx={{ 
-                fontWeight: 300,
-                color: '#1a1a1a',
-                fontSize: '1.25rem'
-              }}
-            >
-              Figma API Integration
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-              <Chip 
-                label={PAGE_VERSION} 
-                color="primary" 
-                variant="outlined"
-                size="small"
-                sx={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.65rem', height: '20px' }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                {PAGE_VERSION_BUILD_DATE}
-              </Typography>
-            </Stack>
-          </Box>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="text"
-              startIcon={<ArrowBackIcon />}
-              sx={{ 
-                color: '#1a1a1a',
-                fontWeight: 400,
-                textTransform: 'none',
-                fontSize: '0.95rem',
-                '&:hover': { 
-                  bgcolor: '#f5f5f5'
-                }
-              }}
-              onClick={() => router.back()}
-            >
-              Back
-            </Button>
-            {isLoggedIn && (
-              <IconButton
-                onClick={handleUserMenuOpen}
-                sx={{ 
-                  bgcolor: 'transparent',
-                  '&:hover': { bgcolor: '#f5f5f5' }
-                }}
-              >
-                <Avatar sx={{ bgcolor: '#667eea', width: 32, height: 32 }}>
-                  <AccountCircleIcon />
-                </Avatar>
-              </IconButton>
-            )}
-            <Menu
-              anchorEl={userMenuAnchor}
-              open={Boolean(userMenuAnchor)}
-              onClose={handleUserMenuClose}
-              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-              sx={{ mt: 1 }}
-            >
-              {isAdmin && (
-                <MenuItem onClick={() => { router.push('/admin'); handleUserMenuClose(); }}>
-                  <ListItemIcon>
-                    <SettingsIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Admin Panel</ListItemText>
-                </MenuItem>
-              )}
-              <MenuItem onClick={() => { router.push('/gallery'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <SearchIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>My FigDex</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/index-management'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <StorageIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Index Management</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/projects-management'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <FolderOpenIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Projects Management</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <PersonIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Account Settings</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/api-index'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ApiIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Figma API Integration</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { handleCopyApiKey(); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ContentCopyIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={handleLogout}>
-                <ListItemIcon>
-                  <LogoutIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Logout</ListItemText>
-              </MenuItem>
-            </Menu>
-          </Stack>
-        </Box>
-      </Container>
-
-      {/* Content */}
-      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 }, pb: { xs: 6, sm: 12 }, px: { xs: 2, sm: 3 } }}>
+    <UserAppLayout title="Figma API Integration" contentMaxWidth="lg" contentSx={{ py: { xs: 2, sm: 4 }, px: { xs: 2, sm: 3 } }}>
 
       <Box sx={{ mt: { xs: 2, sm: 3 } }}>
         {/* Tabs */}
@@ -3322,7 +3182,6 @@ export default function ApiIndexPage() {
           )}
         </Box>
         </Box>
-      </Container>
 
       {/* New Connection Dialog */}
       <Dialog 
@@ -3409,6 +3268,6 @@ export default function ApiIndexPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </UserAppLayout>
   );
 }
