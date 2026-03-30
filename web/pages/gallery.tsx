@@ -1379,6 +1379,24 @@ export default function Home() {
     return parts.join(' | ').slice(0, 120);
   };
 
+  const hasSharableResultContext =
+    search.trim().length > 0 ||
+    selectedSizeTags.length > 0 ||
+    selectedCustomTags.length > 0;
+
+  const currentResultsShareName = buildShareName('search_results', {
+    textSearch: search,
+    sizeTags: selectedSizeTags,
+    customTags: selectedCustomTags,
+  });
+
+  useEffect(() => {
+    if (!shareDialogOpen) return;
+    if (selectedShareType === 'search_results' && !hasSharableResultContext) {
+      setSelectedShareType('all_indices');
+    }
+  }, [hasSharableResultContext, selectedShareType, shareDialogOpen]);
+
   // Create share link
   const handleCreateShare = async (shareType: 'all_indices' | 'search_results') => {
     try {
@@ -3739,17 +3757,10 @@ export default function Home() {
               Create Share Link
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-              Choose what people should see when they open this link.
+              Choose whether people should see your whole gallery or only the result set you prepared right now.
             </Typography>
 
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                gap: 2,
-                mb: 3
-              }}
-            >
+            <Stack spacing={1.5} sx={{ mb: 3 }}>
               <Box
                 onClick={() => setSelectedShareType('all_indices')}
                 sx={{
@@ -3765,74 +3776,71 @@ export default function Home() {
                   }
                 }}
               >
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Share full gallery
-                  </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5 }}>
+                      Everything in this gallery
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      People can browse your indexed files, then keep searching and filtering on their own.
+                    </Typography>
+                  </Box>
                   <Chip size="small" label="Recommended" sx={{ bgcolor: '#eef4ff', color: '#3538cd' }} />
                 </Stack>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  People can browse all your indexed files and keep using search and filters.
-                </Typography>
-                <Chip size="small" label="Name: Full gallery" variant="outlined" />
               </Box>
 
               <Box
-                onClick={() => setSelectedShareType('search_results')}
+                onClick={() => {
+                  if (hasSharableResultContext) {
+                    setSelectedShareType('search_results');
+                  }
+                }}
                 sx={{
                   p: 2,
                   borderRadius: 3,
                   border: selectedShareType === 'search_results' ? '2px solid #667eea' : '1px solid #d0d5dd',
                   bgcolor: selectedShareType === 'search_results' ? '#eef4ff' : '#fff',
-                  cursor: 'pointer',
+                  cursor: hasSharableResultContext ? 'pointer' : 'not-allowed',
+                  opacity: hasSharableResultContext ? 1 : 0.65,
                   transition: 'all 0.18s ease',
-                  '&:hover': {
+                  '&:hover': hasSharableResultContext ? {
                     borderColor: '#98a2ff',
                     boxShadow: '0 6px 18px rgba(16,24,40,0.06)'
-                  }
+                  } : undefined
                 }}
               >
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                  Share current results
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  Just these results
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  People will only see the current search or filtered result set you prepared.
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Share only the search or filters you prepared right now, without exposing the rest of the gallery.
                 </Typography>
-                <Chip
-                  size="small"
-                  label={`Name: ${buildShareName('search_results', {
-                    textSearch: search,
-                    sizeTags: selectedSizeTags,
-                    customTags: selectedCustomTags
-                  })}`}
-                  variant="outlined"
-                />
+                <Typography variant="body2" sx={{ color: hasSharableResultContext ? '#344054' : '#98a2b3', fontWeight: 500 }}>
+                  {hasSharableResultContext ? currentResultsShareName : 'Run a search or apply filters first to share a focused result set.'}
+                </Typography>
               </Box>
-            </Box>
+            </Stack>
 
             {selectedShareType && (
               <Box sx={{ mb: 4, p: 2, borderRadius: 3, bgcolor: '#f8fafc', border: '1px solid #eaecf0' }}>
-                <Typography variant="body2" sx={{ mb: 1, color: '#475467' }}>
-                  {selectedShareType === 'all_indices' 
-                    ? 'Share link will allow viewing all your indices with search and filters enabled.'
-                    : 'Share link will show only the current filtered/search results. Viewers cannot search or filter.'}
+                <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+                  Share preview
                 </Typography>
-                <Chip
-                  size="small"
-                  label={`Name: ${buildShareName(selectedShareType, selectedShareType === 'search_results' ? {
-                    textSearch: search,
-                    sizeTags: selectedSizeTags,
-                    customTags: selectedCustomTags
-                  } : undefined)}`}
-                  sx={{ mb: 1.5, bgcolor: '#f8fafc', color: '#475467' }}
-                />
+                <Typography variant="subtitle1" sx={{ mt: 0.5, mb: 0.75, fontWeight: 700, color: '#111827' }}>
+                  {selectedShareType === 'all_indices' ? 'Full gallery' : currentResultsShareName}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1.75, color: '#475467', lineHeight: 1.7 }}>
+                  {selectedShareType === 'all_indices'
+                    ? 'People will open a browsable version of your gallery and keep searching from there.'
+                    : 'People will open only this prepared result set. This is best when you want to share one focused slice of the library.'}
+                </Typography>
                 <Button
                   variant="contained"
                   onClick={() => handleCreateShare(selectedShareType)}
                   disabled={creatingShare}
-                  sx={{ borderRadius: 999, px: 2.5 }}
+                  sx={{ borderRadius: 999, px: 2.5, textTransform: 'none', fontWeight: 700 }}
                 >
-                  {creatingShare ? 'Creating...' : 'Create Share Link'}
+                  {creatingShare ? 'Creating...' : selectedShareType === 'all_indices' ? 'Create full gallery link' : 'Create focused results link'}
                 </Button>
               </Box>
             )}
@@ -3874,7 +3882,7 @@ export default function Home() {
                         />
                       ) : (
                         <Typography variant="body1" fontWeight={600} sx={{ flex: 1 }}>
-                          {view.share_name || (view.share_type === 'all_indices' ? 'All Indices' : 'Search Results')}
+                          {view.share_name || (view.share_type === 'all_indices' ? 'Full gallery' : 'Focused results')}
                         </Typography>
                       )}
                       <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
