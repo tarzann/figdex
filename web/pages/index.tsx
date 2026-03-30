@@ -107,10 +107,11 @@ const HomePageV2 = () => {
               sx={{ 
                 fontWeight: 700, 
                 color: '#1a1a1a', 
-                mb: 3,
-                fontSize: { xs: '2.8rem', md: '4.8rem' },
-                letterSpacing: -2,
-                lineHeight: 1.1
+                mb: 2.5,
+                fontSize: { xs: '2.45rem', md: '4.1rem' },
+                letterSpacing: '-0.04em',
+                lineHeight: 1.06,
+                maxWidth: 760
               }}
             >
               {FIGDEX_PRIMARY_HERO_MESSAGE}
