@@ -273,7 +273,7 @@ export default function AccountPage() {
   };
 
   return (
-    <UserAppLayout title="Account Settings" contentMaxWidth="md" contentSx={{ py: { xs: 4, md: 6 } }}>
+    <UserAppLayout title="Account Settings" contentMaxWidth="lg" contentSx={{ py: { xs: 4, md: 6 } }}>
         {error && (
           <Alert severity={isGuest ? 'info' : 'error'} sx={{ mb: 2 }}>
             {error}
