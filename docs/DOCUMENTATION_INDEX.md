@@ -30,6 +30,10 @@ This file is the recommended entry point for understanding the current FigDex pr
 - [docs/OPERATIONS_RUNBOOK.md](/Users/ranmor/Documents/FigDex%20Codex/docs/OPERATIONS_RUNBOOK.md)
   Practical operational guidance for resets, backfills, load checks, and production verification.
 
+### Plugin Release
+- [docs/PLUGIN_RELEASE_PROCESS.md](/Users/ranmor/Documents/FigDex%20Codex/docs/PLUGIN_RELEASE_PROCESS.md)
+  Release checklist for plugin version sync, ZIP packaging, and public download updates.
+
 ## Supporting Docs
 
 ### Supabase Performance Context

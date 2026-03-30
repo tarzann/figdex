@@ -49,7 +49,7 @@ import {
 } from '@mui/icons-material';
 import LoginDialog from '../components/LoginDialog';
 import RegisterDialog from '../components/RegisterDialog';
-import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
+import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.28.0'; // Fix: Email notifications now sent even when job already completed, added comprehensive email logging
@@ -209,6 +209,21 @@ const HomePageV2 = () => {
                 >
                   Pricing
                 </Button>
+                <Button
+                  variant="text"
+                  sx={{ 
+                    color: '#1a1a1a',
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    fontSize: '0.95rem',
+                    '&:hover': { 
+                      bgcolor: '#eef2ff'
+                    }
+                  }}
+                  onClick={() => router.push('/download-plugin')}
+                >
+                  Plugin
+                </Button>
                 <IconButton
                   onClick={handleUserMenuOpen}
                   sx={{ 
@@ -298,6 +313,21 @@ const HomePageV2 = () => {
                   onClick={() => router.push('/pricing')}
                 >
                   Pricing
+                </Button>
+                <Button
+                  variant="text"
+                  sx={{ 
+                    color: '#1a1a1a',
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    fontSize: '0.95rem',
+                    '&:hover': { 
+                      bgcolor: '#eef2ff'
+                    }
+                  }}
+                  onClick={() => router.push('/download-plugin')}
+                >
+                  Plugin
                 </Button>
                 <Button
                   variant="text"
@@ -408,8 +438,7 @@ const HomePageV2 = () => {
                 Start Free
               </Button>
               <Button
-                component="a"
-                href={FIGDEX_PLUGIN_DOWNLOAD_PATH}
+                onClick={() => router.push('/download-plugin')}
                 variant="outlined"
                 size="large"
                 startIcon={<PluginIcon />}
