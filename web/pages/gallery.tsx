@@ -581,6 +581,7 @@ export default function Home() {
   const [lobbyFramesLoading, setLobbyFramesLoading] = useState(false);
   const [authFromUrlApplied, setAuthFromUrlApplied] = useState(0); // Incremented when apiKey/viewToken applied from URL; triggers reload
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0); // Incremented when tab becomes visible; triggers reload (e.g. after indexing from plugin)
+  const [dismissedSuccessFileKey, setDismissedSuccessFileKey] = useState('');
 
   // Filter sidebar state
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(true);
@@ -1068,6 +1069,21 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearSuccessFileQuery = () => {
+    if (!router.isReady || typeof window === 'undefined') return;
+    const nextQuery = { ...router.query } as Record<string, any>;
+    delete nextQuery.fileKey;
+    delete nextQuery._t;
+    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+  };
+
+  const dismissFirstIndexSuccess = () => {
+    const rawFileKey = router.query.fileKey;
+    const queryFileKey = typeof rawFileKey === 'string' ? rawFileKey.trim() : Array.isArray(rawFileKey) ? rawFileKey[0]?.trim() || '' : '';
+    if (queryFileKey) setDismissedSuccessFileKey(queryFileKey);
+    clearSuccessFileQuery();
   };
   
   // Load frames for specific index
@@ -2285,6 +2301,20 @@ export default function Home() {
 
   const selectedPageInfo = filePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
   const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
+  const rawSuccessFileKey = router.query.fileKey;
+  const successFileKey =
+    typeof rawSuccessFileKey === 'string'
+      ? rawSuccessFileKey.trim()
+      : Array.isArray(rawSuccessFileKey)
+        ? (rawSuccessFileKey[0] || '').trim()
+        : '';
+  const firstIndexedFile = successFileKey
+    ? indexFiles.find((file: any) => {
+        const figmaFileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+        const stableFileKey = getStableLogicalFileId(file);
+        return figmaFileKey === successFileKey || stableFileKey === successFileKey;
+      }) || null
+    : null;
   const showFirstUseEmptyState =
     !loading &&
     !error &&
@@ -2292,8 +2322,17 @@ export default function Home() {
     indexFiles.length === 0 &&
     allGalleryThumbs.length === 0 &&
     !search.trim();
+  const showFirstIndexSuccess =
+    !showFirstUseEmptyState &&
+    !loading &&
+    !error &&
+    viewMode === 'lobby' &&
+    !!successFileKey &&
+    !!firstIndexedFile &&
+    dismissedSuccessFileKey !== successFileKey;
   const showGenericNoResults =
     !showFirstUseEmptyState &&
+    !showFirstIndexSuccess &&
     !loading &&
     visibleThumbs.length === 0;
 
@@ -3298,6 +3337,78 @@ export default function Home() {
           />
         </Box>
       </Grid>
+        {showFirstIndexSuccess && firstIndexedFile && (
+          <Box
+            sx={{
+              mt: 4,
+              mb: 1,
+              mx: 'auto',
+              maxWidth: 760,
+              bgcolor: '#ffffff',
+              border: '1px solid #d9f2e6',
+              borderRadius: 4,
+              boxShadow: '0 12px 32px rgba(15,23,42,0.05)',
+              p: { xs: 2.5, md: 3 },
+            }}
+          >
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={2}
+              alignItems={{ xs: 'flex-start', md: 'center' }}
+              justifyContent="space-between"
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Chip
+                  label="First index ready"
+                  sx={{ mb: 1.25, bgcolor: '#ecfdf3', color: '#027a48', fontWeight: 700 }}
+                />
+                <Typography variant="h6" sx={{ fontWeight: 800, color: '#111827', mb: 0.75 }}>
+                  Your first indexed file is ready
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#667085', lineHeight: 1.7 }}>
+                  <Box component="span" sx={{ fontWeight: 700, color: '#111827' }}>
+                    {firstIndexedFile.file_name || 'This file'}
+                  </Box>{' '}
+                  was added to your gallery. Open it to review pages, search screens, or share it with your team.
+                </Typography>
+              </Box>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ width: { xs: '100%', md: 'auto' } }}>
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    dismissFirstIndexSuccess();
+                    loadFileFrames(firstIndexedFile);
+                  }}
+                  sx={{
+                    bgcolor: '#111827',
+                    color: '#fff',
+                    textTransform: 'none',
+                    borderRadius: 999,
+                    px: 2.5,
+                    py: 1.1,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    '&:hover': { bgcolor: '#1f2937' },
+                  }}
+                >
+                  Open file
+                </Button>
+                <Button
+                  variant="text"
+                  onClick={dismissFirstIndexSuccess}
+                  sx={{
+                    color: '#475467',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    alignSelf: { xs: 'flex-start', md: 'center' },
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+        )}
         {showFirstUseEmptyState && (
           <Box
             sx={{
