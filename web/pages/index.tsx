@@ -585,7 +585,7 @@ const HomePageV2 = () => {
               { icon: <StorageIcon />, value: 'Large files', label: 'Index long, multi-page Figma projects without manual cleanup' },
               { icon: <SearchIcon />, value: 'Fast search', label: 'Search by file, text, tags, size and filtered results' },
               { icon: <ShareIcon />, value: 'Clean sharing', label: 'Share the full gallery or only the exact result set you want' },
-              { icon: <SpeedIcon />, value: 'Team-ready', label: 'Built for review, audits, handoff and ongoing design operations' },
+              { icon: <SpeedIcon />, value: 'Team-ready', label: 'Built for review, audits, handoff and ongoing design operations', soon: true },
             ].map((item) => (
               <Box
                 key={item.value}
@@ -598,9 +598,24 @@ const HomePageV2 = () => {
                 }}
               >
                 <Box sx={{ color: '#667eea', mb: 1.5 }}>{item.icon}</Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.75 }}>
-                  {item.value}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    {item.value}
+                  </Typography>
+                  {item.soon ? (
+                    <Chip
+                      label="Soon"
+                      size="small"
+                      sx={{
+                        height: 22,
+                        bgcolor: '#eef2ff',
+                        color: '#4f46e5',
+                        fontWeight: 700,
+                        border: '1px solid #c7d2fe'
+                      }}
+                    />
+                  ) : null}
+                </Box>
                 <Typography variant="body2" sx={{ color: '#667085', lineHeight: 1.65 }}>
                   {item.label}
                 </Typography>
