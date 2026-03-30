@@ -26,6 +26,14 @@ This file is the recommended entry point for understanding the current FigDex pr
 - [docs/LAUNCH_READINESS_CHECKLIST.md](/Users/ranmor/Documents/FigDex%20Codex/docs/LAUNCH_READINESS_CHECKLIST.md)
   Structured pre-launch checklist covering blockers, operational readiness, onboarding, payments, and release sequencing.
 
+### Go-To-Market UX Priorities
+- [docs/GO_TO_MARKET_UX_PRIORITIES.md](/Users/ranmor/Documents/FigDex%20Codex/docs/GO_TO_MARKET_UX_PRIORITIES.md)
+  Consolidated UX, marketing, and product-friction priorities for making FigDex market-ready.
+
+### Activation Plan
+- [docs/ACTIVATION_PLAN.md](/Users/ranmor/Documents/FigDex%20Codex/docs/ACTIVATION_PLAN.md)
+  Practical execution plan for improving first-time user activation from landing to first successful indexed result.
+
 ### Operations / Runbook
 - [docs/OPERATIONS_RUNBOOK.md](/Users/ranmor/Documents/FigDex%20Codex/docs/OPERATIONS_RUNBOOK.md)
   Practical operational guidance for resets, backfills, load checks, and production verification.
