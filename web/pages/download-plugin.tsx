@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
-import { Avatar, Box, Button, Card, CardContent, Chip, Container, Stack, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, Chip, Container, Stack, Typography } from '@mui/material';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import PublicSiteHeader from '../components/PublicSiteHeader';
 import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
   FIGDEX_CATEGORY_STATEMENT,
@@ -14,15 +12,6 @@ import {
 } from '../lib/marketing-messaging';
 
 export default function DownloadPluginPage() {
-  const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const userData = localStorage.getItem('figma_web_user');
-    setIsLoggedIn(Boolean(userData));
-  }, []);
-
   return (
     <>
       <Head>
@@ -37,110 +26,8 @@ export default function DownloadPluginPage() {
           py: { xs: 3.5, md: 4 },
         }}
       >
+        <PublicSiteHeader activeNav="plugin" />
         <Container maxWidth="lg">
-          <Box
-            sx={{
-              pb: { xs: 4, md: 5 },
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 3,
-            }}
-          >
-            <Box sx={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                  letterSpacing: 1.5,
-                  color: '#1a1a1a',
-                  fontSize: '1.25rem',
-                }}
-              >
-                FIGDEX
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Button
-                variant="text"
-                sx={{
-                  color: '#1a1a1a',
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  fontSize: '0.95rem',
-                  '&:hover': { bgcolor: '#eef2ff' },
-                }}
-                onClick={() => router.push('/pricing')}
-              >
-                Pricing
-              </Button>
-              <Button
-                variant="text"
-                sx={{
-                  color: '#1a1a1a',
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  fontSize: '0.95rem',
-                  '&:hover': { bgcolor: '#eef2ff' },
-                }}
-                onClick={() => router.push('/download-plugin')}
-              >
-                Plugin
-              </Button>
-              {isLoggedIn ? (
-                <Button
-                  variant="contained"
-                  startIcon={
-                    <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.18)', width: 22, height: 22 }}>
-                      <AccountCircleIcon sx={{ fontSize: 16 }} />
-                    </Avatar>
-                  }
-                  sx={{
-                    bgcolor: '#111827',
-                    color: '#fff',
-                    textTransform: 'none',
-                    borderRadius: 999,
-                    px: 2.25,
-                    '&:hover': { bgcolor: '#1f2937' },
-                  }}
-                  onClick={() => router.push('/gallery')}
-                >
-                  My FigDex
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="text"
-                    sx={{
-                      color: '#1a1a1a',
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      fontSize: '0.95rem',
-                      '&:hover': { bgcolor: '#eef2ff' },
-                    }}
-                    onClick={() => router.push('/login')}
-                  >
-                    Login
-                  </Button>
-                  <Button
-                    variant="contained"
-                    sx={{
-                      bgcolor: '#111827',
-                      color: '#fff',
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      borderRadius: 999,
-                      px: 2.5,
-                      '&:hover': { bgcolor: '#1f2937' },
-                    }}
-                    onClick={() => router.push('/register')}
-                  >
-                    Start Free
-                  </Button>
-                </>
-              )}
-            </Stack>
-          </Box>
 
           <Stack spacing={4} sx={{ maxWidth: 960, mx: 'auto', pb: { xs: 3, md: 6 } }}>
             <Box sx={{ textAlign: 'center' }}>

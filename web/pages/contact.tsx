@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
@@ -9,28 +9,13 @@ import {
   Divider,
   TextField,
   Alert,
-  CircularProgress,
-  IconButton,
-  Avatar,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText
+  CircularProgress
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
   Email as EmailIcon,
-  Send as SendIcon,
-  AccountCircle as AccountCircleIcon,
-  Search as SearchIcon,
-  Storage as StorageIcon,
-  Person as PersonIcon,
-  Api as ApiIcon,
-  ContentCopy as ContentCopyIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
-  FolderOpen as FolderOpenIcon
+  Send as SendIcon
 } from '@mui/icons-material';
+import PublicSiteHeader from '../components/PublicSiteHeader';
 
 const ContactPage = () => {
   const router = useRouter();
@@ -43,86 +28,6 @@ const ContactPage = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const checkLogin = () => {
-      if (typeof window !== 'undefined') {
-        const userData = localStorage.getItem('figma_web_user');
-        if (userData) {
-          try {
-            const user = JSON.parse(userData);
-            setIsLoggedIn(true);
-            const adminEmails = ['ranmor01@gmail.com'];
-            setIsAdmin(adminEmails.includes(user.email));
-          } catch {
-            setIsLoggedIn(false);
-          }
-        }
-      }
-    };
-    checkLogin();
-  }, []);
-
-  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserMenuAnchor(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('figma_web_user');
-    setIsLoggedIn(false);
-    setIsAdmin(false);
-    handleUserMenuClose();
-    router.push('/');
-  };
-
-  const handleCopyApiKey = async () => {
-    if (typeof window === 'undefined') return;
-    const userData = localStorage.getItem('figma_web_user');
-    if (!userData) {
-      alert('No user found');
-      return;
-    }
-    try {
-      const user = JSON.parse(userData);
-      if (user && user.api_key) {
-        try {
-          await navigator.clipboard.writeText(user.api_key);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          alert('API Key copied to clipboard!');
-        } catch (err) {
-          console.error('Failed to copy API key:', err);
-          const textArea = document.createElement('textarea');
-          textArea.value = user.api_key;
-          document.body.appendChild(textArea);
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            alert('API Key copied to clipboard!');
-          } catch (fallbackErr) {
-            console.error('Fallback copy failed:', fallbackErr);
-            alert('Failed to copy API key');
-          }
-          document.body.removeChild(textArea);
-        }
-      } else {
-        alert('No API key found for this user');
-      }
-    } catch (err) {
-      console.error('Failed to parse user data:', err);
-      alert('Failed to copy API key');
-    }
-  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -161,129 +66,7 @@ const ContactPage = () => {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#FFFFFF' }}>
-      {/* Header */}
-      <Container maxWidth="lg">
-        <Box sx={{ py: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 300,
-              letterSpacing: 3,
-              color: '#1a1a1a',
-              fontSize: '1.5rem',
-              cursor: 'pointer'
-            }}
-            onClick={() => router.push('/')}
-          >
-            FIGDEX
-          </Typography>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              fontWeight: 300,
-              color: '#1a1a1a',
-              fontSize: '1.25rem',
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)'
-            }}
-          >
-            Contact Us
-          </Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="text"
-              startIcon={<ArrowBackIcon />}
-              sx={{ 
-                color: '#1a1a1a',
-                fontWeight: 400,
-                textTransform: 'none',
-                fontSize: '0.95rem',
-                '&:hover': { 
-                  bgcolor: '#f5f5f5'
-                }
-              }}
-              onClick={() => router.back()}
-            >
-              Back
-            </Button>
-            {isLoggedIn && (
-              <IconButton
-                onClick={handleUserMenuOpen}
-                sx={{ 
-                  bgcolor: 'transparent',
-                  '&:hover': { bgcolor: '#f5f5f5' }
-                }}
-              >
-                <Avatar sx={{ bgcolor: '#667eea', width: 32, height: 32 }}>
-                  <AccountCircleIcon />
-                </Avatar>
-              </IconButton>
-            )}
-            <Menu
-              anchorEl={userMenuAnchor}
-              open={Boolean(userMenuAnchor)}
-              onClose={handleUserMenuClose}
-              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-              sx={{ mt: 1 }}
-            >
-              {isAdmin && (
-                <MenuItem onClick={() => { router.push('/admin'); handleUserMenuClose(); }}>
-                  <ListItemIcon>
-                    <SettingsIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Admin Panel</ListItemText>
-                </MenuItem>
-              )}
-              <MenuItem onClick={() => { router.push('/gallery'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <SearchIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>My FigDex</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/index-management'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <StorageIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Index Management</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/projects-management'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <FolderOpenIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Projects Management</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <PersonIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Account Settings</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { router.push('/api-index'); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ApiIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Figma API Integration</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={() => { handleCopyApiKey(); handleUserMenuClose(); }}>
-                <ListItemIcon>
-                  <ContentCopyIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
-              </MenuItem>
-              <Divider />
-              <MenuItem onClick={handleLogout}>
-                <ListItemIcon>
-                  <LogoutIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Logout</ListItemText>
-              </MenuItem>
-            </Menu>
-          </Stack>
-        </Box>
-      </Container>
+      <PublicSiteHeader />
 
       {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 }, pb: 12 }}>
@@ -534,4 +317,3 @@ const ContactPage = () => {
 };
 
 export default ContactPage;
-

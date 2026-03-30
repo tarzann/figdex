@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import LoginDialog from '../components/LoginDialog';
 import RegisterDialog from '../components/RegisterDialog';
+import PublicSiteHeader from '../components/PublicSiteHeader';
 import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
   FIGDEX_IDEAL_CUSTOMER_PROFILE,
@@ -160,206 +161,19 @@ const HomePageV2 = () => {
         backgroundImage: 'radial-gradient(circle at top left, rgba(102,126,234,0.14), transparent 36%), radial-gradient(circle at top right, rgba(17,24,39,0.08), transparent 28%)'
       }}
     >
-      {/* Header */}
-      <Container maxWidth="lg">
-        <Box
-          sx={{
-            py: 3.5,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 3
-          }}
-        >
-          <Box sx={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontWeight: 700,
-                letterSpacing: 1.5,
-                color: '#1a1a1a',
-                fontSize: '1.25rem'
-              }}
-            >
-              FIGDEX
-            </Typography>
-          </Box>
-          <Stack direction="row" spacing={2} alignItems="center">
-            {isLoggedIn ? (
-              <>
-                <Button
-                  variant="text"
-                  sx={{ 
-                    color: '#1a1a1a',
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    '&:hover': { 
-                      bgcolor: '#eef2ff'
-                    }
-                  }}
-                  onClick={() => router.push('/pricing')}
-                >
-                  Pricing
-                </Button>
-                <Button
-                  variant="text"
-                  sx={{ 
-                    color: '#1a1a1a',
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    '&:hover': { 
-                      bgcolor: '#eef2ff'
-                    }
-                  }}
-                  onClick={() => router.push('/download-plugin')}
-                >
-                  Plugin
-                </Button>
-                <IconButton
-                  onClick={handleUserMenuOpen}
-                  sx={{ 
-                    bgcolor: 'transparent',
-                    '&:hover': { bgcolor: '#f5f5f5' }
-                  }}
-                >
-                  <Avatar sx={{ bgcolor: '#667eea', width: 32, height: 32 }}>
-                    <AccountCircleIcon />
-                  </Avatar>
-                </IconButton>
-                <Menu
-                  anchorEl={userMenuAnchor}
-                  open={Boolean(userMenuAnchor)}
-                  onClose={handleUserMenuClose}
-                  transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                  anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                  sx={{ mt: 1 }}
-                >
-                  {isAdmin && (
-                    <MenuItem onClick={() => { router.push('/admin'); handleUserMenuClose(); }}>
-                      <ListItemIcon>
-                        <SettingsIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Admin Panel</ListItemText>
-                    </MenuItem>
-                  )}
-                  <MenuItem onClick={() => { router.push('/gallery'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <SearchIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>My FigDex</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { router.push('/index-management'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <StorageIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Index Management</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { router.push('/projects-management'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <FolderOpenIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Projects Management</ListItemText>
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <PersonIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Account Settings</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { router.push('/api-index'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <ApiIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Figma API Integration</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { handleCopyApiKey(); handleUserMenuClose(); }}>
-                    <ListItemIcon>
-                      <ContentCopyIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem onClick={handleLogout}>
-                    <ListItemIcon>
-                      <LogoutIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Logout</ListItemText>
-                  </MenuItem>
-                </Menu>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="text"
-                  sx={{ 
-                    color: '#1a1a1a',
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    '&:hover': { 
-                      bgcolor: '#eef2ff'
-                    }
-                  }}
-                  onClick={() => router.push('/pricing')}
-                >
-                  Pricing
-                </Button>
-                <Button
-                  variant="text"
-                  sx={{ 
-                    color: '#1a1a1a',
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    '&:hover': { 
-                      bgcolor: '#eef2ff'
-                    }
-                  }}
-                  onClick={() => router.push('/download-plugin')}
-                >
-                  Plugin
-                </Button>
-                <Button
-                  variant="text"
-                  sx={{ 
-                    color: '#1a1a1a',
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    '&:hover': { 
-                      bgcolor: '#eef2ff'
-                    }
-                  }}
-                  onClick={() => setLoginDialogOpen(true)}
-                >
-                  Login
-                </Button>
-                <Button
-                  variant="contained"
-                  sx={{ 
-                    bgcolor: '#111827',
-                    color: '#fff',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    px: 3,
-                    borderRadius: 999,
-                    '&:hover': { 
-                      bgcolor: '#1f2937'
-                    }
-                  }}
-                  onClick={() => setRegisterDialogOpen(true)}
-                >
-                  Start Free
-                </Button>
-              </>
-            )}
-          </Stack>
-        </Box>
-      </Container>
+      <PublicSiteHeader
+        isLoggedIn={isLoggedIn}
+        isAdmin={isAdmin}
+        userMenuAnchor={userMenuAnchor}
+        onUserMenuOpen={handleUserMenuOpen}
+        onUserMenuClose={handleUserMenuClose}
+        onLogout={handleLogout}
+        onCopyApiKey={handleCopyApiKey}
+        copied={copied}
+        onLoginClick={() => setLoginDialogOpen(true)}
+        onRegisterClick={() => setRegisterDialogOpen(true)}
+        showPageVersion={`Page ${PAGE_VERSION}`}
+      />
 
       {/* SECTION 1 — HERO */}
       <Container maxWidth="lg" sx={{ py: { xs: 5, md: 8 } }}>
