@@ -59,9 +59,6 @@ export default function DownloadPluginPage() {
               >
                 FIGDEX
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
-                Plugin download
-              </Typography>
             </Box>
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Button

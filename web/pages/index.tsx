@@ -59,7 +59,6 @@ import {
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.28.0'; // Fix: Email notifications now sent even when job already completed, added comprehensive email logging
-const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' '); // Auto-generated build timestamp
 
 const HomePageV2 = () => {
   const router = useRouter();
@@ -172,7 +171,7 @@ const HomePageV2 = () => {
             gap: 3
           }}
         >
-          <Box>
+          <Box sx={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
             <Typography 
               variant="h4" 
               sx={{ 
@@ -184,18 +183,6 @@ const HomePageV2 = () => {
             >
               FIGDEX
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-              <Chip 
-                label={PAGE_VERSION} 
-                color="primary" 
-                variant="outlined"
-                size="small"
-                sx={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.65rem', height: '20px' }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                {PAGE_VERSION_BUILD_DATE}
-              </Typography>
-            </Stack>
           </Box>
           <Stack direction="row" spacing={2} alignItems="center">
             {isLoggedIn ? (
@@ -422,16 +409,20 @@ const HomePageV2 = () => {
             >
               {FIGDEX_PRIMARY_SUPPORT_MESSAGE}
             </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.5}
+              sx={{ mb: 2, flexWrap: 'wrap', alignItems: { xs: 'stretch', sm: 'center' } }}
+            >
               <Button
                 variant="contained"
                 size="large"
                 sx={{ 
                   bgcolor: '#111827',
                   color: '#fff',
-                  py: 1.5,
-                  px: 5,
-                  fontSize: '1rem',
+                  py: 1.35,
+                  px: 4,
+                  fontSize: '0.98rem',
                   fontWeight: 600,
                   textTransform: 'none',
                   borderRadius: 999,
@@ -451,9 +442,9 @@ const HomePageV2 = () => {
                 sx={{
                   color: '#1a1a1a',
                   borderColor: '#cbd5e1',
-                  py: 1.5,
-                  px: 4,
-                  fontSize: '1rem',
+                  py: 1.35,
+                  px: 3.5,
+                  fontSize: '0.98rem',
                   fontWeight: 600,
                   textTransform: 'none',
                   borderRadius: 999,
@@ -465,28 +456,21 @@ const HomePageV2 = () => {
               >
                 Download Plugin
               </Button>
-              <Button
-                variant="outlined"
-                size="large"
-                startIcon={<PlayIcon />}
-                sx={{ 
-                  color: '#1a1a1a', 
-                  borderColor: '#cbd5e1',
-                  py: 1.5,
-                  px: 5,
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  borderRadius: 999,
-                  '&:hover': { 
-                    borderColor: '#1a1a1a',
-                    bgcolor: '#fff'
-                  }
-                }}
-              >
-                Watch 60-Second Demo
-              </Button>
             </Stack>
+            <Button
+              variant="text"
+              startIcon={<PlayIcon />}
+              sx={{
+                color: '#475467',
+                fontWeight: 600,
+                textTransform: 'none',
+                px: 0,
+                minWidth: 0,
+                '&:hover': { bgcolor: 'transparent', color: '#111827' }
+              }}
+            >
+              Watch 60-second demo
+            </Button>
             <Typography
               variant="body1"
               sx={{
@@ -510,7 +494,7 @@ const HomePageV2 = () => {
               ))}
             </Stack>
             <Typography variant="caption" sx={{ color: '#667085', display: 'block', mt: 1 }}>
-              Public plugin package available now: {FIGDEX_PLUGIN_VERSION}
+              Public plugin package available now: {FIGDEX_PLUGIN_VERSION} • Page {PAGE_VERSION}
             </Typography>
           </Box>
           <Box>

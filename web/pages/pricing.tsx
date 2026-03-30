@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, Container, Card, CardContent, Typography, Button, List, ListItem, ListItemIcon, ListItemText, Chip, Divider, Stack, IconButton, Avatar, Menu, MenuItem, CircularProgress } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
@@ -213,49 +212,50 @@ export default function Pricing({ publicPlans }: PricingProps) {
     >
       {/* Header */}
       <Container maxWidth="lg">
-        <Box sx={{ py: 3.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', gap: 3 }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 700,
-              letterSpacing: 1.5,
-              color: '#1a1a1a',
-              fontSize: '1.25rem',
-              cursor: 'pointer'
-            }}
-            onClick={() => router.push('/')}
-          >
-            FIGDEX
-          </Typography>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              fontWeight: 500,
-              color: '#1a1a1a',
-              fontSize: '1.05rem',
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)'
-            }}
-          >
-            Pricing
-          </Typography>
+        <Box sx={{ py: 3.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
+          <Box sx={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                color: '#1a1a1a',
+                fontSize: '1.25rem'
+              }}
+            >
+              FIGDEX
+            </Typography>
+          </Box>
           <Stack direction="row" spacing={2} alignItems="center">
             <Button
               variant="text"
-              startIcon={<ArrowBackIcon />}
               sx={{ 
                 color: '#1a1a1a',
-                fontWeight: 400,
+                fontWeight: 500,
                 textTransform: 'none',
                 fontSize: '0.95rem',
                 '&:hover': { 
-                  bgcolor: '#f5f5f5'
+                  bgcolor: '#eef2ff'
                 }
               }}
-              onClick={() => router.back()}
+              onClick={() => router.push('/pricing')}
             >
-              Back
+              Pricing
+            </Button>
+            <Button
+              variant="text"
+              sx={{ 
+                color: '#1a1a1a',
+                fontWeight: 500,
+                textTransform: 'none',
+                fontSize: '0.95rem',
+                '&:hover': { 
+                  bgcolor: '#eef2ff'
+                }
+              }}
+              onClick={() => router.push('/download-plugin')}
+            >
+              Plugin
             </Button>
             {isLoggedIn && (
               <IconButton
