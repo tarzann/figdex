@@ -1,158 +1,322 @@
-# דוח מצב קיים – FigDex (פלאגין + מערכת ווב)
+# FigDex Status Report
 
-**As-Is Snapshot רשמי (Founder Decision #2)** — מסמך זה הוא Baseline מחייב להחלטות מוצר ופיתוח.
+**Date:** March 30, 2026  
+**Plugin version:** `v1.32.35`  
+**Web status:** current `main` after normalized-index migration, gallery/search/performance hardening, and pricing/account UX cleanup  
+**Production URL:** [https://www.figdex.com](https://www.figdex.com)
 
-**תאריך:** 31 בינואר 2026 (עדכון: 23 במרץ 2026)  
-**גרסה:** v1.32.02 (פלאגין) / v1.32.02 (ווב)  
-**סטטוס כללי:** ✅ Production Ready  
-**שלב א – משתמש חדש:** ✅ אומת בהצלחה (8 בפברואר 2026) — ראה `docs/STAGE1_NEW_USER_VERIFIED.md`
+## 1. Executive Summary
 
----
+FigDex is now in a much stronger state than it was at the start of this stabilization cycle.
 
-## 1. סקירה כללית
+The system has moved from a heavy legacy JSON-first index model toward a normalized storage model, the plugin flow is materially more stable, the gallery and file-view performance issues were resolved, and the core manual smoke-test flow passed end to end.
 
-FigDex היא פלטפורמה ליצירה, ניהול ושיתוף של אינדקסים חיפושיים לקבצי Figma. המערכת מורכבת משני רכיבים עיקריים:
+At this point:
+- The product is usable for serious founder-led testing.
+- The main bottlenecks that previously caused `429`, `504`, `statement timeout`, and slow gallery file loads have been addressed.
+- The UX across plugin, gallery, landing, pricing, and account is more coherent.
+- The system still contains some legacy compatibility layers, but they are no longer the dominant path.
 
-| רכיב | תיאור | מיקום |
-|------|--------|--------|
-| **פלאגין Figma** | אינדוקס פריימים מתוך קובץ Figma והעלאה למערכת | `FigDex/plugin/` |
-| **אפליקציית ווב** | אחסון, גלריה, חיפוש, ניהול משתמשים ופרויקטים | `FigDex/web/` או `my-figma-gallery/` |
+## 2. Current Product Scope
 
-**כתובת פרודקשן:** https://www.figdex.com
+FigDex currently consists of three connected layers:
 
----
+| Layer | Purpose | Status |
+|------|---------|--------|
+| **Figma Plugin** | Connect file, select pages, export frames, upload and index | Stable for active testing |
+| **Web App** | Gallery, file browsing, search, sharing, account, pricing, admin | Stable for active testing |
+| **Supabase Backend** | Normalized index storage, auth, storage, metadata, sharing, usage | Stable after migration and backfill |
 
-## 2. פלאגין Figma
+## 3. What Was Stabilized
 
-### 2.1 גרסאות וקבצים
+### 3.1 Plugin
 
-| קובץ | גרסה נוכחית | הערות |
-|------|-------------|--------|
-| `plugin/code.js` | **1.32.02** | קוד ריצה (sandbox), בניית אינדקס, העלאה |
-| `plugin/ui.html` | 1.32.02 | ממשק משתמש, לוגין, העלאה |
-| `plugin/manifest.json` | - | API 1.0.0, דומיינים: Supabase, figdex.com |
+The plugin was cleaned up and stabilized across:
+- auth recovery
+- deleted-user handling
+- file linking
+- page selection
+- progress/status feedback
+- upload retry behavior
+- unsupported syntax cleanup for Figma runtime
+- stale local state after server resets
 
-### 2.2 יכולות עיקריות (פעילות)
+Recent UX improvements include:
+- clearer top-level hierarchy
+- improved `Account` card
+- cleaner `Pages` selection controls
+- better indexing status presentation
+- removal of noisy and redundant controls
 
-- **אינדוקס פריימים:** איסוף FRAME (כולל בתוך SECTION), סינון `[NO_INDEX]`
-- **טקסט לחיפוש:** קריאת `__FRAME_TEXTS__` מפריימי תמונה, יצירת searchTokens
-- **העלאה:** תמונות ל-Supabase Storage (signed URLs), מניפסט ל-`/api/upload-index-v2`
-- **אימות:** Supabase Auth (session), שמירת tokens בעמוד FigDex עם **הצפנה AES-256-GCM**
-- **התחברות ווב:** לוגין דרך iframe ל־www.figdex.com, API Key validation
-- **הגדרות:** שמירת איכות תמונה ובחירת עמודים ב-pluginData (עמוד FigDex)
-- **הדרת עמודים:** "Exclude from index" בתפריט הקשר, סימון ויזואלי, הוצאה באינדוקס הבא
+Plugin code:
+- [plugin/code.js](/Users/ranmor/Documents/FigDex%20Codex/plugin/code.js)
+- [plugin/ui.html](/Users/ranmor/Documents/FigDex%20Codex/plugin/ui.html)
 
-### 2.3 דומיינים (manifest)
+### 3.2 Web App
 
-- `https://txbraavvjiriwfdlmcvc.supabase.co` – Supabase
-- `https://www.figdex.com`, `https://figdex.com` – שרת FigDex
-- Dev: `http://localhost:3003`, `http://localhost:3004`
+The web app received major improvements in:
+- gallery hierarchy
+- file view structure
+- share flow UX
+- account usage UX
+- landing page clarity
+- pricing page clarity
+- admin user/index views
 
-### 2.4 זרימת עבודה (תמצית)
+Key files:
+- [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
+- [web/pages/index.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/index.tsx)
+- [web/pages/pricing.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/pricing.tsx)
+- [web/pages/account.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/account.tsx)
 
-1. משתמש בוחר עמודים (ובהגדרות – איכות תמונה).
-2. פלאגין בונה JSON אינדקס (פריימים, מטא-דאטה, טקסטים).
-3. תמונות מועלות ל-Supabase דרך `/api/storage/signed-upload`.
-4. מניפסט נשלח ל־`/api/upload-index-v2` (או fallback ל־`/api/upload-index`).
+### 3.3 Backend / DB
 
----
+The most important architectural change was the move to normalized index storage:
 
-## 3. מערכת הווב
+- `indexed_files`
+- `indexed_pages`
+- `indexed_frames`
+- `indexed_owner_usage`
 
-### 3.1 מקורות קוד
+This replaced the previous over-reliance on `index_files.index_data` as the operational source of truth.
 
-יש שני מקורות אפשריים לאפליקציית הווב:
+Reference docs and SQL:
+- [docs/NORMALIZED_INDEX_ARCHITECTURE.md](/Users/ranmor/Documents/FigDex%20Codex/docs/NORMALIZED_INDEX_ARCHITECTURE.md)
+- [web/sql/create_normalized_index_tables.sql](/Users/ranmor/Documents/FigDex%20Codex/web/sql/create_normalized_index_tables.sql)
+- [web/sql/backfill_normalized_index_from_index_files.sql](/Users/ranmor/Documents/FigDex%20Codex/web/sql/backfill_normalized_index_from_index_files.sql)
 
-| מיקום | הערות |
-|--------|--------|
-| **FigDex/web/** | גרסה מסונכרנת עם פלאגין FigDex, כולל releases |
-| **my-figma-gallery/** | פרויקט Next.js נפרד (frames-index-platform-GPT), תיעוד FEATURES_STATUS מפורט |
+## 4. System Architecture Status
 
-הפלאגין מתחבר ל־**www.figdex.com** – יש להניח שפרודקשן מועלה מ-FigDex/web או מ־my-figma-gallery (לפי הגדרות ה-deploy).
+### 4.1 New Source of Truth
 
-### 3.2 סטק טכנולוגי
+Operationally, the system should now be thought of as:
 
-- **Frontend:** Next.js 15.5.9, React 19.1.0, Material-UI 7.2.0, Tailwind 4
-- **Backend:** Next.js API Routes (Serverless)
-- **DB:** Supabase (PostgreSQL), RLS
-- **Storage:** Supabase Storage
-- **Hosting:** Vercel (לפי תיעוד)
-- **Auth:** Supabase Auth (OAuth + Email/Password)
-- **Email:** Resend
-- **תשלומים:** Paddle JS + Stripe בפרויקט (לפי package.json) – סטטוס באינטגרציה בפועל ראה FEATURES_STATUS
+- `indexed_files` = logical file
+- `indexed_pages` = indexed page summary
+- `indexed_frames` = searchable/displayable frame rows
+- `indexed_owner_usage` = precomputed usage summary
 
-### 3.3 גרסאות API ו־Pages (מתוך FigDex)
+### 4.2 Legacy Compatibility
 
-| רכיב | גרסה | קובץ/עמוד |
-|------|--------|-----------|
-| API Upload | v1.30.40 | `pages/api/upload-index-v2.ts` |
-| Gallery | v1.30.24 | `pages/gallery.tsx` |
-| Index Management | v1.30.28 | `pages/index-management.tsx` |
+`index_files` still exists and is still used in some compatibility paths, but it should no longer be treated as the primary product model.
 
-### 3.4 עמודים ו־API עיקריים
+Current reality:
+- normalized write paths are active
+- normalized read paths are active in major flows
+- legacy fallback still exists in some routes
+- the platform is in late migration, not full deletion
 
-**עמודים:**  
-`index`, `home`, `login`, `register`, `account`, `gallery`, `index-management`, `projects`, `projects-management`, `api-index` (Figma API), `pricing`, `help`, `contact`, `settings`, `share/[token]`, `u/[slug]`, `admin/*` (משתמשים, אינדקסים, jobs, analytics, addons, וכו').
+### 4.3 Important Schema Note
 
-**API (דוגמאות):**  
-`upload-index`, `upload-index-v2`, `storage/signed-upload`, `validate-api-key`, `account`, `get-indices`, `user/custom-tags`, `process-index-job`, `get-job-status`, ועוד כ־84 routes ב־`pages/api/`.
+`indexed_files` uses `total_frames`, not `frame_count`.
 
-### 3.5 תכונות ווב – סיכום (לפי FEATURES_STATUS)
+Any future work that assumes `indexed_files.frame_count` is incorrect and should use:
+- `indexed_files.total_frames`
 
-- **אימות:** Google OAuth, Email/Password, שחזור סיסמה ✅  
-- **אינדקסים:** העלאה מפלאגין, Figma API (create-index-from-figma, process-index-job), Jobs ברקע, התקדמות, Saved connections ✅  
-- **גלריה:** Masonry, מודל תמונה, lazy loading, שיתוף (share links), עמודים ציבוריים ✅  
-- **חיפוש:** טקסט, סינון לפי קובץ/תגיות/מועדפים ✅  
-- **פרויקטים:** CRUD, אנשים, סטטוס, לינקים ל-Figma/Jira ✅  
-- **תכניות וקרדיטים:** Free/Pro/Team/Unlimited, קרדיטים חודשיים, היסטוריית עסקאות, אדמין ✅  
-- **אדמין:** משתמשים, אינדקסים, Jobs, אנליטיקה, Add-ons ✅  
-- **חסר/חלקי:** תשלומים מלאים, ייצוא אינדקס, Team sharing, 2FA, Webhooks, PWA, i18n – רשימה מפורטת ב־FEATURES_STATUS.md
+## 5. Performance Status
 
----
+### 5.1 Problem We Had
 
-## 4. חיבור פלאגין ↔ ווב
+The major production bottleneck moved into:
+- [web/pages/api/file-index-view.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/file-index-view.ts)
 
-| פעולה | endpoint / יעד |
-|--------|-----------------|
-| לוגין | iframe → https://www.figdex.com/login |
-| אימות API Key | GET/POST https://www.figdex.com/api/validate-api-key |
-| פרטי חשבון | https://www.figdex.com/api/account |
-| רשימת אינדקסים | https://www.figdex.com/api/get-indices |
-| העלאת תמונות | https://www.figdex.com/api/storage/signed-upload |
-| העלאת אינדקס (מניפסט) | https://www.figdex.com/api/upload-index-v2 (מועדף), /api/upload-index (fallback) |
-| תגיות מותאמות | https://www.figdex.com/api/user/custom-tags |
+Specifically:
+- `mode=page`
+- `mode=search`
 
-הפלאגין שומר Supabase tokens (מוצפנים) ב-pluginData של עמוד FigDex ומשתמש בהם לסשן.
+The problem was caused by:
+- heavy payloads
+- on-request thumbnail generation
+- returning large `data:image/...` blobs in hot request paths
 
----
+### 5.2 What Was Fixed
 
-## 5. מסד נתונים ואחסון
+We fixed this by:
+- removing thumbnail generation from live request handling
+- removing `frame_payload` from the hot path
+- removing heavy `image_url` blobs from the hot path
+- backfilling missing `thumb_url` values in `indexed_frames`
 
-- **Supabase Project:** `txbraavvjiriwfdlmcvc.supabase.co`
-- **טבלאות (דוגמאות):** users, saved_connections, saved_indices, index_files, index_jobs, index_archives, projects, shared_views, credits, addon_packages, וכו' – רשימה מלאה ב־`sql/` ו־docs
-- **Migrations:** קבצי SQL ב־`web/sql/` (או `my-figma-gallery/sql/`)
+### 5.3 Production Load Test Result
 
----
+Production smoke-load test after the fixes, `12` concurrent users for `30s`:
 
-## 6. סיכום סטטוס
+| Endpoint | p50 | p95 | Result |
+|---------|-----|-----|--------|
+| `get-indices` | ~359ms | ~1625ms | Stable |
+| `file-summary` | ~292ms | ~1108ms | Stable |
+| `file-page` | ~397ms | ~1119ms | Stable |
+| `file-search` | ~351ms | ~509ms | Stable |
+| `user-limits` | ~554ms | ~1405ms | Stable |
+| `public-share` | ~83ms | ~148ms | Stable |
 
-| תחום | סטטוס | הערות |
-|------|--------|--------|
-| פלאגין | ✅ פעיל | v1.30.77, הצפנה, הדרת עמודים, העלאה v2 |
-| ווב – ליבה | ✅ פעיל | Auth, גלריה, אינדקסים, פרויקטים, אדמין |
-| חיבור פלאגין–ווב | ✅ פעיל | figdex.com, upload-index-v2, signed-upload |
-| DB ו-Storage | ✅ Supabase | Production |
-| תשלומים / Monetization | ⚠️ חלקי | Paddle/Stripe בפרויקט, אינטגרציה מלאה חסרה (לפי FEATURES_STATUS) |
-| תיעוד | ✅ קיים | VERSION.md, CHANGELOG, FEATURES_STATUS, SPECIFICATION, INSTALLATION |
+This is a major improvement over the earlier state where:
+- `file-page` was around `20s+`
+- `file-search` was around `12s+` and timing out
+- Supabase probes degraded dramatically under load
 
----
+### 5.4 Thumbnail Backfill Status
 
-## 7. מסמכים רלוונטיים
+We verified live data in Supabase:
+- `indexed_frames`: `174`
+- missing `thumb_url` before backfill: `174`
+- missing `thumb_url` after backfill: `0`
 
-- **FigDex:** `README.md`, `VERSION.md`, `plugin/CHANGELOG.md`, `plugin/VERSIONS.md`
-- **ווב:** `docs/FEATURES_STATUS.md`, `docs/VERSION.md`, `docs/SPECIFICATION.md`, `docs/INSTALLATION.md`
-- **מפרט תכונות מפורט:** `docs/FEATURES_STATUS.md` (בתוך my-figma-gallery או FigDex/web)
+## 6. Search Status
 
----
+Search behavior was upgraded in multiple stages:
 
-*דוח זה מתאר את המצב הקיים בתאריך 31.01.2026. גרסאות בפועל עשויות להשתנות – מומלץ לבדוק `plugin/code.js` (PLUGIN_VERSION) ו־`web/pages/api/upload-index-v2.ts` (API_VERSION).*
+### 6.1 Partial Matches
+
+Search now supports partial matching instead of effectively behaving like exact matching only.
+
+Examples:
+- `nova` can match `novaPay`
+- partial name/tag/page matches now work
+
+### 6.2 Loose Multi-Term Matching
+
+Search now supports a looser multi-term pattern rather than requiring exact contiguous text.
+
+Example:
+- query: `month 1 stro`
+- can match: `month 1 starting strong`
+
+This was implemented both:
+- in the server path
+- and in the local gallery-side filtering layer
+
+Relevant files:
+- [web/pages/api/file-index-view.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/file-index-view.ts)
+- [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
+
+## 7. UX / Product Decisions Made
+
+### 7.1 Credits Removed from Primary UX
+
+Credits were intentionally removed from the main user-facing pricing model for now.
+
+Reason:
+- they made the pricing and upgrade story harder to explain
+- they were not central to the current product value
+- files / frames / plans are a clearer commercial model at this stage
+
+### 7.2 Current Commercial UX Model
+
+The product now emphasizes:
+- plan
+- file quota
+- frame quota
+- fair-use protection
+
+### 7.3 Fair Use / Abuse Protection
+
+We introduced operational protection instead of user-facing credits:
+- cooldown only after repeated rapid re-indexing
+- override flag for specific users
+
+User override field:
+- `bypass_indexing_limits`
+
+This allows specific internal/test users to bypass:
+- cooldown
+- indexing fair-use limits
+
+## 8. Admin / Operations Status
+
+### 8.1 Admin Dashboard
+
+Admin surfaces were corrected to use logical index counts rather than raw legacy row counts.
+
+This includes:
+- dashboard index totals
+- index management grouping
+- user usage visibility
+
+### 8.2 User Management
+
+The admin user view now shows:
+- plan
+- file usage
+- frame usage
+- reset indices action
+- bypass indexing limits toggle
+
+### 8.3 Reset Behavior
+
+User reset now:
+- clears indices without deleting the user
+- preserves plan
+- refreshes admin state more correctly
+
+## 9. Manual Smoke-Test Status
+
+The following manual smoke tests were reported as passing:
+
+1. new indexing
+2. heavy indexing
+3. gallery lobby
+4. file open and search
+5. sharing
+6. user reset
+7. user usage (`Files / Frames`)
+
+This is important because the system is not only passing builds and DB checks; it was also validated in actual product flow testing.
+
+Related checklist:
+- [docs/FLOW_TESTING_CHECKLIST.md](/Users/ranmor/Documents/FigDex%20Codex/docs/FLOW_TESTING_CHECKLIST.md)
+
+## 10. Known Remaining Technical Reality
+
+The system is strong, but not “finished”.
+
+Known remaining reality:
+- some legacy fallback routes still exist
+- `index_files` is still present and still used in compatibility paths
+- some older admin/debug/payment surfaces may still need cleanup
+- there is still room for more backend hardening and observability
+
+This is not a blocker for founder-led testing, but it is still worth tracking.
+
+## 11. Recommended Next Priorities
+
+### 11.1 Short-Term
+
+Recommended near-term work:
+- continue reducing any remaining dependency on `index_files`
+- strengthen observability around indexing and file-view routes
+- formalize load-test tooling
+- continue UX polish only where it has clear product value
+
+### 11.2 Product / Go-To-Market
+
+The most useful product-facing next steps are likely:
+- onboarding clarity
+- upgrade flow clarity
+- trial / plan behavior
+- better founder-facing monitoring of usage and failures
+
+## 12. Operational Notes
+
+There is currently an uncommitted local load-test harness directory:
+- [web/scripts](/Users/ranmor/Documents/FigDex%20Codex/web/scripts)
+
+This was used for production smoke-load testing during stabilization.
+
+A decision is still needed:
+- keep it as an official internal tool
+- or remove / ignore it
+
+## 13. Bottom Line
+
+FigDex is now in a materially better place:
+- faster
+- cleaner
+- more coherent
+- more testable
+- and much less fragile than before
+
+It is now reasonable to treat the system as:
+- stable enough for continued founder-led product validation
+- not yet final in architecture cleanup
+- but clearly past the earlier “core instability” phase
