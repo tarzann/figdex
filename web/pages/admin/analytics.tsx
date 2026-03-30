@@ -12,6 +12,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { ArrowBack, People, Description, TrendingUp, Storage } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 interface AnalyticsData {
   totalUsers: number;
@@ -42,16 +43,12 @@ export default function AdminAnalytics() {
 
   const checkAdminAndLoadAnalytics = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      const adminEmails = ['ranmor01@gmail.com'];
-      
-      if (adminEmails.includes(user.email)) {
+      if (access.ok) {
         setIsAdmin(true);
         await loadAnalytics();
       } else {
@@ -250,5 +247,4 @@ export default function AdminAnalytics() {
     </Container>
   );
 }
-
 

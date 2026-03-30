@@ -35,6 +35,7 @@ import {
   HourglassEmpty,
   Info,
 } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 interface Job {
   id: string;
@@ -101,16 +102,12 @@ export default function AdminJobs() {
 
   const checkAdminStatus = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      const adminEmails = ['ranmor01@gmail.com'];
-      
-      if (adminEmails.includes(user.email)) {
+      if (access.ok) {
         setIsAdmin(true);
         loadJobs();
       } else {

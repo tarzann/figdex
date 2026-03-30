@@ -28,6 +28,7 @@ import {
   Tooltip
 } from '@mui/material';
 import { Edit, Delete, ArrowBack, DeleteForever, RestartAlt } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 // Version tracking - Update this number for each fix/change
 const PAGE_VERSION = 'v1.32.05'; // Show plan usage in admin users table
@@ -94,16 +95,12 @@ export default function AdminUsers() {
 
   const checkAdminAndLoadUsers = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      const adminEmails = ['ranmor01@gmail.com'];
-      
-      if (adminEmails.includes(user.email)) {
+      if (access.ok) {
         setIsAdmin(true);
         await loadUsers();
       } else {

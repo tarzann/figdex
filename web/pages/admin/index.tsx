@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Container, Typography, Card, Paper, CircularProgress, Alert, Button } from '@mui/material';
 import { People, Description, TrendingUp, Settings, Home, History, AddBox, Notifications, Route } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -19,25 +20,15 @@ export default function AdminDashboard() {
 
   const checkAdminStatus = async () => {
     try {
-      // Check if user is logged in
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      
-      // For now, check if user email matches admin email
-      // This is a temporary solution until we implement proper session handling
-      const adminEmails = ['ranmor01@gmail.com'];
-      
-      if (adminEmails.includes(user.email)) {
+      if (access.ok) {
         setIsAdmin(true);
-        // Load stats from API
         loadStats();
       } else {
-        console.log('User is not admin:', user.email);
         router.push('/');
       }
     } catch (error) {

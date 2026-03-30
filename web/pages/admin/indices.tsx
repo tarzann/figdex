@@ -27,6 +27,7 @@ import {
   Chip
 } from '@mui/material';
 import { Delete, ArrowBack, Search, Build, Warning, History, Restore } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 interface IndexFile {
   id: string;
@@ -129,18 +130,14 @@ export default function AdminIndicesV2() {
 
   const checkAdminAndLoadIndices = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      const adminEmails = ['ranmor01@gmail.com'];
-      
-      if (adminEmails.includes(user.email)) {
+      if (access.ok) {
         setIsAdmin(true);
-        setUserEmail(user.email);
+        setUserEmail(access.user.email || '');
         await loadIndices();
       } else {
         router.push('/');

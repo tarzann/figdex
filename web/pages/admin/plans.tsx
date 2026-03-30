@@ -28,6 +28,7 @@ import {
 } from '@mui/material';
 import { Edit, ArrowBack, Close, Check } from '@mui/icons-material';
 import { formatBytes } from '../../lib/plans';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 const PAGE_VERSION = 'v1.0.0';
 const PAGE_VERSION_BUILD_DATE = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -99,16 +100,14 @@ export default function AdminPlans() {
 
   const checkAdminAndLoadPlans = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-      const user = JSON.parse(userData);
-      const adminEmails = ['ranmor01@gmail.com'];
-      if (adminEmails.includes(user.email)) {
+      if (access.ok && access.apiKey) {
         setIsAdmin(true);
-        await loadPlans(user.api_key);
+        await loadPlans(access.apiKey);
       } else {
         router.push('/');
       }

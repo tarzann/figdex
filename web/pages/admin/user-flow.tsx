@@ -30,6 +30,7 @@ import {
   Shield,
   TaskAlt,
 } from '@mui/icons-material';
+import { requireAdminClientAccess } from '../../lib/admin-client';
 
 type FlowStep = {
   key: string;
@@ -86,8 +87,6 @@ type FlowResponse = {
   }>;
 };
 
-const ADMIN_EMAILS = ['ranmor01@gmail.com'];
-
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleString('en-US', {
     month: 'short',
@@ -124,14 +123,12 @@ export default function AdminUserFlowPage() {
 
   const checkAdminStatus = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      if (!userData) {
+      const access = await requireAdminClientAccess();
+      if (!access.user) {
         router.push('/login');
         return;
       }
-
-      const user = JSON.parse(userData);
-      if (!ADMIN_EMAILS.includes(user.email)) {
+      if (!access.ok) {
         router.push('/');
         return;
       }
