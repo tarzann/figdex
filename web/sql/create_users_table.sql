@@ -25,12 +25,18 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Users can only see their own data
 CREATE POLICY "Users can view own data" ON users
   TO authenticated
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT USING (
+    auth.uid() = id
+    AND COALESCE((auth.jwt() ->> 'is_anonymous')::boolean, false) = false
+  );
 
 -- Users can update their own data
 CREATE POLICY "Users can update own data" ON users
   TO authenticated
-  FOR UPDATE USING (auth.uid() = id);
+  FOR UPDATE USING (
+    auth.uid() = id
+    AND COALESCE((auth.jwt() ->> 'is_anonymous')::boolean, false) = false
+  );
 
 -- Service role can insert/update/delete (for registration)
 CREATE POLICY "Service role can manage users" ON users
