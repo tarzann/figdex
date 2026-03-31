@@ -256,7 +256,7 @@ export default function Login() {
                     Sign in to continue with FigDex
                   </Typography>
                   <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7 }}>
-                    Continue to your searchable design library, or connect your account to the plugin and create your first index.
+                    Open your library, reconnect the plugin, or finish setting up your first indexed Figma file.
                   </Typography>
                 </Box>
 

@@ -142,7 +142,7 @@ export default function RegisterPage() {
                     Create your FigDex account
                   </Typography>
                   <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7 }}>
-                    Install the plugin, connect your account, and turn your first large Figma file into a searchable design library.
+                    Create your account, connect the plugin, and turn your first large Figma file into a searchable library your team can use.
                   </Typography>
                 </Box>
 

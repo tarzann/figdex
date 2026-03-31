@@ -3,9 +3,11 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { Alert, Box, Card, CardContent, Chip, Container, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, Container, Stack, Typography } from '@mui/material';
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import PublicSiteLayout from '../components/PublicSiteLayout';
-import { PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
+import { PUBLIC_SITE_PRIMARY_BUTTON_SX, PUBLIC_SITE_SECONDARY_BUTTON_SX, PUBLIC_SITE_SURFACE_SX } from '../lib/public-site-styles';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -149,10 +151,10 @@ export default function PluginConnect() {
                 sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
               />
               <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827', mb: 1.5 }}>
-                Connect FigDex to the plugin
+                Connect your plugin and return to Figma
               </Typography>
               <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7, mb: 3 }}>
-                We&apos;re verifying your session and connecting your account so you can return to Figma and continue indexing.
+                We&apos;re verifying your session so the plugin can keep indexing into your FigDex library without asking you to sign in again.
               </Typography>
 
               {status === 'checking' ? <Typography>Checking your session...</Typography> : null}
@@ -163,15 +165,47 @@ export default function PluginConnect() {
                   <Alert severity="success" sx={{ textAlign: 'left', mb: 2 }}>
                     {message}
                   </Alert>
-                  <Typography component={Link} href="/gallery" sx={{ color: '#3538cd', fontWeight: 700, textDecoration: 'none' }}>
-                    Open My FigDex
-                  </Typography>
+                  <Stack spacing={1.5} alignItems="center">
+                    <Typography variant="body2" sx={{ color: '#667085', maxWidth: 420 }}>
+                      Your account is now connected. Go back to the plugin to finish your first index, or open your library in the web app.
+                    </Typography>
+                    <Button
+                      component={Link}
+                      href="/gallery"
+                      variant="contained"
+                      endIcon={<ArrowForwardRoundedIcon />}
+                      sx={{ ...PUBLIC_SITE_PRIMARY_BUTTON_SX, px: 2.5 }}
+                    >
+                      Open My FigDex
+                    </Button>
+                  </Stack>
                 </Box>
               ) : null}
               {status === 'error' ? (
-                <Alert severity="error" sx={{ textAlign: 'left' }}>
-                  {message}
-                </Alert>
+                <Stack spacing={2}>
+                  <Alert severity="error" sx={{ textAlign: 'left' }}>
+                    {message}
+                  </Alert>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center">
+                    <Button
+                      component={Link}
+                      href="/download-plugin"
+                      variant="outlined"
+                      startIcon={<ExtensionOutlinedIcon />}
+                      sx={{ ...PUBLIC_SITE_SECONDARY_BUTTON_SX }}
+                    >
+                      Open setup guide
+                    </Button>
+                    <Button
+                      component={Link}
+                      href="/login"
+                      variant="contained"
+                      sx={{ ...PUBLIC_SITE_PRIMARY_BUTTON_SX }}
+                    >
+                      Sign in again
+                    </Button>
+                  </Stack>
+                </Stack>
               ) : null}
             </CardContent>
           </Card>

@@ -28,7 +28,7 @@ export default function DownloadPluginPage() {
                 sx={{ mb: 2, bgcolor: '#eef4ff', color: '#1d4ed8', fontWeight: 700 }}
               />
               <Typography variant="h2" sx={{ fontWeight: 800, color: '#111827', fontSize: { xs: '2.2rem', md: '3.4rem' }, mb: 2 }}>
-                Install the FigDex plugin and create your first searchable design library
+                Install the FigDex plugin and create your first library in minutes
               </Typography>
               <Typography variant="h6" sx={{ color: '#4b5563', fontWeight: 400, maxWidth: 760, mx: 'auto', lineHeight: 1.6 }}>
                 {FIGDEX_CATEGORY_STATEMENT} Download the plugin without signing up, install it in Figma, then connect your account or continue as guest.
@@ -68,9 +68,9 @@ export default function DownloadPluginPage() {
 
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
                     {[
-                      ['1', 'Download and install', 'Save the plugin package locally, extract it, and import it into Figma from `manifest.json`.'],
-                      ['2', 'Connect or continue as guest', 'Open the plugin and choose whether to connect your FigDex account or start with the guest flow.'],
-                      ['3', 'Create your first index', 'Link a Figma file, index the pages you want, and open the result in FigDex Web.'],
+                      ['1', 'Add the plugin to Figma', 'Download the package, unzip it, and add it to Figma once.'],
+                      ['2', 'Connect or continue as guest', 'Open the plugin and choose whether to connect your FigDex account or start as a guest.'],
+                      ['3', 'Create your first library', 'Link a Figma file, choose the pages you want, and open the result in FigDex Web.'],
                     ].map(([step, title, text]) => (
                       <Box key={step} sx={{ p: 2.5, borderRadius: 4, bgcolor: '#fff', border: '1px solid #e5e7eb' }}>
                         <Chip label={step} size="small" sx={{ mb: 1.5, bgcolor: '#111827', color: '#fff', fontWeight: 700 }} />
@@ -94,7 +94,7 @@ export default function DownloadPluginPage() {
                       endIcon={<ArrowForwardRoundedIcon />}
                       sx={{ textTransform: 'none', fontWeight: 700 }}
                     >
-                      Create a free account
+                      Create a free account before you connect
                     </Button>
                   </Stack>
                 </Stack>

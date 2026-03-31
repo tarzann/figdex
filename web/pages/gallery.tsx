@@ -3411,7 +3411,7 @@ export default function Home() {
               Your gallery is ready for its first indexed file
             </Typography>
             <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.75, maxWidth: 560, mx: 'auto', mb: 3 }}>
-              Install the FigDex plugin, link a Figma file, and create your first index. Once it finishes, your searchable library will appear here.
+              Install the FigDex plugin, link a Figma file, and create your first index. As soon as it finishes, this library becomes the place your team can browse, search, and share.
             </Typography>
 
             <Stack
@@ -3465,7 +3465,7 @@ export default function Home() {
               }}
             >
               {[
-                ['1', 'Install the plugin', 'Download the public package and import it into Figma.'],
+                ['1', 'Install the plugin', 'Download the public package and add it to Figma once.'],
                 ['2', 'Link a file', 'Open the plugin, paste your Figma file link, and load the pages you want.'],
                 ['3', 'Create your first index', 'Choose the pages to include and open the result in FigDex Web.'],
               ].map(([step, title, text]) => (
