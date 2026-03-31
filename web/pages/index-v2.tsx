@@ -171,11 +171,32 @@ const HomePageV2 = () => {
                     </ListItemIcon>
                     <ListItemText>Account Settings</ListItemText>
                   </MenuItem>
-                  <MenuItem onClick={() => { router.push('/api-index'); handleUserMenuClose(); }}>
-                    <ListItemIcon>
+                  <MenuItem
+                    disabled
+                    sx={{
+                      opacity: 1,
+                      '&.Mui-disabled': {
+                        opacity: 1,
+                      },
+                    }}
+                  >
+                    <ListItemIcon sx={{ color: '#98A2B3' }}>
                       <ApiIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText>Figma API Integration</ListItemText>
+                    <ListItemText
+                      primary="Figma API Integration"
+                      primaryTypographyProps={{ sx: { color: '#667085' } }}
+                    />
+                    <Chip
+                      label="Soon"
+                      size="small"
+                      sx={{
+                        height: 22,
+                        fontWeight: 700,
+                        bgcolor: 'rgba(59,130,246,0.1)',
+                        color: '#2563eb',
+                      }}
+                    />
                   </MenuItem>
                   <Divider />
                   <MenuItem onClick={handleLogout}>
