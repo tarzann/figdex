@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Box, Container, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
+import { Box, Typography, Card, CardContent, Button, Stack, TextField, Alert, CircularProgress, Chip } from '@mui/material';
 import { useRouter } from 'next/router';
 import {
-  ArrowBack as ArrowBackIcon,
-  AccountCircle as AccountCircleIcon,
-  Search as SearchIcon,
   Storage as StorageIcon,
-  Person as PersonIcon,
-  Api as ApiIcon,
-  ContentCopy as ContentCopyIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
   FolderOpen as FolderOpenIcon
 } from '@mui/icons-material';
 import UserAppLayout from '../components/UserAppLayout';
+import {
+  PUBLIC_SITE_PRIMARY_BUTTON_SX,
+  PUBLIC_SITE_SECONDARY_BUTTON_SX,
+  PUBLIC_SITE_SURFACE_SX,
+} from '../lib/public-site-styles';
 
 type AccountData = {
   user: { id: string; email: string; name?: string | null; plan?: string | null; apiKeyMasked?: string | null; };
@@ -37,11 +34,8 @@ export default function AccountPage() {
   const [error, setError] = useState<string>('');
   const [apiKey, setApiKey] = useState<string>('');
   const [showKey, setShowKey] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const loadAccount = async () => {
@@ -109,7 +103,6 @@ export default function AccountPage() {
           user: accountJson.user,
           usage: accountJson.usage
         });
-        setIsLoggedIn(true);
         const adminEmails = ['ranmor01@gmail.com'];
         setIsAdmin(adminEmails.includes(accountJson.user.email));
       } catch (e: any) {
@@ -122,63 +115,6 @@ export default function AccountPage() {
 
     loadAccount();
   }, []);
-
-  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserMenuAnchor(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('figma_web_user');
-    setIsLoggedIn(false);
-    setIsAdmin(false);
-    handleUserMenuClose();
-    router.push('/');
-  };
-
-  const handleCopyApiKey = async () => {
-    if (typeof window === 'undefined') return;
-    const userData = localStorage.getItem('figma_web_user');
-    if (!userData) {
-      alert('No user found');
-      return;
-    }
-    try {
-      const user = JSON.parse(userData);
-      if (user && user.api_key) {
-        try {
-          await navigator.clipboard.writeText(user.api_key);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          alert('API Key copied to clipboard!');
-        } catch (err) {
-          console.error('Failed to copy API key:', err);
-          const textArea = document.createElement('textarea');
-          textArea.value = user.api_key;
-          document.body.appendChild(textArea);
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            alert('API Key copied to clipboard!');
-          } catch (fallbackErr) {
-            console.error('Fallback copy failed:', fallbackErr);
-            alert('Failed to copy API key');
-          }
-          document.body.removeChild(textArea);
-        }
-      } else {
-        alert('No API key found for this user');
-      }
-    } catch (err) {
-      console.error('Failed to parse user data:', err);
-      alert('Failed to copy API key');
-    }
-  };
 
   const regenerateKey = async () => {
     if (!apiKey) return;
@@ -218,10 +154,13 @@ export default function AccountPage() {
     }
   };
 
-  const copyKey = () => {
-    navigator.clipboard.writeText(apiKey);
-    console.log('[account] api key copied');
-    alert('Copied!');
+  const copyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(apiKey);
+    } catch (e) {
+      console.error('[account] failed to copy api key', e);
+      alert('Failed to copy API key');
+    }
   };
 
   const getPlanColor = (plan?: string | null) => {
@@ -246,6 +185,12 @@ export default function AccountPage() {
     if (progress >= 90) return '#D92D20';
     if (progress >= 75) return '#F79009';
     return '#1570EF';
+  };
+
+  const ACCOUNT_CARD_SX = {
+    ...PUBLIC_SITE_SURFACE_SX,
+    borderRadius: 4,
+    boxShadow: '0 16px 40px rgba(15,23,42,0.06)',
   };
 
   const renderUsageBar = (current?: number, max?: number | null) => {
@@ -293,43 +238,64 @@ export default function AccountPage() {
         {loading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>}
         {!loading && data && (
           <Stack spacing={3}>
-            <Card>
+            <Card sx={ACCOUNT_CARD_SX}>
               <CardContent>
-                <Typography variant="h6" fontWeight={600}>Profile</Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>Email: {data.user.email}</Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Plan:{' '}
+                <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+                  Profile
+                </Typography>
+                <Typography variant="h5" sx={{ mt: 1, fontWeight: 800, color: '#111827', letterSpacing: '-0.03em' }}>
+                  {data.user.email}
+                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
+                  <Typography variant="body2" sx={{ color: '#667085' }}>
+                    Current plan
+                  </Typography>
                   <Chip
                     size="small"
                     label={(data.user.plan || 'free').toUpperCase()}
                     color={getPlanColor(data.user.plan)}
                   />
-                </Typography>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
-                  <Button variant="contained" onClick={() => router.push('/pricing')}>
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3 }}>
+                  <Button sx={PUBLIC_SITE_PRIMARY_BUTTON_SX} variant="contained" onClick={() => router.push('/pricing')}>
                     {data.user.plan === 'free' ? 'Upgrade to Pro' : 'Manage plan'}
                   </Button>
-                  <Button variant="outlined" onClick={() => router.push('/gallery')}>
+                  <Button sx={PUBLIC_SITE_SECONDARY_BUTTON_SX} variant="outlined" onClick={() => router.push('/gallery')}>
                     Open gallery
                   </Button>
                 </Stack>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card sx={ACCOUNT_CARD_SX}>
               <CardContent>
-                <Typography variant="h6" fontWeight={600}>API Key</Typography>
+                <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+                  API access
+                </Typography>
+                <Typography variant="h5" sx={{ mt: 1, fontWeight: 800, color: '#111827', letterSpacing: '-0.03em' }}>
+                  API Key
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.25, mb: 2.5 }}>
+                  Keep this key private. You only need it for direct API workflows outside the plugin and gallery.
+                </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 1 }}>
                   <TextField
                     fullWidth
                     value={showKey ? apiKey : (data.user.apiKeyMasked || apiKey.slice(0, 8) + '••••••')}
                     InputProps={{ readOnly: true }}
                   />
-                  <Button variant="outlined" onClick={copyKey}>Copy</Button>
-                  <Button variant="outlined" onClick={() => setShowKey(!showKey)}>
+                  <Button sx={PUBLIC_SITE_SECONDARY_BUTTON_SX} variant="outlined" onClick={copyKey}>Copy</Button>
+                  <Button sx={PUBLIC_SITE_SECONDARY_BUTTON_SX} variant="outlined" onClick={() => setShowKey(!showKey)}>
                     {showKey ? 'Hide' : 'Show'}
                   </Button>
-                  <Button variant="contained" color="error" onClick={regenerateKey}>Regenerate</Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={regenerateKey}
+                    sx={{ textTransform: 'none', borderRadius: 999, fontWeight: 700 }}
+                  >
+                    Regenerate
+                  </Button>
                 </Stack>
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                   Regenerating will invalidate the old key (update your plugin settings).
@@ -337,11 +303,18 @@ export default function AccountPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card sx={ACCOUNT_CARD_SX}>
               <CardContent>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
                   <FolderOpenIcon color="primary" />
-                  <Typography variant="h6" fontWeight={600}>Usage</Typography>
+                  <Box>
+                    <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+                      Workspace
+                    </Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', letterSpacing: '-0.03em' }}>
+                      Usage
+                    </Typography>
+                  </Box>
                 </Stack>
                 <Stack spacing={2.5}>
                   <Box>
@@ -363,10 +336,10 @@ export default function AccountPage() {
                     {renderUsageBar(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
                   </Box>
                 </Stack>
-                <Typography variant="body2" sx={{ mt: 2 }}>Indexed files: {data.usage.indices}</Typography>
-                <Typography variant="body2">Storage: {((data.usage.storageBytes || 0) / (1024*1024)).toFixed(2)} MB</Typography>
+                <Typography variant="body2" sx={{ mt: 2, color: '#475467' }}>Indexed files: {data.usage.indices}</Typography>
+                <Typography variant="body2" sx={{ color: '#475467' }}>Storage: {((data.usage.storageBytes || 0) / (1024*1024)).toFixed(2)} MB</Typography>
                 {data.usage.lastUploadedAt && (
-                  <Typography variant="body2">Last upload: {new Date(data.usage.lastUploadedAt).toLocaleString()}</Typography>
+                  <Typography variant="body2" sx={{ color: '#475467' }}>Last upload: {new Date(data.usage.lastUploadedAt).toLocaleString()}</Typography>
                 )}
               </CardContent>
             </Card>

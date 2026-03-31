@@ -7,7 +7,6 @@ import {
   Chip,
   Container,
   Divider,
-  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -19,7 +18,6 @@ import {
   AccountCircle as AccountCircleIcon,
   Api as ApiIcon,
   ArrowBack as ArrowBackIcon,
-  ContentCopy as ContentCopyIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
   Search as SearchIcon,
@@ -48,7 +46,6 @@ export default function UserAppLayout({
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -84,22 +81,6 @@ export default function UserAppLayout({
     setIsAdmin(false);
     handleUserMenuClose();
     router.push('/');
-  };
-
-  const handleCopyApiKey = async () => {
-    if (typeof window === 'undefined') return;
-    const userData = localStorage.getItem('figma_web_user');
-    if (!userData) return;
-    try {
-      const user = JSON.parse(userData);
-      if (!user?.api_key) return;
-      await navigator.clipboard.writeText(user.api_key);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy API key:', error);
-    }
-    handleUserMenuClose();
   };
 
   return (
@@ -230,10 +211,6 @@ export default function UserAppLayout({
                       color: '#2563eb',
                     }}
                   />
-                </MenuItem>
-                <MenuItem onClick={handleCopyApiKey}>
-                  <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
-                  <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogout}>

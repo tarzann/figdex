@@ -1299,45 +1299,6 @@ export default function Home() {
     handleUserMenuClose();
   };
 
-  // Handle copy API key
-  const handleCopyApiKey = async () => {
-    const user = getCurrentUser();
-    console.log('Current user:', user);
-    console.log('User api_key:', user?.api_key);
-    
-    if (user && user.api_key) {
-      try {
-        await navigator.clipboard.writeText(user.api_key);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        console.log('API key copied to clipboard:', user.api_key);
-        alert('API Key copied to clipboard!');
-      } catch (err) {
-        console.error('Failed to copy API key:', err);
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = user.api_key;
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-          document.execCommand('copy');
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          console.log('API key copied using fallback method');
-          alert('API Key copied to clipboard!');
-        } catch (fallbackErr) {
-          console.error('Fallback copy failed:', fallbackErr);
-          alert('Failed to copy API key');
-        }
-        document.body.removeChild(textArea);
-      }
-    } else {
-      console.error('No user or API key found');
-      alert('No API key found. Please make sure you are logged in.');
-    }
-    handleUserMenuClose();
-  };
-
   // Handle settings dialog
   const handleOpenSettings = () => {
     setSettingsDialogOpen(true);
@@ -2868,12 +2829,6 @@ export default function Home() {
                       color: '#2563eb',
                     }}
                   />
-                </MenuItem>
-                <MenuItem onClick={handleCopyApiKey}>
-                  <ListItemIcon>
-                    <ContentCopyIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>{copied ? 'API Key Copied!' : 'Copy API Key'}</ListItemText>
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogout}>
