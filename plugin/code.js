@@ -12,6 +12,25 @@ function debugLog() {
   if (!DEBUG_LOGS) return;
   try { console.log.apply(console, arguments); } catch (e) {}
 }
+function pluginConsoleLog(level, message, meta) {
+  var method = console && typeof console[level] === 'function' ? console[level] : console.log;
+  var prefix = '[FigDex][plugin]';
+  try {
+    if (meta !== undefined) method.call(console, prefix + ' ' + message, meta);
+    else method.call(console, prefix + ' ' + message);
+  } catch (e) {
+    try { console.log(prefix + ' ' + message); } catch (_) {}
+  }
+}
+function pluginTrace(message, meta) {
+  pluginConsoleLog('log', message, meta);
+}
+function pluginWarn(message, meta) {
+  pluginConsoleLog('warn', message, meta);
+}
+function pluginError(message, meta) {
+  pluginConsoleLog('error', message, meta);
+}
 
 try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {}
 setTimeout(() => { try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {} }, 500);
@@ -113,6 +132,11 @@ async function resolveCurrentFileKey() {
     if (liveFileKey !== sessionFileKey) sessionFileKey = liveFileKey;
     await setStored(STORAGE_KEYS.FILE_KEY, liveFileKey);
     await setStored(STORAGE_KEYS.FILE_NAME, figma.root.name || 'Untitled');
+    pluginTrace('Resolved file key automatically', {
+      source: 'auto',
+      hasFileKey: true,
+      fileName: figma.root.name || 'Untitled'
+    });
     return { fileKey: liveFileKey, source: 'auto' };
   }
   var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
@@ -120,8 +144,18 @@ async function resolveCurrentFileKey() {
     var trimmedStoredDocKey = storedDocKey.trim();
     if (trimmedStoredDocKey !== globalFileKey) globalFileKey = trimmedStoredDocKey;
     if (trimmedStoredDocKey !== sessionFileKey) sessionFileKey = trimmedStoredDocKey;
+    pluginTrace('Using saved file key fallback', {
+      source: 'saved',
+      hasFileKey: true,
+      fileName: figma.root.name || 'Untitled'
+    });
     return { fileKey: trimmedStoredDocKey, source: 'saved' };
   }
+  pluginWarn('No file key available for current document', {
+    source: 'none',
+    hasFileKey: false,
+    fileName: figma.root.name || 'Untitled'
+  });
   return { fileKey: '', source: 'none' };
 }
 
@@ -248,6 +282,13 @@ async function postChunkWithRetry(url, requestOptions, meta) {
       }
       var waitMs = getRetryAfterMs(response, attempt);
       var retryStep = 'Retrying part ' + meta.chunkNumber + '/' + meta.totalChunks + ' in ' + Math.ceil(waitMs / 1000) + 's...';
+      pluginWarn('Chunk upload retry scheduled', {
+        chunkNumber: meta.chunkNumber,
+        totalChunks: meta.totalChunks,
+        attempt: attempt,
+        status: response.status,
+        waitMs: waitMs
+      });
       figma.notify(retryStep, { timeout: 1500 });
       figma.ui.postMessage({ type: 'upload-progress', step: retryStep, framesDone: meta.framesDone });
       await logIndexStage(retryStep, {
@@ -262,6 +303,13 @@ async function postChunkWithRetry(url, requestOptions, meta) {
       if (attempt === MAX_CHUNK_UPLOAD_ATTEMPTS) break;
       var networkWaitMs = Math.min(10000, 1200 * Math.pow(2, Math.max(0, attempt - 1)));
       var networkRetryStep = 'Connection issue on part ' + meta.chunkNumber + '/' + meta.totalChunks + '. Retrying...';
+      pluginWarn('Chunk upload hit network issue', {
+        chunkNumber: meta.chunkNumber,
+        totalChunks: meta.totalChunks,
+        attempt: attempt,
+        message: error && error.message ? String(error.message) : 'Network issue',
+        waitMs: networkWaitMs
+      });
       figma.notify(networkRetryStep, { timeout: 1500 });
       figma.ui.postMessage({ type: 'upload-progress', step: networkRetryStep, framesDone: meta.framesDone });
       await logIndexStage(networkRetryStep, {
@@ -485,6 +533,11 @@ async function logIndexStage(step, meta) {
   if (!stage) return;
   if (lastLoggedIndexStage === stage && stage !== 'retrying') return;
   lastLoggedIndexStage = stage;
+  pluginTrace('Index stage: ' + stage, Object.assign({
+    step: step || '',
+    runId: activeIndexRunId || null,
+    fileKeySource: globalFileKeySource || 'none'
+  }, meta || {}));
   await sendPluginTelemetryEvent('index_stage', Object.assign({
     runId: activeIndexRunId,
     stage: stage,
@@ -839,6 +892,14 @@ async function loadUserLimitsToUI(webToken) {
   var resolvedInitialFile = await resolveCurrentFileKey();
   var savedKey = resolvedInitialFile.fileKey;
   globalFileKeySource = resolvedInitialFile.source || 'none';
+  pluginTrace('Plugin loaded', {
+    pluginVersion: PLUGIN_VERSION,
+    documentId: figma.root.id || rootId || '0:0',
+    fileName: figma.root.name || 'Untitled',
+    fileKeySource: globalFileKeySource,
+    hasFileKey: !!savedKey,
+    hasLiveFileKey: !!getLiveFileKey()
+  });
   if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
@@ -926,6 +987,10 @@ figma.ui.onmessage = async (msg) => {
     globalFileKey = msg.fileKey || '';
     sessionFileKey = globalFileKey;
     globalFileKeySource = msg.source || (globalFileKey ? 'manual' : 'none');
+    pluginTrace(globalFileKey ? 'File key saved from UI' : 'File key cleared from UI', {
+      source: globalFileKeySource,
+      hasFileKey: !!globalFileKey
+    });
     await setStored(STORAGE_KEYS.FILE_KEY, globalFileKey);
     await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName != null ? msg.fileName : (figma.root.name || 'Untitled'));
     return;
@@ -933,6 +998,10 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'get-file-key') {
     var resolvedFileKey = await resolveCurrentFileKey();
     globalFileKeySource = resolvedFileKey.source || 'none';
+    pluginTrace('UI requested file key', {
+      source: globalFileKeySource,
+      hasFileKey: !!resolvedFileKey.fileKey
+    });
     figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedFileKey.fileKey || '', source: globalFileKeySource });
     return;
   }
@@ -949,6 +1018,10 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
     var resolvedRefreshFileKey = await resolveCurrentFileKey();
     globalFileKeySource = resolvedRefreshFileKey.source || globalFileKeySource || 'none';
+    pluginTrace('Refreshing pages', {
+      source: globalFileKeySource,
+      hasFileKey: !!resolvedRefreshFileKey.fileKey
+    });
     if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== globalFileKey) {
       globalFileKey = resolvedRefreshFileKey.fileKey;
     }
@@ -1198,6 +1271,11 @@ figma.ui.onmessage = async (msg) => {
       lastLoggedIndexStage = '';
       figma.notify('Preparing gallery...');
       var selectedIds = msg.selectedPages || [];
+      pluginTrace('Index run started', {
+        runId: activeIndexRunId,
+        selectedPagesCount: Array.isArray(selectedIds) ? selectedIds.length : 0,
+        fileKeySource: globalFileKeySource || 'none'
+      });
       await sendPluginTelemetryEvent('index_run_started', {
         runId: activeIndexRunId,
         selectedPagesCount: Array.isArray(selectedIds) ? selectedIds.length : 0,
@@ -1222,6 +1300,11 @@ figma.ui.onmessage = async (msg) => {
       const docId = figma.root.id || rootId || '0:0';
       const fileName = await getStored(STORAGE_KEYS.FILE_NAME, null) || figma.root.name || 'Untitled';
       if (!fileKey) {
+        pluginWarn('Index run blocked: missing file key', {
+          runId: activeIndexRunId,
+          selectedPagesCount: Array.isArray(selectedIds) ? selectedIds.length : 0,
+          fileKeySource: globalFileKeySource || 'none'
+        });
         await sendPluginTelemetryEvent('index_run_blocked', {
           runId: activeIndexRunId,
           reason: 'missing_file_key',
@@ -1439,6 +1522,13 @@ figma.ui.onmessage = async (msg) => {
       }
 
       var mergePages = dirtyPageIds.length < selectedIds.length;
+      pluginTrace('Prepared index payload', {
+        runId: activeIndexRunId,
+        selectedPagesCount: selectedIds.length,
+        dirtyPageCount: dirtyPageIds.length,
+        frameCount: allPageFrames.length,
+        mergePages: mergePages
+      });
 
       // Same cover as plugin UI (only for first chunk). Fallback to first frame only if no explicit cover can be exported.
       var coverImageDataUrl = null;
@@ -1570,6 +1660,13 @@ figma.ui.onmessage = async (msg) => {
         }
         if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
         var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
+        pluginTrace('Uploading chunk', {
+          runId: activeIndexRunId,
+          chunkNumber: chunkIndex + 1,
+          totalChunks: totalChunks,
+          chunkFrameCount: chunkFrameCount,
+          finalizePageIds: finalizePageIds
+        });
         figma.notify(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks + '...' : 'Uploading to FigDex...');
         figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', framesDone: totalUploaded });
         await logIndexStage(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', {
@@ -1614,6 +1711,12 @@ figma.ui.onmessage = async (msg) => {
         if (errMsg !== 'Index failed' && errJson && errJson.details) errMsg += ' — ' + String(errJson.details);
         if (errMsg === 'Index failed') errMsg = 'Index failed (' + ((res && res.status) || '') + ')';
         var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
+        pluginError('Index run failed', {
+          runId: activeIndexRunId,
+          status: res ? res.status : null,
+          code: errJson ? errJson.code : null,
+          message: errMsg
+        });
         if (res && res.status === 401 && !isGuestLimit) {
           await sendPluginTelemetryEvent('index_run_failed', {
             runId: activeIndexRunId,
@@ -1671,6 +1774,13 @@ figma.ui.onmessage = async (msg) => {
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
       else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
       figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      pluginTrace('Index run completed', {
+        runId: activeIndexRunId,
+        pageCount: dirtyPageIds.length,
+        frameCount: allPageFrames.length,
+        totalChunks: totalChunks,
+        resultUrl: resultUrl
+      });
       await sendPluginTelemetryEvent('index_run_completed', {
         runId: activeIndexRunId,
         selectedPagesCount: selectedIds.length,
@@ -1687,6 +1797,11 @@ figma.ui.onmessage = async (msg) => {
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
     } catch (e) {
       console.error('[code.js] start-advanced error:', e);
+      pluginError('Unexpected indexing exception', {
+        runId: activeIndexRunId,
+        stage: lastLoggedIndexStage || 'working',
+        message: e && e.message ? String(e.message) : 'Unknown error'
+      });
       await sendPluginTelemetryEvent('index_run_failed', {
         runId: activeIndexRunId,
         stage: lastLoggedIndexStage || 'working',
