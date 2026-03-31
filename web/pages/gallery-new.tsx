@@ -1,8 +1,5 @@
-import GalleryPage from './gallery';
+import LegacyRouteRedirect from '../components/LegacyRouteRedirect';
 
-export default function GalleryNew() {
-  return <GalleryPage />;
+export default function GalleryNewRedirect() {
+  return <LegacyRouteRedirect to="/gallery" label="Gallery New" />;
 }
-
-
-
