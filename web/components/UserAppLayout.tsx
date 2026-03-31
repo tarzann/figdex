@@ -29,7 +29,6 @@ import {
 import {
   PUBLIC_SITE_BACKGROUND_SX,
   PUBLIC_SITE_PRIMARY_BUTTON_SX,
-  PUBLIC_SITE_SURFACE_SX,
 } from '../lib/public-site-styles';
 
 type UserAppLayoutProps = {
@@ -105,20 +104,31 @@ export default function UserAppLayout({
 
   return (
     <Box sx={{ minHeight: '100vh', ...PUBLIC_SITE_BACKGROUND_SX }}>
-      <Container maxWidth="lg" sx={{ pt: 4, pb: 2 }}>
+      <Container maxWidth="lg" sx={{ pt: 3.5, pb: 2 }}>
         <Box
           sx={{
-            ...PUBLIC_SITE_SURFACE_SX,
-            px: { xs: 2, sm: 2.5 },
-            py: 1.75,
-            borderRadius: 999,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            gap: 2,
+            gap: 3,
+            pb: 2.25,
+            borderBottom: '1px solid rgba(17,24,39,0.08)',
           }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={3} alignItems="center">
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                color: '#1a1a1a',
+                fontSize: '1.25rem',
+                cursor: 'pointer',
+              }}
+              onClick={() => router.push('/')}
+            >
+              FIGDEX
+            </Typography>
             <Button
               variant="text"
               startIcon={<ArrowBackIcon />}
@@ -133,31 +143,40 @@ export default function UserAppLayout({
             >
               Back
             </Button>
-            <Box>
-              <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
-                FigDex
-              </Typography>
-              <Typography variant="h6" sx={{ color: '#111827', fontWeight: 800, lineHeight: 1.1 }}>
-                {title}
-              </Typography>
-            </Box>
           </Stack>
 
           {isLoggedIn && (
             <>
-              <IconButton
+              <Button
+                variant="contained"
+                startIcon={
+                  <Avatar
+                    sx={{
+                      bgcolor: 'rgba(255,255,255,0.12)',
+                      width: 24,
+                      height: 24,
+                      border: '1px solid rgba(255,255,255,0.14)',
+                    }}
+                  >
+                    <AccountCircleIcon sx={{ fontSize: 16, color: '#f8fafc' }} />
+                  </Avatar>
+                }
                 onClick={handleUserMenuOpen}
                 sx={{
                   ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
-                  width: 46,
-                  height: 46,
-                  boxShadow: '0 10px 24px rgba(15,23,42,0.14)',
+                  px: 2.35,
+                  py: 0.8,
+                  minHeight: 48,
+                  fontSize: '1rem',
+                  letterSpacing: '-0.01em',
+                  boxShadow: '0 12px 30px rgba(15,23,42,0.18)',
+                  '& .MuiButton-startIcon': {
+                    marginRight: '10px',
+                  },
                 }}
               >
-                <Avatar sx={{ bgcolor: 'transparent', color: '#fff', width: 32, height: 32 }}>
-                  <AccountCircleIcon />
-                </Avatar>
-              </IconButton>
+                My FigDex
+              </Button>
               <Menu
                 anchorEl={userMenuAnchor}
                 open={Boolean(userMenuAnchor)}
@@ -205,6 +224,25 @@ export default function UserAppLayout({
               </Menu>
             </>
           )}
+        </Box>
+
+        <Box
+          sx={{
+            pt: 2.25,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            gap: 2,
+          }}
+        >
+          <Box>
+            <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+              Workspace
+            </Typography>
+            <Typography variant="h4" sx={{ color: '#111827', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.04em' }}>
+              {title}
+            </Typography>
+          </Box>
         </Box>
       </Container>
 
