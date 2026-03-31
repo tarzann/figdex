@@ -113,16 +113,16 @@ async function resolveCurrentFileKey() {
     if (liveFileKey !== sessionFileKey) sessionFileKey = liveFileKey;
     await setStored(STORAGE_KEYS.FILE_KEY, liveFileKey);
     await setStored(STORAGE_KEYS.FILE_NAME, figma.root.name || 'Untitled');
-    return liveFileKey;
+    return { fileKey: liveFileKey, source: 'auto' };
   }
   var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
   if (typeof storedDocKey === 'string' && storedDocKey.trim()) {
     var trimmedStoredDocKey = storedDocKey.trim();
     if (trimmedStoredDocKey !== globalFileKey) globalFileKey = trimmedStoredDocKey;
     if (trimmedStoredDocKey !== sessionFileKey) sessionFileKey = trimmedStoredDocKey;
-    return trimmedStoredDocKey;
+    return { fileKey: trimmedStoredDocKey, source: 'saved' };
   }
-  return '';
+  return { fileKey: '', source: 'none' };
 }
 
 function cryptoRandomString() {
@@ -250,6 +250,12 @@ async function postChunkWithRetry(url, requestOptions, meta) {
       var retryStep = 'Retrying part ' + meta.chunkNumber + '/' + meta.totalChunks + ' in ' + Math.ceil(waitMs / 1000) + 's...';
       figma.notify(retryStep, { timeout: 1500 });
       figma.ui.postMessage({ type: 'upload-progress', step: retryStep, framesDone: meta.framesDone });
+      await logIndexStage(retryStep, {
+        chunkNumber: meta.chunkNumber,
+        totalChunks: meta.totalChunks,
+        framesDone: meta.framesDone,
+        attempts: attempt,
+      });
       await sleep(waitMs);
     } catch (error) {
       lastError = error;
@@ -258,6 +264,12 @@ async function postChunkWithRetry(url, requestOptions, meta) {
       var networkRetryStep = 'Connection issue on part ' + meta.chunkNumber + '/' + meta.totalChunks + '. Retrying...';
       figma.notify(networkRetryStep, { timeout: 1500 });
       figma.ui.postMessage({ type: 'upload-progress', step: networkRetryStep, framesDone: meta.framesDone });
+      await logIndexStage(networkRetryStep, {
+        chunkNumber: meta.chunkNumber,
+        totalChunks: meta.totalChunks,
+        framesDone: meta.framesDone,
+        attempts: attempt,
+      });
       await sleep(networkWaitMs);
     }
   }
@@ -426,6 +438,60 @@ async function exportFrameThumbnailData(frame, width, height) {
 
 let globalFileKey = '';
 let sessionFileKey = '';
+let globalFileKeySource = 'none';
+let activeIndexRunId = null;
+let lastLoggedIndexStage = '';
+
+async function sendPluginTelemetryEvent(eventName, meta) {
+  try {
+    var anonId = await getStored(STORAGE_KEYS.ANON_ID, null);
+    var webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
+    var userId = webUser && typeof webUser === 'object'
+      ? (webUser.id || webUser.email || null)
+      : null;
+    await fetch('https://www.figdex.com/api/telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventName: eventName,
+        timestamp: Date.now(),
+        pluginVersion: PLUGIN_VERSION,
+        userType: userId ? 'RETURNING' : 'NEW',
+        hasFileKey: !!globalFileKey,
+        selectedPagesCount: meta && typeof meta.selectedPagesCount === 'number' ? meta.selectedPagesCount : 0,
+        fileKeyHash: globalFileKey ? simpleHash(globalFileKey) : null,
+        sessionId: activeIndexRunId || null,
+        anonId: typeof anonId === 'string' ? anonId : null,
+        userId: typeof userId === 'string' ? userId : null,
+        meta: meta || {},
+      })
+    });
+  } catch (e) {}
+}
+
+function normalizeIndexStageLabel(step) {
+  var raw = String(step || '').toLowerCase();
+  if (!raw) return '';
+  if (raw.indexOf('prepar') !== -1) return 'preparing';
+  if (raw.indexOf('export') !== -1) return 'exporting';
+  if (raw.indexOf('upload') !== -1) return 'uploading';
+  if (raw.indexOf('retry') !== -1 || raw.indexOf('connection issue') !== -1) return 'retrying';
+  if (raw.indexOf('complete') !== -1 || raw.indexOf('final') !== -1) return 'finalizing';
+  return 'working';
+}
+
+async function logIndexStage(step, meta) {
+  var stage = normalizeIndexStageLabel(step);
+  if (!stage) return;
+  if (lastLoggedIndexStage === stage && stage !== 'retrying') return;
+  lastLoggedIndexStage = stage;
+  await sendPluginTelemetryEvent('index_stage', Object.assign({
+    runId: activeIndexRunId,
+    stage: stage,
+    step: step || '',
+    fileKeySource: globalFileKeySource || 'none',
+  }, meta || {}));
+}
 
 // --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
 // Top-level frames: (1) direct FRAME children of Page; (2) direct FRAME children of each Section (one level only). Excludes [NO_INDEX].
@@ -770,11 +836,13 @@ async function loadUserLimitsToUI(webToken) {
 }
 (async function bootstrap() {
   await migrateDocumentScopedStateToReliableFileKey();
-  var savedKey = await resolveCurrentFileKey();
+  var resolvedInitialFile = await resolveCurrentFileKey();
+  var savedKey = resolvedInitialFile.fileKey;
+  globalFileKeySource = resolvedInitialFile.source || 'none';
   if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey });
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey, source: globalFileKeySource });
   }
   var webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
   var webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
@@ -851,13 +919,15 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'set-file-key') {
     globalFileKey = msg.fileKey || '';
     sessionFileKey = globalFileKey;
+    globalFileKeySource = msg.source || (globalFileKey ? 'manual' : 'none');
     await setStored(STORAGE_KEYS.FILE_KEY, globalFileKey);
     await setStored(STORAGE_KEYS.FILE_NAME, msg.fileName != null ? msg.fileName : (figma.root.name || 'Untitled'));
     return;
   }
   if (msg.type === 'get-file-key') {
     var resolvedFileKey = await resolveCurrentFileKey();
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedFileKey || '' });
+    globalFileKeySource = resolvedFileKey.source || 'none';
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedFileKey.fileKey || '', source: globalFileKeySource });
     return;
   }
   if (msg.type === 'get_anon_id') {
@@ -872,14 +942,15 @@ figma.ui.onmessage = async (msg) => {
   }
   if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
     var resolvedRefreshFileKey = await resolveCurrentFileKey();
-    if (resolvedRefreshFileKey && resolvedRefreshFileKey !== globalFileKey) {
-      globalFileKey = resolvedRefreshFileKey;
+    globalFileKeySource = resolvedRefreshFileKey.source || globalFileKeySource || 'none';
+    if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== globalFileKey) {
+      globalFileKey = resolvedRefreshFileKey.fileKey;
     }
-    if (resolvedRefreshFileKey && resolvedRefreshFileKey !== sessionFileKey) {
-      sessionFileKey = resolvedRefreshFileKey;
+    if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== sessionFileKey) {
+      sessionFileKey = resolvedRefreshFileKey.fileKey;
     }
-    if (resolvedRefreshFileKey) {
-      figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedRefreshFileKey });
+    if (resolvedRefreshFileKey.fileKey) {
+      figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedRefreshFileKey.fileKey, source: globalFileKeySource });
     }
     await figma.loadAllPagesAsync();
     const allPages = figma.root.children
@@ -994,7 +1065,8 @@ figma.ui.onmessage = async (msg) => {
     await deleteCurrentDocumentLegacyState();
     globalFileKey = '';
     sessionFileKey = '';
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: '' });
+    globalFileKeySource = 'none';
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: '', source: 'none' });
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
     return;
@@ -1116,8 +1188,15 @@ figma.ui.onmessage = async (msg) => {
   }
   if (msg.type === 'start-advanced') {
     try {
+      activeIndexRunId = cryptoRandomString();
+      lastLoggedIndexStage = '';
       figma.notify('Preparing gallery...');
       var selectedIds = msg.selectedPages || [];
+      await sendPluginTelemetryEvent('index_run_started', {
+        runId: activeIndexRunId,
+        selectedPagesCount: Array.isArray(selectedIds) ? selectedIds.length : 0,
+        fileKeySource: globalFileKeySource || 'none',
+      });
       await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
       const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
       // Always resolve the key from the current document context.
@@ -1137,6 +1216,12 @@ figma.ui.onmessage = async (msg) => {
       const docId = figma.root.id || rootId || '0:0';
       const fileName = await getStored(STORAGE_KEYS.FILE_NAME, null) || figma.root.name || 'Untitled';
       if (!fileKey) {
+        await sendPluginTelemetryEvent('index_run_blocked', {
+          runId: activeIndexRunId,
+          reason: 'missing_file_key',
+          selectedPagesCount: Array.isArray(selectedIds) ? selectedIds.length : 0,
+          fileKeySource: globalFileKeySource || 'none',
+        });
         figma.notify('Link this file first', { error: true });
         figma.ui.postMessage({ type: 'error', message: 'Link this file first: paste the Figma file link in Step 1 and click Save.' });
         return;
@@ -1260,8 +1345,13 @@ figma.ui.onmessage = async (msg) => {
 
       figma.ui.postMessage({ type: 'upload-started' });
       figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
+      await logIndexStage('Preparing...', { selectedPagesCount: selectedIds.length });
 
       figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
+      await logIndexStage('Exporting ' + dirtyPageIds.length + ' page(s)...', {
+        selectedPagesCount: selectedIds.length,
+        pageCount: dirtyPageIds.length,
+      });
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
       const FRAMES_PER_CHUNK = 10;
@@ -1330,6 +1420,14 @@ figma.ui.onmessage = async (msg) => {
         }
       } catch (payloadErr) {
         console.warn('[code.js] indexPayload collect error:', payloadErr);
+        await sendPluginTelemetryEvent('index_run_failed', {
+          runId: activeIndexRunId,
+          stage: 'exporting',
+          reason: 'collect_frames_failed',
+          message: payloadErr && payloadErr.message ? String(payloadErr.message) : 'Failed to collect frames',
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+        });
         figma.ui.postMessage({ type: 'error', message: 'Failed to collect frames' });
         return;
       }
@@ -1428,6 +1526,11 @@ figma.ui.onmessage = async (msg) => {
       var res = null;
       var finalChunkError = null;
       figma.ui.postMessage({ type: 'upload-progress', step: 'Uploading to FigDex...', framesDone: totalUploaded });
+      await logIndexStage('Uploading to FigDex...', {
+        selectedPagesCount: selectedIds.length,
+        pageCount: dirtyPageIds.length,
+        frameCount: allPageFrames.length,
+      });
       for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         var chunkPages = mergePages ? chunkSpecs[chunkIndex] : chunkSpecs[chunkIndex];
         var chunkPayload = { pages: chunkPages };
@@ -1463,6 +1566,13 @@ figma.ui.onmessage = async (msg) => {
         var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
         figma.notify(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks + '...' : 'Uploading to FigDex...');
         figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', framesDone: totalUploaded });
+        await logIndexStage(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', {
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+          frameCount: allPageFrames.length,
+          chunkNumber: chunkIndex + 1,
+          totalChunks: totalChunks,
+        });
         var headers = { 'Content-Type': 'application/json' };
         if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
         var chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
@@ -1499,6 +1609,13 @@ figma.ui.onmessage = async (msg) => {
         if (errMsg === 'Index failed') errMsg = 'Index failed (' + ((res && res.status) || '') + ')';
         var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
         if (res && res.status === 401 && !isGuestLimit) {
+          await sendPluginTelemetryEvent('index_run_failed', {
+            runId: activeIndexRunId,
+            stage: lastLoggedIndexStage || 'uploading',
+            reason: 'auth_expired',
+            code: errJson ? errJson.code : null,
+            message: errMsg,
+          });
           await setStored(STORAGE_KEYS.WEB_TOKEN, null);
           await setStored(STORAGE_KEYS.WEB_USER, null);
           figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
@@ -1506,6 +1623,16 @@ figma.ui.onmessage = async (msg) => {
           figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
           return;
         }
+        await sendPluginTelemetryEvent('index_run_failed', {
+          runId: activeIndexRunId,
+          stage: lastLoggedIndexStage || 'uploading',
+          reason: 'upload_failed',
+          code: errJson ? errJson.code : null,
+          message: errMsg,
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+          frameCount: allPageFrames.length,
+        });
         figma.notify(errMsg, { error: true });
         figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
         return;
@@ -1538,6 +1665,13 @@ figma.ui.onmessage = async (msg) => {
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
       else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
       figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      await sendPluginTelemetryEvent('index_run_completed', {
+        runId: activeIndexRunId,
+        selectedPagesCount: selectedIds.length,
+        pageCount: dirtyPageIds.length,
+        frameCount: allPageFrames.length,
+        totalChunks: totalChunks,
+      });
       await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
       if (!isGuestMode && token) {
         await loadUserLimitsToUI(token);
@@ -1547,8 +1681,17 @@ figma.ui.onmessage = async (msg) => {
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
     } catch (e) {
       console.error('[code.js] start-advanced error:', e);
+      await sendPluginTelemetryEvent('index_run_failed', {
+        runId: activeIndexRunId,
+        stage: lastLoggedIndexStage || 'working',
+        reason: 'unexpected_exception',
+        message: e && e.message ? String(e.message) : 'Unknown error',
+      });
       figma.notify('Error: ' + (e.message || 'Unknown error'), { error: true });
       figma.ui.postMessage({ type: 'error', message: e.message || 'Unknown error' });
+    } finally {
+      activeIndexRunId = null;
+      lastLoggedIndexStage = '';
     }
     return;
   }
