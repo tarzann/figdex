@@ -872,6 +872,12 @@ async function loadUserLimitsToUI(webToken) {
   webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
   var anonId = await getOrCreateAnonId();
   figma.ui.postMessage({ type: 'TELEMETRY_ANON_ID', anonId: anonId });
+  await sendPluginTelemetryEvent('plugin_loaded', {
+    documentId: figma.root.id || rootId || '0:0',
+    fileName: figma.root.name || 'Untitled',
+    fileKeySource: globalFileKeySource || 'none',
+    hasLiveFileKey: !!getLiveFileKey(),
+  });
   if (webToken && typeof webToken === 'string' && anonId) {
     try {
       var br = await fetch('https://www.figdex.com/api/claim/by-anon-id', {
