@@ -117,45 +117,14 @@ function getDocumentScopeId() {
   return figma.root.id || rootId || '0:0';
 }
 
-function hasReliableCurrentFileKey() {
-  return typeof figma.fileKey === 'string' && !!figma.fileKey.trim();
-}
-
-function getLiveFileKey() {
-  return (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
-}
-
 async function resolveCurrentFileKey() {
-  var liveFileKey = getLiveFileKey();
-  if (liveFileKey) {
-    if (liveFileKey !== globalFileKey) globalFileKey = liveFileKey;
-    if (liveFileKey !== sessionFileKey) sessionFileKey = liveFileKey;
-    await setStored(STORAGE_KEYS.FILE_KEY, liveFileKey);
-    await setStored(STORAGE_KEYS.FILE_NAME, figma.root.name || 'Untitled');
-    pluginTrace('Resolved file key automatically', {
-      source: 'auto',
-      hasFileKey: true,
-      fileName: figma.root.name || 'Untitled'
-    });
-    return { fileKey: liveFileKey, source: 'auto' };
-  }
   var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
   if (typeof storedDocKey === 'string' && storedDocKey.trim()) {
     var trimmedStoredDocKey = storedDocKey.trim();
     if (trimmedStoredDocKey !== globalFileKey) globalFileKey = trimmedStoredDocKey;
     if (trimmedStoredDocKey !== sessionFileKey) sessionFileKey = trimmedStoredDocKey;
-    pluginTrace('Using saved file key fallback', {
-      source: 'saved',
-      hasFileKey: true,
-      fileName: figma.root.name || 'Untitled'
-    });
     return { fileKey: trimmedStoredDocKey, source: 'saved' };
   }
-  pluginWarn('No file key available for current document', {
-    source: 'none',
-    hasFileKey: false,
-    fileName: figma.root.name || 'Untitled'
-  });
   return { fileKey: '', source: 'none' };
 }
 
@@ -897,9 +866,15 @@ async function loadUserLimitsToUI(webToken) {
     documentId: figma.root.id || rootId || '0:0',
     fileName: figma.root.name || 'Untitled',
     fileKeySource: globalFileKeySource,
-    hasFileKey: !!savedKey,
-    hasLiveFileKey: !!getLiveFileKey()
+    hasFileKey: !!savedKey
   });
+  if (!savedKey) {
+    pluginWarn('No saved file link for current document', {
+      source: 'none',
+      hasFileKey: false,
+      fileName: figma.root.name || 'Untitled'
+    });
+  }
   if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
@@ -937,7 +912,6 @@ async function loadUserLimitsToUI(webToken) {
     documentId: figma.root.id || rootId || '0:0',
     fileName: figma.root.name || 'Untitled',
     fileKeySource: globalFileKeySource || 'none',
-    hasLiveFileKey: !!getLiveFileKey(),
   });
   if (webToken && typeof webToken === 'string' && anonId) {
     try {
@@ -1022,6 +996,12 @@ figma.ui.onmessage = async (msg) => {
       source: globalFileKeySource,
       hasFileKey: !!resolvedRefreshFileKey.fileKey
     });
+    if (!resolvedRefreshFileKey.fileKey) {
+      pluginWarn('Pages refresh is using manual-link mode without a saved file link', {
+        source: 'none',
+        hasFileKey: false
+      });
+    }
     if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== globalFileKey) {
       globalFileKey = resolvedRefreshFileKey.fileKey;
     }
@@ -1283,17 +1263,10 @@ figma.ui.onmessage = async (msg) => {
       });
       await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
       const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
-      // Always resolve the key from the current document context.
-      // Never fall back to a cross-document global value during indexing,
-      // otherwise a new file can be uploaded under the previous file's key.
-      var currentDocKey = (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
       var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
       if (typeof storedDocKey !== 'string') storedDocKey = '';
       storedDocKey = storedDocKey ? storedDocKey.trim() : '';
-      var fileKey = currentDocKey || sessionFileKey || (hasReliableCurrentFileKey() ? storedDocKey : '') || '';
-      if (currentDocKey && currentDocKey !== storedDocKey) {
-        await setStored(STORAGE_KEYS.FILE_KEY, currentDocKey);
-      }
+      var fileKey = sessionFileKey || storedDocKey || '';
       if (fileKey && fileKey !== globalFileKey) {
         globalFileKey = fileKey;
       }
