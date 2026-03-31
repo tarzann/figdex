@@ -710,7 +710,12 @@ async function getServerIndexStatus(fileKey, webToken, anonId) {
     });
     if (!response || !response.ok) return null;
     var payload = await response.json();
-    return payload && payload.success ? !!payload.exists : null;
+    if (!payload || !payload.success) return null;
+    return {
+      exists: !!payload.exists,
+      owner: payload.owner || null,
+      indexedPageIds: Array.isArray(payload.indexedPageIds) ? payload.indexedPageIds.map(function (id) { return String(id); }) : null
+    };
   } catch (e) {
     return null;
   }
@@ -865,10 +870,22 @@ figma.ui.onmessage = async (msg) => {
       try {
         var tokenForIndexState = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
         var anonIdForIndexState = await getStored(STORAGE_KEYS.ANON_ID, null);
-        var hasServerIndex = await getServerIndexStatus(globalFileKey, tokenForIndexState, anonIdForIndexState);
-        if (hasServerIndex === false) {
+        var serverIndexState = await getServerIndexStatus(globalFileKey, tokenForIndexState, anonIdForIndexState);
+        if (serverIndexState && serverIndexState.exists === false) {
           indexedMeta = [];
           await setStored(STORAGE_KEYS.INDEXED_PAGES, []);
+        } else if (serverIndexState && serverIndexState.exists && Array.isArray(serverIndexState.indexedPageIds)) {
+          var allowedPageIds = {};
+          for (var spi = 0; spi < serverIndexState.indexedPageIds.length; spi++) {
+            allowedPageIds[String(serverIndexState.indexedPageIds[spi])] = true;
+          }
+          var reconciledMeta = Array.isArray(indexedMeta)
+            ? indexedMeta.filter(function (m) { return m && m.pageId && !!allowedPageIds[String(m.pageId)]; })
+            : [];
+          if (reconciledMeta.length !== (Array.isArray(indexedMeta) ? indexedMeta.length : 0)) {
+            indexedMeta = reconciledMeta;
+            await setStored(STORAGE_KEYS.INDEXED_PAGES, reconciledMeta);
+          }
         }
       } catch (e) {}
     }

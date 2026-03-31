@@ -60,12 +60,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const normalized = await supabase
         .from('indexed_files')
-        .select('id', { head: true, count: 'exact' })
+        .select('id')
         .eq('user_id', user.id)
         .eq('figma_file_key', fileKey)
-        .limit(1);
-      if ((normalized.count || 0) > 0) {
-        return res.status(200).json({ success: true, exists: true, owner: 'user' });
+        .limit(1)
+        .maybeSingle();
+      if (normalized.data?.id) {
+        const indexedPages = await supabase
+          .from('indexed_pages')
+          .select('figma_page_id')
+          .eq('file_id', normalized.data.id)
+          .order('sort_order', { ascending: true });
+
+        return res.status(200).json({
+          success: true,
+          exists: true,
+          owner: 'user',
+          indexedPageIds: (indexedPages.data || []).map((row: any) => String(row.figma_page_id)).filter(Boolean),
+        });
       }
 
       const legacy = await supabase
@@ -84,13 +96,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const normalizedGuest = await supabase
       .from('indexed_files')
-      .select('id', { head: true, count: 'exact' })
+      .select('id')
       .is('user_id', null)
       .eq('owner_anon_id', anonId)
       .eq('figma_file_key', fileKey)
-      .limit(1);
-    if ((normalizedGuest.count || 0) > 0) {
-      return res.status(200).json({ success: true, exists: true, owner: 'guest' });
+      .limit(1)
+      .maybeSingle();
+    if (normalizedGuest.data?.id) {
+      const indexedPages = await supabase
+        .from('indexed_pages')
+        .select('figma_page_id')
+        .eq('file_id', normalizedGuest.data.id)
+        .order('sort_order', { ascending: true });
+
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        owner: 'guest',
+        indexedPageIds: (indexedPages.data || []).map((row: any) => String(row.figma_page_id)).filter(Boolean),
+      });
     }
 
     const legacyGuest = await supabase
