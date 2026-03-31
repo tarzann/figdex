@@ -158,11 +158,11 @@ const HomePageV2 = () => {
                     </ListItemIcon>
                     <ListItemText>My FigDex</ListItemText>
                   </MenuItem>
-                  <MenuItem onClick={() => { router.push('/projects'); handleUserMenuClose(); }}>
+                  <MenuItem onClick={() => { router.push('/gallery'); handleUserMenuClose(); }}>
                     <ListItemIcon>
                       <FolderOpenIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText>All Projects</ListItemText>
+                    <ListItemText>My FigDex</ListItemText>
                   </MenuItem>
                   <Divider />
                   <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>
@@ -1161,4 +1161,3 @@ const HomePageV2 = () => {
 };
 
 export default HomePageV2;
-

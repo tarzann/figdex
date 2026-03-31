@@ -1308,12 +1308,11 @@ export default function GalleryV2() {
           >
             Retry
           </Button>
-          <Button 
-            variant="outlined" 
-            onClick={() => router.push('/projects')}
-            startIcon={<FolderOpenIcon />}
+          <Button
+            variant="outlined"
+            onClick={() => router.push('/gallery')}
           >
-            Choose Another Project
+            Back to Gallery
           </Button>
         </Stack>
       </Box>

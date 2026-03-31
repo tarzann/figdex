@@ -2281,12 +2281,11 @@ export default function Home() {
           >
             Retry
           </Button>
-          <Button 
-            variant="outlined" 
-            onClick={() => router.push('/projects')}
-            startIcon={<FolderOpenIcon />}
+          <Button
+            variant="outlined"
+            onClick={() => router.push('/gallery')}
           >
-            Choose Another Project
+            Back to Gallery
           </Button>
         </Stack>
       </Box>
@@ -2835,12 +2834,6 @@ export default function Home() {
                     <StorageIcon fontSize="small" />
                   </ListItemIcon>
                   <ListItemText>Index Management</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { router.push('/projects-management'); handleUserMenuClose(); }}>
-                  <ListItemIcon>
-                    <FolderOpenIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Projects Management</ListItemText>
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>

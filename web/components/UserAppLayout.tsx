@@ -19,7 +19,6 @@ import {
   Api as ApiIcon,
   ArrowBack as ArrowBackIcon,
   ContentCopy as ContentCopyIcon,
-  FolderOpen as FolderOpenIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
   Search as SearchIcon,
@@ -198,10 +197,6 @@ export default function UserAppLayout({
                 <MenuItem onClick={() => { router.push('/index-management'); handleUserMenuClose(); }}>
                   <ListItemIcon><StorageIcon fontSize="small" /></ListItemIcon>
                   <ListItemText>Index Management</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { router.push('/projects-management'); handleUserMenuClose(); }}>
-                  <ListItemIcon><FolderOpenIcon fontSize="small" /></ListItemIcon>
-                  <ListItemText>Projects Management</ListItemText>
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={() => { router.push('/account'); handleUserMenuClose(); }}>

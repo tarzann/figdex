@@ -56,12 +56,12 @@ export default function Header() {
           <Button 
             color="inherit" 
             startIcon={<FolderOpenIcon />}
-            onClick={() => router.push('/projects')}
+            onClick={() => router.push('/gallery')}
             sx={{ 
-              backgroundColor: router.pathname === '/projects' ? 'rgba(255,255,255,0.1)' : 'transparent'
+              backgroundColor: router.pathname === '/gallery' ? 'rgba(255,255,255,0.1)' : 'transparent'
             }}
           >
-            פרויקטים
+            My FigDex
           </Button>
 
           {isAdmin && (

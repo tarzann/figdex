@@ -93,11 +93,11 @@ export default function Home() {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-        <Button 
-          variant="contained" 
-          onClick={() => router.push('/projects')}
+        <Button
+          variant="contained"
+          onClick={() => router.push('/gallery')}
         >
-          בחר פרויקט אחר
+          חזרה לגלריה
         </Button>
       </Box>
     );
@@ -119,12 +119,12 @@ export default function Home() {
         Frames: {frames.length}
       </Typography>
 
-      <Button 
-        variant="outlined" 
-        onClick={() => router.push('/projects')}
+      <Button
+        variant="outlined"
+        onClick={() => router.push('/gallery')}
         sx={{ mt: 2 }}
       >
-        כל הפרויקטים
+        חזרה לגלריה
       </Button>
 
       {frames.map((frame, index) => (
