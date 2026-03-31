@@ -269,6 +269,47 @@ export default function AccountPage() {
 
             <Card sx={ACCOUNT_CARD_SX}>
               <CardContent>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <FolderOpenIcon color="primary" />
+                  <Box>
+                    <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
+                      Workspace
+                    </Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', letterSpacing: '-0.03em' }}>
+                      Usage
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Stack spacing={2.5}>
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
+                      <Typography variant="body2" fontWeight={600}>Files</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {(data.usage.files || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFiles)}
+                      </Typography>
+                    </Stack>
+                    {renderUsageBar(data.usage.files, data.usage.maxFiles)}
+                  </Box>
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
+                      <Typography variant="body2" fontWeight={600}>Frames</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {(data.usage.frames || data.usage.framesApprox || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFrames)}
+                      </Typography>
+                    </Stack>
+                    {renderUsageBar(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
+                  </Box>
+                </Stack>
+                <Typography variant="body2" sx={{ mt: 2, color: '#475467' }}>Indexed files: {data.usage.indices}</Typography>
+                <Typography variant="body2" sx={{ color: '#475467' }}>Storage: {((data.usage.storageBytes || 0) / (1024*1024)).toFixed(2)} MB</Typography>
+                {data.usage.lastUploadedAt && (
+                  <Typography variant="body2" sx={{ color: '#475467' }}>Last upload: {new Date(data.usage.lastUploadedAt).toLocaleString()}</Typography>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card sx={ACCOUNT_CARD_SX}>
+              <CardContent>
                 <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
                   API access
                 </Typography>
@@ -337,47 +378,6 @@ export default function AccountPage() {
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                   Regenerating will invalidate the old key (update your plugin settings).
                 </Typography>
-              </CardContent>
-            </Card>
-
-            <Card sx={ACCOUNT_CARD_SX}>
-              <CardContent>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                  <FolderOpenIcon color="primary" />
-                  <Box>
-                    <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
-                      Workspace
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', letterSpacing: '-0.03em' }}>
-                      Usage
-                    </Typography>
-                  </Box>
-                </Stack>
-                <Stack spacing={2.5}>
-                  <Box>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
-                      <Typography variant="body2" fontWeight={600}>Files</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {(data.usage.files || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFiles)}
-                      </Typography>
-                    </Stack>
-                    {renderUsageBar(data.usage.files, data.usage.maxFiles)}
-                  </Box>
-                  <Box>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
-                      <Typography variant="body2" fontWeight={600}>Frames</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {(data.usage.frames || data.usage.framesApprox || 0).toLocaleString()} / {formatLimitValue(data.usage.maxFrames)}
-                      </Typography>
-                    </Stack>
-                    {renderUsageBar(data.usage.frames || data.usage.framesApprox, data.usage.maxFrames)}
-                  </Box>
-                </Stack>
-                <Typography variant="body2" sx={{ mt: 2, color: '#475467' }}>Indexed files: {data.usage.indices}</Typography>
-                <Typography variant="body2" sx={{ color: '#475467' }}>Storage: {((data.usage.storageBytes || 0) / (1024*1024)).toFixed(2)} MB</Typography>
-                {data.usage.lastUploadedAt && (
-                  <Typography variant="body2" sx={{ color: '#475467' }}>Last upload: {new Date(data.usage.lastUploadedAt).toLocaleString()}</Typography>
-                )}
               </CardContent>
             </Card>
 
