@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
+  Chip,
   Container,
   Typography,
   Button,
@@ -214,17 +215,27 @@ const HelpCenter = () => {
               elevation={0}
               sx={{ 
                 ...PUBLIC_SITE_SURFACE_SX,
-                cursor: 'pointer',
-                '&:hover': { borderColor: '#667eea', boxShadow: 1 }
+                opacity: 0.9
               }}
-              onClick={() => router.push('/api-index')}
             >
               <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 400, mb: 1 }}>
-                  API Documentation
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 400 }}>
+                    API Documentation
+                  </Typography>
+                  <Chip
+                    label="Soon"
+                    size="small"
+                    sx={{
+                      height: 22,
+                      fontWeight: 700,
+                      bgcolor: 'rgba(59,130,246,0.1)',
+                      color: '#2563eb',
+                    }}
+                  />
+                </Box>
                 <Typography variant="body2" sx={{ color: '#666', fontWeight: 300 }}>
-                  Learn how to use the Figma API integration.
+                  Figma API integration docs will be added here soon.
                 </Typography>
               </CardContent>
             </Card>

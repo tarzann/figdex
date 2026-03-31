@@ -371,28 +371,6 @@ export default function AccountPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Figma API Integration</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Create indices directly from Figma files using the Figma REST API. This feature is available for Pro and Unlimited plans.
-                </Typography>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                  <Button
-                    variant="contained"
-                    onClick={() => router.push('/api-index')}
-                    disabled={data.user.plan === 'free'}
-                  >
-                    Create index from Figma API
-                  </Button>
-                  {data.user.plan === 'free' && (
-                    <Button variant="outlined" onClick={() => router.push('/pricing')}>
-                      Upgrade to unlock
-                    </Button>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
           </Stack>
         )}
     </UserAppLayout>
