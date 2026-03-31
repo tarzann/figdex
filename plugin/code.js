@@ -102,6 +102,29 @@ function hasReliableCurrentFileKey() {
   return typeof figma.fileKey === 'string' && !!figma.fileKey.trim();
 }
 
+function getLiveFileKey() {
+  return (typeof figma.fileKey === 'string' && figma.fileKey.trim()) ? figma.fileKey.trim() : '';
+}
+
+async function resolveCurrentFileKey() {
+  var liveFileKey = getLiveFileKey();
+  if (liveFileKey) {
+    if (liveFileKey !== globalFileKey) globalFileKey = liveFileKey;
+    if (liveFileKey !== sessionFileKey) sessionFileKey = liveFileKey;
+    await setStored(STORAGE_KEYS.FILE_KEY, liveFileKey);
+    await setStored(STORAGE_KEYS.FILE_NAME, figma.root.name || 'Untitled');
+    return liveFileKey;
+  }
+  var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
+  if (typeof storedDocKey === 'string' && storedDocKey.trim()) {
+    var trimmedStoredDocKey = storedDocKey.trim();
+    if (trimmedStoredDocKey !== globalFileKey) globalFileKey = trimmedStoredDocKey;
+    if (trimmedStoredDocKey !== sessionFileKey) sessionFileKey = trimmedStoredDocKey;
+    return trimmedStoredDocKey;
+  }
+  return '';
+}
+
 function cryptoRandomString() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -747,13 +770,7 @@ async function loadUserLimitsToUI(webToken) {
 }
 (async function bootstrap() {
   await migrateDocumentScopedStateToReliableFileKey();
-  var savedKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
-  // Fallback: figma.fileKey gives current file's key (when available, e.g. published plugins)
-  if (!savedKey && typeof figma.fileKey === 'string' && figma.fileKey.trim()) {
-    savedKey = figma.fileKey.trim();
-    globalFileKey = savedKey;
-    await setStored(STORAGE_KEYS.FILE_KEY, savedKey);
-  }
+  var savedKey = await resolveCurrentFileKey();
   if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
@@ -839,7 +856,8 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
   if (msg.type === 'get-file-key') {
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: globalFileKey || '' });
+    var resolvedFileKey = await resolveCurrentFileKey();
+    figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedFileKey || '' });
     return;
   }
   if (msg.type === 'get_anon_id') {
@@ -853,6 +871,16 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
   if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
+    var resolvedRefreshFileKey = await resolveCurrentFileKey();
+    if (resolvedRefreshFileKey && resolvedRefreshFileKey !== globalFileKey) {
+      globalFileKey = resolvedRefreshFileKey;
+    }
+    if (resolvedRefreshFileKey && resolvedRefreshFileKey !== sessionFileKey) {
+      sessionFileKey = resolvedRefreshFileKey;
+    }
+    if (resolvedRefreshFileKey) {
+      figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedRefreshFileKey });
+    }
     await figma.loadAllPagesAsync();
     const allPages = figma.root.children
       .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
