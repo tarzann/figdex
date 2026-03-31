@@ -605,6 +605,7 @@ export default function Home() {
   const [authFromUrlApplied, setAuthFromUrlApplied] = useState(0); // Incremented when apiKey/viewToken applied from URL; triggers reload
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0); // Incremented when tab becomes visible; triggers reload (e.g. after indexing from plugin)
   const [dismissedSuccessFileKey, setDismissedSuccessFileKey] = useState('');
+  const [hasStoredUser, setHasStoredUser] = useState(false);
 
   // Filter sidebar state
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(true);
@@ -706,6 +707,7 @@ export default function Home() {
         if (typeof window !== 'undefined') {
           const userStr = localStorage.getItem('figma_web_user');
           if (userStr) user = JSON.parse(userStr);
+          setHasStoredUser(!!user?.email);
           const raw = router.query.anonId;
           anonId = (Array.isArray(raw) ? raw[0] : raw) || localStorage.getItem('figdex_anon_id') || null;
           if (anonId) anonId = anonId.trim().slice(0, 200) || null;
@@ -3349,7 +3351,7 @@ export default function Home() {
                   <Box component="span" sx={{ fontWeight: 700, color: '#111827' }}>
                     {firstIndexedFile.file_name || 'This file'}
                   </Box>{' '}
-                  was added to your gallery. Open it to review pages, search screens, or share it with your team.
+                  was added to your gallery. Open it now to review pages, search screens, and make sure your first library feels right.
                 </Typography>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ width: { xs: '100%', md: 'auto' } }}>
@@ -3440,7 +3442,7 @@ export default function Home() {
               <Button
                 variant="outlined"
                 startIcon={<FolderOpenIcon />}
-                onClick={() => router.push('/help')}
+                onClick={() => router.push(hasStoredUser ? '/help' : '/register')}
                 sx={{
                   color: '#111827',
                   borderColor: '#cbd5e1',
@@ -3452,7 +3454,7 @@ export default function Home() {
                   '&:hover': { borderColor: '#111827', bgcolor: 'rgba(17,24,39,0.04)' },
                 }}
               >
-                See Setup Steps
+                {hasStoredUser ? 'See Setup Steps' : 'Create Free Account'}
               </Button>
             </Stack>
 

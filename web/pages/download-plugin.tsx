@@ -91,14 +91,23 @@ export default function DownloadPluginPage() {
                     <Typography variant="body2" sx={{ color: '#6b7280' }}>
                       Current public plugin package: <strong>{FIGDEX_PLUGIN_VERSION}</strong>
                     </Typography>
-                    <Button
-                      component={Link}
-                      href="/register"
-                      endIcon={<ArrowForwardRoundedIcon />}
-                      sx={{ textTransform: 'none', fontWeight: 700 }}
-                    >
-                      Create a free account before you connect
-                    </Button>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                      <Button
+                        component={Link}
+                        href="/login"
+                        sx={{ textTransform: 'none', fontWeight: 700, color: '#475467' }}
+                      >
+                        I already have an account
+                      </Button>
+                      <Button
+                        component={Link}
+                        href="/register"
+                        endIcon={<ArrowForwardRoundedIcon />}
+                        sx={{ textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Create a free account
+                      </Button>
+                    </Stack>
                   </Stack>
                 </Stack>
               </CardContent>
