@@ -24,14 +24,17 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Create policies
 -- Users can only see their own data
 CREATE POLICY "Users can view own data" ON users
+  TO authenticated
   FOR SELECT USING (auth.uid() = id);
 
 -- Users can update their own data
 CREATE POLICY "Users can update own data" ON users
+  TO authenticated
   FOR UPDATE USING (auth.uid() = id);
 
 -- Service role can insert/update/delete (for registration)
 CREATE POLICY "Service role can manage users" ON users
+  TO service_role
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Create function to update updated_at timestamp
@@ -41,7 +44,8 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ language 'plpgsql'
+SET search_path = public;
 
 -- Create trigger to automatically update updated_at
 CREATE TRIGGER update_users_updated_at

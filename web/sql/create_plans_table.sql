@@ -37,7 +37,8 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = public;
 
 DROP TRIGGER IF EXISTS trigger_update_plans_updated_at ON plans;
 CREATE TRIGGER trigger_update_plans_updated_at
