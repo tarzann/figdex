@@ -1,6 +1,6 @@
 # FigDex Launch Readiness Checklist
 
-**Last updated:** March 30, 2026  
+**Last updated:** March 31, 2026  
 **Scope:** pre-launch readiness for founder-led market release  
 **Goal:** define what must be true before FigDex is ready for external users
 
@@ -18,8 +18,7 @@ The product is already strong in:
 
 The remaining launch work is mostly about:
 - commercial flow validation
-- security / permission hardening
-- onboarding polish
+- final onboarding polish
 - final operational confidence
 
 ## 2. Must Fix Before Launch
@@ -40,14 +39,14 @@ These items should be treated as true blockers for external release.
 
 ### 2.2 Auth and Permissions Hardening
 
-- [ ] review all admin routes for authorization consistency
-- [ ] verify admin access is not relying only on weak client assumptions where server validation should exist
-- [ ] verify share permissions for:
+- [x] review all admin routes for authorization consistency
+- [x] verify admin access is not relying only on weak client assumptions where server validation should exist
+- [x] verify share permissions for:
   - valid enabled share
   - disabled share
   - deleted share
   - invalid share token
-- [ ] verify plugin connection flow correctly rejects stale or invalid auth
+- [x] verify plugin connection flow correctly rejects stale or invalid auth
 
 ### 2.3 End-to-End New User Onboarding
 
@@ -62,6 +61,9 @@ These items should be treated as true blockers for external release.
   - first share
 - [ ] confirm the user can understand the product without internal knowledge
 - [ ] confirm the first-time flow works with a completely new user and clean browser state
+
+Current note:
+- onboarding surfaces have been significantly improved, but a fresh zero-state validation pass is still recommended before launch
 
 ### 2.4 Error and Empty States
 
@@ -100,7 +102,7 @@ These are not hard blockers, but they should be planned quickly after launch.
 
 ### 3.3 Gallery Product Polish
 
-- [ ] improve empty states and no-result states
+- [ ] improve any remaining empty states and no-result states discovered in final journey testing
 - [ ] consider future navigation refinement between file view and side navigation
 - [ ] continue reducing visual and cognitive load in complex views
 
@@ -185,8 +187,8 @@ Proceed only after:
 
 If we continue in launch mode, the next highest-value tasks are:
 
-1. validate Paddle and plan transitions end to end
-2. run a clean first-time onboarding test from zero state
-3. harden auth / admin / share permissions
-4. polish empty and failure states
-5. add a small admin KPI summary based on the activity log
+1. run a clean first-time onboarding test from zero state
+2. publish the pending plugin polish
+3. polish any remaining empty and failure states discovered in that pass
+4. add a small admin KPI summary based on the activity log
+5. validate Paddle and plan transitions end to end when business operations are ready

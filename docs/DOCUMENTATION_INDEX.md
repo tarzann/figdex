@@ -1,6 +1,6 @@
 # FigDex Documentation Index
 
-**Last updated:** March 30, 2026
+**Last updated:** March 31, 2026
 
 This file is the recommended entry point for understanding the current FigDex project documentation.
 
@@ -32,7 +32,7 @@ This file is the recommended entry point for understanding the current FigDex pr
 
 ### Activation Plan
 - [docs/ACTIVATION_PLAN.md](/Users/ranmor/Documents/FigDex%20Codex/docs/ACTIVATION_PLAN.md)
-  Practical execution plan for improving first-time user activation from landing to first successful indexed result.
+  Practical execution plan for improving first-time user activation from landing to first successful indexed result, with current phase progress.
 
 ### Operations / Runbook
 - [docs/OPERATIONS_RUNBOOK.md](/Users/ranmor/Documents/FigDex%20Codex/docs/OPERATIONS_RUNBOOK.md)

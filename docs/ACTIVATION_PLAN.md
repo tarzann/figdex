@@ -1,6 +1,6 @@
 # FigDex Activation Plan
 
-**Last updated:** March 30, 2026
+**Last updated:** March 31, 2026
 
 This document translates current UX, marketing, and product-friction findings into a practical plan for improving user activation before launch.
 
@@ -228,17 +228,45 @@ Feel like control and trust, not admin setup.
 - download page refinement
 - plugin first-session copy cleanup
 
+**Status:** mostly completed in the current cycle.
+
+Completed or substantially improved:
+- shared messaging system
+- homepage CTA cleanup
+- download page outcome-led rewrite
+- login/register/plugin-connect copy cleanup
+- public-site shell alignment
+
 ### Phase 2
 
 - gallery first-session simplification
 - share UX simplification
 - pricing upgrade clarity
 
+**Status:** mostly completed in the current cycle.
+
+Completed or substantially improved:
+- gallery first-use empty state
+- first-index success state
+- share choice simplification
+- pricing clarity improvements
+
 ### Phase 3
 
 - account trust/control polish
 - admin clarity improvements
 - supporting empty/error/loading state pass
+
+**Status:** partially completed.
+
+Completed or substantially improved:
+- account trust/control cleanup
+- admin activity and user-flow visibility
+- index management polish
+
+Still open:
+- final pass on plugin first-session UX
+- small follow-up pass on empty/error states across remaining surfaces
 
 ## 6. What Not to Do
 
@@ -252,8 +280,8 @@ Do not:
 
 The next implementation cycle should begin with:
 
-1. defining final core messaging
-2. simplifying the first-time path from homepage to first index
-3. reducing new-user complexity in the gallery
+1. publish the pending plugin UI polish
+2. run one more clean first-time journey from zero state
+3. tighten any remaining empty/error states discovered in that pass
 
 This should be executed before broader visual polish work.

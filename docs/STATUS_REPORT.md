@@ -1,8 +1,8 @@
 # FigDex Status Report
 
-**Date:** March 30, 2026  
+**Date:** March 31, 2026  
 **Plugin version:** `v1.32.35`  
-**Web status:** current `main` after normalized-index migration, gallery/search/performance hardening, and pricing/account UX cleanup  
+**Web status:** current `main` after normalized-index migration, gallery/search/performance hardening, public-site shell unification, activation-path cleanup, and user-app UX cleanup  
 **Production URL:** [https://www.figdex.com](https://www.figdex.com)
 
 ## 1. Executive Summary
@@ -14,7 +14,7 @@ The system has moved from a heavy legacy JSON-first index model toward a normali
 At this point:
 - The product is usable for serious founder-led testing.
 - The main bottlenecks that previously caused `429`, `504`, `statement timeout`, and slow gallery file loads have been addressed.
-- The UX across plugin, gallery, landing, pricing, and account is more coherent.
+- The UX across plugin, gallery, landing, pricing, account, download, auth, and admin is materially more coherent.
 - The system still contains some legacy compatibility layers, but they are no longer the dominant path.
 
 ## 2. Current Product Scope
@@ -62,12 +62,21 @@ The web app received major improvements in:
 - landing page clarity
 - pricing page clarity
 - admin user/index views
+- download and auth flow clarity
+- public-site shell consistency across marketing/support/legal pages
+- first-use and first-success onboarding states
+- index management polish
 
 Key files:
 - [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
 - [web/pages/index.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/index.tsx)
 - [web/pages/pricing.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/pricing.tsx)
 - [web/pages/account.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/account.tsx)
+- [web/pages/download-plugin.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/download-plugin.tsx)
+- [web/pages/login.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/login.tsx)
+- [web/pages/register.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/register.tsx)
+- [web/pages/plugin-connect.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/plugin-connect.tsx)
+- [web/pages/index-management.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/index-management.tsx)
 
 ### 3.3 Backend / DB
 
@@ -106,7 +115,16 @@ Current reality:
 - legacy fallback still exists in some routes
 - the platform is in late migration, not full deletion
 
-### 4.3 Important Schema Note
+### 4.3 Route Cleanup Status
+
+The product surface was reduced materially:
+
+- legacy `gallery-*`, `index-*`, and old dashboard routes now redirect to canonical pages
+- `Projects Management` and related `/api/projects` routes were removed from the product
+- `Figma API Integration` is currently positioned as `Soon`, not as an active flow
+- `Copy API Key` now lives only in `Account`, not in menus
+
+### 4.4 Important Schema Note
 
 `indexed_files` uses `total_frames`, not `frame_count`.
 
@@ -222,6 +240,26 @@ This allows specific internal/test users to bypass:
 - cooldown
 - indexing fair-use limits
 
+### 7.4 Activation / First-Time UX
+
+The activation path was simplified across:
+- homepage CTA hierarchy
+- plugin download page
+- login / register
+- plugin connection
+- empty gallery first-use state
+- first-index success state
+
+Current intended path:
+- landing
+- download plugin
+- connect or continue as guest
+- link file
+- first index
+- open first result in the gallery
+
+This path is still not fully "done", but it is now substantially clearer than earlier in the cycle.
+
 ## 8. Admin / Operations Status
 
 ### 8.1 Admin Dashboard
@@ -249,6 +287,13 @@ User reset now:
 - preserves plan
 - refreshes admin state more correctly
 
+### 8.4 Activity / Flow Visibility
+
+Admin now includes:
+- live activity log
+- user flow dashboard
+- richer event logging for indexing, share, claim, limits, and usage activity
+
 ## 9. Manual Smoke-Test Status
 
 The following manual smoke tests were reported as passing:
@@ -258,6 +303,33 @@ The following manual smoke tests were reported as passing:
 3. gallery lobby
 4. file open and search
 5. sharing
+6. reset indices
+7. usage counters
+
+Additional progress since the original smoke pass:
+- index management was polished and aligned visually with the rest of the product
+- download/auth/plugin-connect onboarding copy was tightened
+- activation CTAs were improved for first-time users and guests
+
+## 10. Current Highest-Priority Open Work
+
+The current recommended order is:
+
+1. finish remaining plugin UI changes and publish them
+2. continue small activation/onboarding polish where needed
+3. keep `Figma API Integration` as `Soon` until the real flow is ready
+4. defer billing / Paddle validation until business setup is ready
+
+## 11. Overall Assessment
+
+FigDex now feels much closer to a coherent early product than to a stitched set of tools.
+
+The biggest remaining gap is no longer system stability; it is final product packaging:
+- plugin polish
+- activation polish
+- commercial flow validation later
+
+For founder-led testing and controlled early usage, the system is in a strong state.
 6. user reset
 7. user usage (`Files / Frames`)
 
