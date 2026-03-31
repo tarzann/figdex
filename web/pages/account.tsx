@@ -278,24 +278,61 @@ export default function AccountPage() {
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1.25, mb: 2.5 }}>
                   Keep this key private. You only need it for direct API workflows outside the plugin and gallery.
                 </Typography>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 1 }}>
+                <Stack spacing={2} sx={{ mt: 1 }}>
                   <TextField
                     fullWidth
                     value={showKey ? apiKey : (data.user.apiKeyMasked || apiKey.slice(0, 8) + '••••••')}
                     InputProps={{ readOnly: true }}
                   />
-                  <Button sx={PUBLIC_SITE_SECONDARY_BUTTON_SX} variant="outlined" onClick={copyKey}>Copy</Button>
-                  <Button sx={PUBLIC_SITE_SECONDARY_BUTTON_SX} variant="outlined" onClick={() => setShowKey(!showKey)}>
-                    {showKey ? 'Hide' : 'Show'}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={regenerateKey}
-                    sx={{ textTransform: 'none', borderRadius: 999, fontWeight: 700 }}
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1.5}
+                    sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
                   >
-                    Regenerate
-                  </Button>
+                    <Button
+                      sx={{
+                        ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
+                        minHeight: 48,
+                        px: 2.5,
+                        boxShadow: '0 10px 24px rgba(15,23,42,0.14)',
+                      }}
+                      variant="contained"
+                      onClick={copyKey}
+                    >
+                      Copy key
+                    </Button>
+                    <Button
+                      sx={{
+                        ...PUBLIC_SITE_SECONDARY_BUTTON_SX,
+                        minHeight: 48,
+                        px: 2.5,
+                      }}
+                      variant="outlined"
+                      onClick={() => setShowKey(!showKey)}
+                    >
+                      {showKey ? 'Hide key' : 'Show key'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={regenerateKey}
+                      sx={{
+                        textTransform: 'none',
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        minHeight: 48,
+                        px: 2.5,
+                        color: '#B42318',
+                        borderColor: 'rgba(180,35,24,0.22)',
+                        bgcolor: '#fff',
+                        '&:hover': {
+                          borderColor: '#B42318',
+                          bgcolor: 'rgba(180,35,24,0.04)',
+                        },
+                      }}
+                    >
+                      Regenerate
+                    </Button>
+                  </Stack>
                 </Stack>
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                   Regenerating will invalidate the old key (update your plugin settings).
