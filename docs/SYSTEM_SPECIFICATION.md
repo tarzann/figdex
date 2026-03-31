@@ -1,6 +1,6 @@
 # FigDex System Specification
 
-**Last updated:** March 30, 2026  
+**Last updated:** March 31, 2026  
 **Status:** current specification of the active FigDex product and platform
 
 ## 1. Product Definition
@@ -17,6 +17,7 @@ Core user value:
 - browse indexed screens quickly
 - search by names, text, and tags
 - share full galleries or current search results
+- move from plugin capture to web review in a single understandable journey
 
 ## 2. Primary User Types
 
@@ -91,12 +92,19 @@ Plugin output includes:
 
 Main entry areas:
 - [web/pages/index.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/index.tsx)
+- [web/pages/download-plugin.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/download-plugin.tsx)
+- [web/pages/login.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/login.tsx)
+- [web/pages/register.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/register.tsx)
+- [web/pages/plugin-connect.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/plugin-connect.tsx)
 - [web/pages/pricing.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/pricing.tsx)
 - [web/pages/account.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/account.tsx)
 - [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
+- [web/pages/index-management.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/index-management.tsx)
 - [web/pages/admin/index.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/admin/index.tsx)
 
 Primary responsibilities:
+- public product messaging
+- plugin installation and first-session guidance
 - authentication and user state
 - gallery browsing
 - file view
@@ -173,6 +181,25 @@ Current role:
 
 ## 5. Core Product Flows
 
+## 5.0 Intended Activation Flow
+
+The intended founder-led activation path is:
+
+1. user lands on homepage
+2. user downloads plugin
+3. user signs in or continues as guest
+4. user links a file in the plugin
+5. user creates a first index
+6. user opens the result in the gallery
+7. user understands search and share
+
+The system was recently updated to support this path more explicitly across:
+- landing
+- plugin download
+- auth
+- plugin connect
+- gallery first-use and first-success states
+
 ## 5.1 Plugin Indexing Flow
 
 1. plugin opens
@@ -196,6 +223,12 @@ Current role:
    - frame count
 4. user clicks a file
 5. file view opens
+
+For a first-time user with no indices:
+- the gallery should show guided onboarding, not a generic empty state
+
+For a user arriving from a first successful index:
+- the gallery should show a success-oriented entry state and direct them to open the file
 
 ## 5.3 File View Flow
 
@@ -228,6 +261,7 @@ Expected share behavior:
 - descriptive share naming
 - stable share link rendering
 - public read path works without breaking image previews
+- user-facing share choices are phrased in human terms where possible
 
 ## 5.6 Reset Flow
 
@@ -274,8 +308,18 @@ Admin capabilities currently include:
 - logical index visibility
 - reset indices
 - bypass toggle for indexing limits
+- activity log
+- user-flow monitoring
 
 Admin should report logical product state, not raw legacy rows.
+
+## 7.1 Product Surface Cleanup Status
+
+The active user-facing product surface has been simplified:
+- `Projects Management` and related project APIs were removed
+- multiple legacy route variants now redirect to canonical pages
+- `Figma API Integration` is positioned as `Soon`, not as an active user flow
+- technical actions were moved deeper into account or hidden from main navigation where appropriate
 
 ## 8. Performance Principles
 
@@ -337,6 +381,7 @@ The system is strong enough for continued testing and iteration, but:
 - legacy compatibility paths still exist
 - not every historical document is current
 - some older admin/payment artifacts may still need cleanup
+- one plugin UI polish pass is still intentionally pending local approval
 
 The correct mental model is:
 - normalized-first
@@ -347,7 +392,7 @@ The correct mental model is:
 ## 12. Recommended Near-Term Priorities
 
 1. continue reducing remaining dependence on `index_files`
-2. improve observability and operator tooling
+2. finish pending plugin UI polish and publish it
 3. maintain a clean and simple plan/upgrade model
 4. continue focused UX polish only where it improves clarity or conversion
 5. keep performance regressions checked with controlled load smoke tests

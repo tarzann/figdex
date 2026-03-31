@@ -1,6 +1,6 @@
 # FigDex Go-To-Market UX Priorities
 
-**Last updated:** March 30, 2026
+**Last updated:** March 31, 2026
 
 This document synthesizes recent UI/UX, marketing, and product-friction audits into one practical view of what matters most before taking FigDex to market.
 
@@ -12,20 +12,26 @@ FigDex already has strong product capability:
 - sharing flows
 - admin visibility
 
-The main remaining problem is not capability. It is activation clarity.
+The main remaining problem is not capability. It is still activation clarity, although that gap is now much smaller than it was during the first audit pass.
 
-Today the system can do a lot, but a first-time user still has to work too hard to understand:
+Today the system can do a lot, but a first-time user can still work too hard to understand:
 - what FigDex is
 - what the plugin does
 - what the web app does
 - what to do first
 - what happens next
 
+What changed recently:
+- the public shell is now far more consistent
+- auth and plugin-connect are now much closer to the rest of the product
+- gallery first-use and first-success states are in place
+- index management and account feel more like product surfaces than internal tools
+
 ## 2. Main UX / GTM Problems
 
-### 2.1 No Single First-Time Path
+### 2.1 First-Time Path Is Stronger, But Still Needs One Clean Validation Pass
 
-The product currently exposes too many valid paths:
+The product used to expose too many valid paths. This has been reduced, but the journey still needs clean-user validation:
 - homepage
 - pricing
 - plugin download
@@ -35,9 +41,9 @@ The product currently exposes too many valid paths:
 - gallery
 - account
 
-This makes the system feel powerful, but less guided than it should be.
+The path is now more coherent, but it still needs one final validation pass from zero state.
 
-### 2.2 Inconsistent Product Language
+### 2.2 Product Language Is Better, But Still Needs Discipline
 
 The product still mixes internal and user-facing terms:
 - plugin
@@ -48,11 +54,11 @@ The product still mixes internal and user-facing terms:
 - share
 - FigDex Web
 
-This increases cognitive load, especially early in the journey.
+This increases cognitive load, especially early in the journey. Much of this has already improved, but it still needs to stay under control.
 
-### 2.3 Gallery Is Strong but Heavy for New Users
+### 2.3 Gallery Is Strong but Still Slightly Heavy for New Users
 
-The gallery is now much more capable and faster, but as a first meaningful screen it still asks users to process:
+The gallery is now much more capable and faster, and it now includes first-use and first-success states, but as a first meaningful screen it still asks users to process:
 - navigation
 - search
 - filters
@@ -60,19 +66,19 @@ The gallery is now much more capable and faster, but as a first meaningful scree
 - results modes
 - file modes
 
-This is too much before activation.
+This is improved, but still the heaviest user-facing product surface.
 
-### 2.4 Plugin vs Web Relationship Is Not Repeated Clearly Enough
+### 2.4 Plugin vs Web Relationship Must Stay Explicit Everywhere
 
 Users should hear one simple message repeatedly:
 - Use the plugin to capture and update designs from Figma.
 - Use FigDex Web to browse, search, review, and share them.
 
-This relationship is present, but not yet treated as a core product rule.
+This relationship is now present in key surfaces and should continue to be treated as a core product rule.
 
-### 2.5 Share Is Powerful but Conceptually Heavy
+### 2.5 Share Is Simpler, But Still Needs Human Framing
 
-The current distinctions are sensible internally, but a user should think in scenarios, not system models.
+The current distinctions are better than before, but a user should still think in scenarios, not system models.
 
 For example:
 - share the full library
@@ -130,10 +136,10 @@ Preferred message direction:
 
 ### P1 — Must Improve First
 
-1. Create a single first-time onboarding path.
-2. Unify terminology across plugin, web, pricing, and share.
-3. Clarify plugin vs web responsibilities everywhere.
-4. Reduce first-session complexity in the gallery.
+1. Validate the now-cleaner first-time onboarding path.
+2. Keep unifying terminology across plugin, web, pricing, and share.
+3. Keep plugin vs web responsibilities explicit everywhere.
+4. Continue reducing first-session complexity in the gallery.
 
 ### P2 — Strong Next Layer
 
@@ -192,16 +198,18 @@ Power is a strength, but it should unfold progressively.
 
 - The plugin + gallery + sharing model is compelling.
 - The normalized architecture now supports a cleaner user experience.
-- The download page is close to a strong onboarding step.
+- The download page is now a strong onboarding step.
 - Pricing and plan visibility are much clearer than before.
+- Auth and plugin-connect are much more coherent with the public site.
+- Index management and account now feel more like product surfaces than internal tools.
 - Operational visibility in admin is strong enough to support launch-stage learning.
 
 ## 7. Practical Recommendation
 
 The next major design/product effort should not be random UI polish.
 
-It should be an activation program focused on:
-1. first-time user path
+It should continue as an activation program focused on:
+1. validating the first-time user path from zero state
 2. terminology cleanup
 3. gallery simplification for new users
 4. share simplification
