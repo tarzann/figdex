@@ -105,3 +105,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_indexed_owner_usage_user
 CREATE UNIQUE INDEX IF NOT EXISTS idx_indexed_owner_usage_guest
   ON indexed_owner_usage(owner_anon_id)
   WHERE user_id IS NULL AND owner_anon_id IS NOT NULL;
+
+ALTER TABLE public.indexed_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.indexed_pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.indexed_frames ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.indexed_owner_usage ENABLE ROW LEVEL SECURITY;
