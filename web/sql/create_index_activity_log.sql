@@ -31,3 +31,5 @@ create index if not exists index_activity_log_user_id_idx
 
 create index if not exists index_activity_log_file_key_idx
   on public.index_activity_log (file_key);
+
+alter table public.index_activity_log enable row level security;
