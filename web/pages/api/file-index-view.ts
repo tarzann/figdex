@@ -71,7 +71,7 @@ const normalizeFrame = (frame: any, page: any) => ({
 const buildClientFrame = (payload: any, overrides: Record<string, any>) => ({
   id: overrides.id || payload?.id || '',
   name: overrides.name || payload?.name || 'Untitled Frame',
-  url: payload?.url || '',
+  url: overrides.url || payload?.url || '',
   pageId: overrides.pageId || payload?.pageId || '',
   pageName: overrides.pageName || payload?.pageName || '',
   width: typeof payload?.width === 'number' ? payload.width : null,
@@ -277,7 +277,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const { data: normalizedFrames } = await svc
           .from('indexed_frames')
-          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order')
+          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order, frame_url:frame_payload->>url')
           .eq('page_id', normalizedPage.id)
           .range(offset, offset + limit - 1)
           .order('sort_order', { ascending: true });
@@ -294,6 +294,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
+            url: typeof (frame as any).frame_url === 'string' ? (frame as any).frame_url : '',
             image: preview.listImage,
             thumb_url: preview.thumbUrl,
           }));
@@ -370,7 +371,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pattern = `%${searchSeed}%`;
         const { data: searchFrames } = await svc
           .from('indexed_frames')
-          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order')
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order, frame_url:frame_payload->>url')
           .in('page_id', pageIds)
           .or(`frame_name.ilike.${pattern},search_text.ilike.${pattern}`)
           .order('sort_order', { ascending: true })
@@ -396,6 +397,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
             customTags: Array.isArray(frame.custom_tags) ? frame.custom_tags : [],
+            url: typeof (frame as any).frame_url === 'string' ? (frame as any).frame_url : '',
             image: preview.listImage,
             thumb_url: preview.thumbUrl,
           }));

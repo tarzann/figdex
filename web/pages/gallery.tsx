@@ -3562,7 +3562,7 @@ export default function Home() {
                   sx={{ mb: 2, maxWidth: 400 }}
                   startIcon={<FigmaIcon />}
                 >
-                  Open in Figma file
+                  {modalThumb?.frame.url ? 'Open frame in Figma' : 'Open in Figma file'}
                 </Button>
               )}
             </>
