@@ -60,6 +60,9 @@ export default function DownloadPluginPage() {
                         ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
                         px: 3.5,
                         py: 1.3,
+                        whiteSpace: 'nowrap',
+                        minWidth: 176,
+                        flexShrink: 0,
                       }}
                     >
                       Download ZIP
