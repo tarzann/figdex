@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
-  Container,
   Typography,
   Paper,
   Table,
@@ -21,34 +20,17 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Snackbar,
   InputAdornment,
-  Stack,
-  Avatar,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider
+  Stack
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
-  Share as ShareIcon,
   Delete as DeleteIcon,
-  Storage as StorageIcon,
-  ContentCopy as ContentCopyIcon,
-  AccountCircle as AccountCircleIcon,
-  Search as SearchIcon,
-  Person as PersonIcon,
-  Api as ApiIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
-  FolderOpen as FolderOpenIcon,
   Update as UpdateIcon,
   CheckCircle as CheckCircleIcon,
   Info as InfoIcon,
   Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon
+  VisibilityOff as VisibilityOffIcon,
+  FolderOpen as FolderOpenIcon
 } from '@mui/icons-material';
 import UserAppLayout from '../components/UserAppLayout';
 
@@ -72,10 +54,6 @@ export default function IndexManagement() {
   const [error, setError] = useState('');
   const [deletingIndex, setDeletingIndex] = useState<string | null>(null);
   // Share functionality removed - sharing is now at gallery level, not per index
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [checkingChanges, setCheckingChanges] = useState<string | null>(null);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
   const [changesResult, setChangesResult] = useState<any>(null);
@@ -130,9 +108,6 @@ export default function IndexManagement() {
           hasIndexData: !!f.index_data
         })));
         setIndexFiles(data.data);
-        setIsLoggedIn(true);
-        const adminEmails = ['ranmor01@gmail.com'];
-        setIsAdmin(adminEmails.includes(user.email));
         // Ensure api_key is in localStorage (get-indices returns full user from DB)
         // Without api_key, delete/check-updates fail with "User not authenticated"
         if (data.user && data.user.api_key && typeof window !== 'undefined') {
@@ -150,63 +125,6 @@ export default function IndexManagement() {
       setIndexFiles([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserMenuAnchor(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('figma_web_user');
-    setIsLoggedIn(false);
-    setIsAdmin(false);
-    handleUserMenuClose();
-    router.push('/');
-  };
-
-  const handleCopyApiKey = async () => {
-    if (typeof window === 'undefined') return;
-    const userData = localStorage.getItem('figma_web_user');
-    if (!userData) {
-      alert('No user found');
-      return;
-    }
-    try {
-      const user = JSON.parse(userData);
-      if (user && user.api_key) {
-        try {
-          await navigator.clipboard.writeText(user.api_key);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          alert('API Key copied to clipboard!');
-        } catch (err) {
-          console.error('Failed to copy API key:', err);
-          const textArea = document.createElement('textarea');
-          textArea.value = user.api_key;
-          document.body.appendChild(textArea);
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            alert('API Key copied to clipboard!');
-          } catch (fallbackErr) {
-            console.error('Fallback copy failed:', fallbackErr);
-            alert('Failed to copy API key');
-          }
-          document.body.removeChild(textArea);
-        }
-      } else {
-        alert('No API key found for this user');
-      }
-    } catch (err) {
-      console.error('Failed to parse user data:', err);
-      alert('Failed to copy API key');
     }
   };
 
@@ -302,31 +220,22 @@ export default function IndexManagement() {
   };
 
   const loadThumbnails = async (files: IndexFile[]) => {
-    const thumbnailPromises = files.map(async (file) => {
+    const immediateThumbnails = files.reduce((acc: Record<string, string | null>, file) => {
+      if (file.file_thumbnail_url) {
+        acc[file.id] = file.file_thumbnail_url;
+      }
+      return acc;
+    }, {});
+
+    if (Object.keys(immediateThumbnails).length > 0) {
+      setThumbnails((prev) => ({ ...prev, ...immediateThumbnails }));
+    }
+
+    const filesNeedingFetch = files.filter((file) => !file.file_thumbnail_url);
+    if (filesNeedingFetch.length === 0) return;
+
+    const thumbnailPromises = filesNeedingFetch.map(async (file) => {
       try {
-        // First, try to use file_thumbnail_url from saved_connections (if available)
-        if (file.file_thumbnail_url) {
-          // Always fetch index data to get signed URL (even if we have file_thumbnail_url)
-          let thumbnailUrl = file.file_thumbnail_url;
-          
-          try {
-            const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
-            if (indexResponse.ok) {
-              const indexData = await indexResponse.json();
-              if (indexData.success && indexData.data) {
-                // Always use coverImageUrl from get-index-data if available (it should be signed)
-                if (indexData.data.coverImageUrl) {
-                  thumbnailUrl = indexData.data.coverImageUrl;
-                }
-              }
-            }
-          } catch (e) {
-            console.error(`Error fetching index data for ${file.id}:`, e);
-          }
-          
-          return { fileId: file.id, thumbnail: thumbnailUrl };
-        }
-        
         // Fallback: Get thumbnail from index_data (coverImageUrl or first frame)
         const indexResponse = await fetch(`/api/get-index-data?indexId=${file.id}`);
         if (!indexResponse.ok) {
@@ -541,22 +450,80 @@ export default function IndexManagement() {
           </Alert>
         )}
 
-        <Paper sx={{ p: 2 }}>
+        <Paper
+          sx={{
+            mb: 3,
+            p: { xs: 2.5, md: 3 },
+            borderRadius: 4,
+            bgcolor: '#ffffff',
+            border: '1px solid #e4e7ec',
+            boxShadow: '0 12px 34px rgba(15,23,42,0.06)',
+          }}
+        >
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }}>
+            <Box>
+              <Chip
+                label="Saved libraries"
+                size="small"
+                sx={{ mb: 1.25, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+              />
+              <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mb: 0.75 }}>
+                Manage your indexed Figma libraries
+              </Typography>
+              <Typography variant="body1" sx={{ color: '#667085', lineHeight: 1.7, maxWidth: 680 }}>
+                Review indexed files, check whether a file changed in Figma, and remove old libraries you no longer need.
+              </Typography>
+            </Box>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ minWidth: { md: 220 } }}>
+              <Chip
+                label={`${indexFiles.length} ${indexFiles.length === 1 ? 'library' : 'libraries'}`}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, bgcolor: '#111827', color: '#fff', fontWeight: 700 }}
+              />
+              <Button
+                variant="outlined"
+                startIcon={<FolderOpenIcon />}
+                onClick={() => router.push('/gallery')}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 999,
+                  borderColor: '#d0d5dd',
+                  color: '#111827',
+                  fontWeight: 700,
+                  px: 2.5,
+                  '&:hover': { borderColor: '#111827', bgcolor: 'rgba(17,24,39,0.04)' },
+                }}
+              >
+                Open gallery
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+
+        <Paper
+          sx={{
+            p: { xs: 1.5, md: 2 },
+            borderRadius: 4,
+            bgcolor: '#ffffff',
+            border: '1px solid #e4e7ec',
+            boxShadow: '0 12px 34px rgba(15,23,42,0.06)',
+            overflow: 'hidden',
+          }}
+        >
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell><strong>Cover</strong></TableCell>
-                  <TableCell><strong>File Name</strong></TableCell>
-                  <TableCell><strong>Source</strong></TableCell>
-                  <TableCell><strong>Last Updated</strong></TableCell>
-                  <TableCell><strong>Frames Count</strong></TableCell>
-                  <TableCell align="center"><strong>Actions</strong></TableCell>
+                  <TableCell sx={{ color: '#667085', fontWeight: 700 }}>Cover</TableCell>
+                  <TableCell sx={{ color: '#667085', fontWeight: 700 }}>File Name</TableCell>
+                  <TableCell sx={{ color: '#667085', fontWeight: 700 }}>Source</TableCell>
+                  <TableCell sx={{ color: '#667085', fontWeight: 700 }}>Last Updated</TableCell>
+                  <TableCell sx={{ color: '#667085', fontWeight: 700 }}>Frames Count</TableCell>
+                  <TableCell align="right" sx={{ color: '#667085', fontWeight: 700 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {indexFiles.map((file) => (
-                  <TableRow key={file.id}>
+                  <TableRow key={file.id} hover sx={{ '& td': { borderColor: '#eaecf0' } }}>
                     <TableCell>
                       {thumbnails[file.id] ? (
                         <Box
@@ -568,7 +535,7 @@ export default function IndexManagement() {
                             height: 48, // 5:3 aspect ratio (80 * 3/5 = 48) - same as lobby
                             objectFit: 'cover',
                             borderRadius: 1,
-                            border: '1px solid #e0e0e0'
+                            border: '1px solid #e4e7ec'
                           }}
                           onError={(e: any) => {
                             // Hide image on error
@@ -580,22 +547,20 @@ export default function IndexManagement() {
                           sx={{
                             width: 80,
                             height: 48, // 5:3 aspect ratio - same as lobby
-                            bgcolor: 'grey.200',
+                            bgcolor: '#f8fafc',
                             borderRadius: 1,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            border: '1px solid #e0e0e0'
+                            border: '1px solid #e4e7ec'
                           }}
                         >
-                          <Typography variant="caption" color="text.secondary">
-                            No cover
-                          </Typography>
+                          <CircularProgress size={16} sx={{ color: '#98a2b3' }} />
                         </Box>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" fontWeight={500}>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: '#111827' }}>
                         {file.file_name || `Index ${file.id}`}
                       </Typography>
                     </TableCell>
@@ -603,59 +568,114 @@ export default function IndexManagement() {
                       <Chip 
                         label={file.source || 'Plugin'} 
                         size="small"
-                        color={file.source === 'API' ? 'primary' : 'default'}
-                        variant={file.source === 'API' ? 'filled' : 'outlined'}
+                        sx={{
+                          bgcolor: file.source === 'API' ? '#eef4ff' : '#f8fafc',
+                          color: file.source === 'API' ? '#3538cd' : '#475467',
+                          border: '1px solid #e4e7ec',
+                          fontWeight: 700,
+                        }}
                       />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" sx={{ color: '#475467' }}>
                         {formatDate(file.uploaded_at)}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" sx={{ color: '#111827', fontWeight: 600 }}>
                         {countFrames(file).toLocaleString()}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center">
-                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                        <IconButton
-                          color="info"
+                    <TableCell align="right">
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={checkingChanges === file.id ? <CircularProgress size={14} /> : <UpdateIcon fontSize="small" />}
                           onClick={() => handleCheckForUpdates(file)}
                           disabled={checkingChanges === file.id || !file.figma_file_key}
-                          size="small"
-                          title="Check for updates"
+                          sx={{
+                            textTransform: 'none',
+                            borderRadius: 999,
+                            borderColor: '#d0d5dd',
+                            color: '#111827',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            '&:hover': { borderColor: '#111827', bgcolor: 'rgba(17,24,39,0.04)' },
+                          }}
                         >
-                          {checkingChanges === file.id ? (
-                            <CircularProgress size={20} />
-                          ) : (
-                            <UpdateIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                        {/* Share button removed - sharing is now at gallery level, not per index */}
-                        <IconButton
-                          color="error"
+                          Check updates
+                        </Button>
+                        <Button
+                          variant="text"
+                          size="small"
+                          startIcon={deletingIndex === file.id ? <CircularProgress size={14} /> : <DeleteIcon fontSize="small" />}
                           onClick={() => handleDeleteIndex(file.id)}
                           disabled={deletingIndex === file.id}
-                          size="small"
-                          title="Delete"
+                          sx={{
+                            textTransform: 'none',
+                            borderRadius: 999,
+                            color: '#b42318',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            '&:hover': { bgcolor: '#fef3f2' },
+                          }}
                         >
-                          {deletingIndex === file.id ? (
-                            <CircularProgress size={20} />
-                          ) : (
-                            <DeleteIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Box>
+                          Delete
+                        </Button>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}
                 {indexFiles.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} align="center">
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                        No indices found
-                      </Typography>
+                      <Box sx={{ py: 6 }}>
+                        <Chip
+                          label="No libraries yet"
+                          sx={{ mb: 2, bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+                        />
+                        <Typography variant="h6" sx={{ fontWeight: 800, color: '#111827', mb: 1 }}>
+                          Your saved libraries will appear here
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 460, mx: 'auto', mb: 2.5 }}>
+                          Create your first index in the plugin, then return here to manage updates and remove old libraries.
+                        </Typography>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center">
+                          <Button
+                            variant="contained"
+                            onClick={() => router.push('/download-plugin')}
+                            sx={{
+                              bgcolor: '#111827',
+                              color: '#fff',
+                              textTransform: 'none',
+                              borderRadius: 999,
+                              px: 3,
+                              py: 1.15,
+                              fontWeight: 700,
+                              '&:hover': { bgcolor: '#1f2937' },
+                            }}
+                          >
+                            Download Plugin
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={() => router.push('/gallery')}
+                            sx={{
+                              textTransform: 'none',
+                              borderRadius: 999,
+                              borderColor: '#d0d5dd',
+                              color: '#111827',
+                              fontWeight: 700,
+                              px: 3,
+                              py: 1.15,
+                              '&:hover': { borderColor: '#111827', bgcolor: 'rgba(17,24,39,0.04)' },
+                            }}
+                          >
+                            Open Gallery
+                          </Button>
+                        </Stack>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 )}
