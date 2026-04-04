@@ -8,6 +8,27 @@ interface ContactFormData {
   message: string;
 }
 
+interface BetaInterestData {
+  name: string;
+  email: string;
+  role: string;
+  company?: string;
+  figmaFileCount: string;
+  teamSize?: string;
+  primaryUseCase: string;
+  biggestPainPoint: string;
+  notes?: string;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function sendContactEmail(data: ContactFormData): Promise<{ success: boolean; error?: string }> {
   const resendApiKey = process.env.RESEND_API_KEY;
   const supportEmail = process.env.SUPPORT_EMAIL || 'support@figdex.com';
@@ -85,6 +106,81 @@ Submitted at: ${new Date().toISOString()}
     return { success: true };
   } catch (error) {
     console.error('Email sending error:', error);
+    return { success: false, error: 'Failed to send email' };
+  }
+}
+
+export async function sendBetaInterestEmail(data: BetaInterestData): Promise<{ success: boolean; error?: string }> {
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const supportEmail = process.env.SUPPORT_EMAIL || 'support@figdex.com';
+  const fromEmail = process.env.FROM_EMAIL || 'noreply@figdex.com';
+
+  if (!resendApiKey) {
+    console.log('📧 Beta interest submission (email not configured):', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+    return { success: true };
+  }
+
+  try {
+    const resend = await import('resend');
+    const resendClient = new resend.Resend(resendApiKey);
+
+    const safeNotes = data.notes ? escapeHtml(data.notes).replace(/\n/g, '<br>') : 'None';
+    const safePainPoint = escapeHtml(data.biggestPainPoint).replace(/\n/g, '<br>');
+
+    const { error } = await resendClient.emails.send({
+      from: fromEmail,
+      to: supportEmail,
+      replyTo: data.email,
+      subject: `[Beta Interest] ${data.name} — ${data.role}`,
+      html: `
+        <h2>New FigDex Beta Interest</h2>
+        <p><strong>Name:</strong> ${escapeHtml(data.name)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
+        <p><strong>Role:</strong> ${escapeHtml(data.role)}</p>
+        <p><strong>Company / Team:</strong> ${escapeHtml(data.company || 'Not provided')}</p>
+        <p><strong>Figma files:</strong> ${escapeHtml(data.figmaFileCount)}</p>
+        <p><strong>Team size:</strong> ${escapeHtml(data.teamSize || 'Not provided')}</p>
+        <p><strong>Primary use case:</strong> ${escapeHtml(data.primaryUseCase)}</p>
+        <hr>
+        <p><strong>Biggest pain point:</strong></p>
+        <p>${safePainPoint}</p>
+        <p><strong>Notes:</strong></p>
+        <p>${safeNotes}</p>
+        <hr>
+        <p><small>Submitted at: ${new Date().toISOString()}</small></p>
+      `,
+      text: `
+New FigDex Beta Interest
+
+Name: ${data.name}
+Email: ${data.email}
+Role: ${data.role}
+Company / Team: ${data.company || 'Not provided'}
+Figma files: ${data.figmaFileCount}
+Team size: ${data.teamSize || 'Not provided'}
+Primary use case: ${data.primaryUseCase}
+
+Biggest pain point:
+${data.biggestPainPoint}
+
+Notes:
+${data.notes || 'None'}
+
+Submitted at: ${new Date().toISOString()}
+      `,
+    });
+
+    if (error) {
+      console.error('Resend beta interest error:', error);
+      return { success: false, error: 'Failed to send email' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Beta interest email error:', error);
     return { success: false, error: 'Failed to send email' };
   }
 }
@@ -692,5 +788,4 @@ View in Admin Panel: ${siteUrl}/admin/users
     return { success: false, error: 'Failed to send email' };
   }
 }
-
 

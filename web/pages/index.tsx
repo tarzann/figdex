@@ -9,7 +9,10 @@ import {
   CardContent,
   Stack,
   Divider,
-  Chip
+  Chip,
+  Dialog,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Extension as PluginIcon,
@@ -47,6 +50,7 @@ const HomePageV2 = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [betaDialogOpen, setBetaDialogOpen] = useState(false);
 
   useEffect(() => {
     const checkLogin = () => {
@@ -67,11 +71,30 @@ const HomePageV2 = () => {
     checkLogin();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const dismissed = localStorage.getItem('figdex_beta_popup_dismissed_v1');
+    if (dismissed === 'true') return;
+
+    const timeoutId = window.setTimeout(() => {
+      setBetaDialogOpen(true);
+    }, 1800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('figma_web_user');
     setIsLoggedIn(false);
     setIsAdmin(false);
     router.push('/');
+  };
+
+  const dismissBetaDialog = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('figdex_beta_popup_dismissed_v1', 'true');
+    }
+    setBetaDialogOpen(false);
   };
 
   return (
@@ -893,6 +916,105 @@ const HomePageV2 = () => {
       </Box>
 
       {/* Login Dialog */}
+      <Dialog
+        open={betaDialogOpen}
+        onClose={dismissBetaDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 5,
+            border: '1px solid #dbe3f0',
+            boxShadow: '0 30px 80px rgba(15,23,42,0.18)',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <DialogContent sx={{ p: { xs: 3, md: 4 } }}>
+          <Chip
+            label="Early beta"
+            sx={{
+              mb: 2,
+              bgcolor: '#eef2ff',
+              color: '#4f46e5',
+              fontWeight: 700,
+              borderRadius: 999,
+            }}
+          />
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              color: '#111827',
+              mb: 1.5,
+            }}
+          >
+            Want early access to FigDex?
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              color: '#667085',
+              lineHeight: 1.75,
+              mb: 3,
+            }}
+          >
+            We&apos;re inviting a small group of teams to help shape the beta. Leave your details and tell us a bit about your Figma workflow.
+          </Typography>
+          <Box
+            sx={{
+              p: 2.25,
+              borderRadius: 3,
+              bgcolor: '#f8fafc',
+              border: '1px solid #e4e7ec',
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#475467', lineHeight: 1.8 }}>
+              Best fit right now: teams working with large multi-page files, repeated review cycles, design ops, and stakeholder sharing.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: { xs: 3, md: 4 }, pb: { xs: 3, md: 4 }, pt: 0 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ width: '100%' }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                dismissBetaDialog();
+                router.push('/beta');
+              }}
+              sx={{
+                bgcolor: '#111827',
+                color: '#fff',
+                textTransform: 'none',
+                borderRadius: 999,
+                px: 3,
+                py: 1.35,
+                fontWeight: 700,
+                '&:hover': { bgcolor: '#1f2937' },
+              }}
+            >
+              Join the beta
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={dismissBetaDialog}
+              sx={{
+                color: '#111827',
+                borderColor: '#cbd5e1',
+                textTransform: 'none',
+                borderRadius: 999,
+                px: 3,
+                py: 1.35,
+                fontWeight: 600,
+              }}
+            >
+              Maybe later
+            </Button>
+          </Stack>
+        </DialogActions>
+      </Dialog>
+
       <LoginDialog
         open={loginDialogOpen}
         onClose={() => setLoginDialogOpen(false)}
