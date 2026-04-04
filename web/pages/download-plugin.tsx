@@ -1,11 +1,10 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { Box, Button, Card, CardContent, Chip, Container, Stack, Typography } from '@mui/material';
-import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import PublicSiteLayout from '../components/PublicSiteLayout';
-import { FIGDEX_PLUGIN_DOWNLOAD_PATH, FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
+import { FIGDEX_PLUGIN_VERSION } from '../lib/plugin-release';
 import {
   FIGDEX_CATEGORY_STATEMENT,
   FIGDEX_PLUGIN_WEB_RELATIONSHIP,
@@ -31,7 +30,7 @@ export default function DownloadPluginPage() {
                 Install the FigDex plugin and create your first library in minutes
               </Typography>
               <Typography variant="h6" sx={{ color: '#4b5563', fontWeight: 400, maxWidth: 760, mx: 'auto', lineHeight: 1.6 }}>
-                {FIGDEX_CATEGORY_STATEMENT} Download the plugin without signing up, install it in Figma, then connect your account or continue as guest.
+                {FIGDEX_CATEGORY_STATEMENT} Plugin download is temporarily unavailable while we prepare the next release.
               </Typography>
               <Typography variant="body1" sx={{ color: '#667085', maxWidth: 760, mx: 'auto', lineHeight: 1.7, mt: 2 }}>
                 {FIGDEX_PLUGIN_WEB_RELATIONSHIP}
@@ -51,11 +50,9 @@ export default function DownloadPluginPage() {
                       </Typography>
                     </Box>
                     <Button
-                      component="a"
-                      href={FIGDEX_PLUGIN_DOWNLOAD_PATH}
                       variant="contained"
                       size="large"
-                      startIcon={<DownloadRoundedIcon />}
+                      disabled
                       sx={{
                         ...PUBLIC_SITE_PRIMARY_BUTTON_SX,
                         px: 3.5,
@@ -63,16 +60,17 @@ export default function DownloadPluginPage() {
                         whiteSpace: 'nowrap',
                         minWidth: 176,
                         flexShrink: 0,
+                        opacity: 0.65,
                       }}
                     >
-                      Download ZIP
+                      Download soon
                     </Button>
                   </Stack>
 
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
                     {[
-                      ['1', 'Add the plugin to Figma', 'Download the package, unzip it, and add it to Figma once.'],
-                      ['2', 'Connect or continue as guest', 'Open the plugin and choose whether to connect your FigDex account or start as a guest.'],
+                      ['1', 'Plugin release in preparation', 'We are preparing the next public plugin package for download.'],
+                      ['2', 'Connect or continue as guest', 'When the package is available, open the plugin and choose whether to connect your FigDex account or start as a guest.'],
                       ['3', 'Create your first library', 'Link a Figma file, choose the pages you want, and open the result in FigDex Web.'],
                     ].map(([step, title, text]) => (
                       <Box key={step} sx={{ p: 2.5, borderRadius: 4, bgcolor: '#fff', border: '1px solid #e5e7eb' }}>
@@ -89,7 +87,7 @@ export default function DownloadPluginPage() {
 
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
                     <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                      Current public plugin package: <strong>{FIGDEX_PLUGIN_VERSION}</strong>
+                      Next public plugin release: <strong>{FIGDEX_PLUGIN_VERSION}</strong>
                     </Typography>
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                       <Button
