@@ -515,6 +515,16 @@ async function logIndexStage(step, meta) {
   }, meta || {}));
 }
 
+async function postIndexProgress(step, meta) {
+  var details = meta && typeof meta === 'object' ? meta : {};
+  figma.ui.postMessage({
+    type: 'upload-progress',
+    step: step || 'Updating index…',
+    framesDone: typeof details.framesDone === 'number' ? details.framesDone : 0,
+  });
+  await logIndexStage(step, details);
+}
+
 // --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
 // Top-level frames: (1) direct FRAME children of Page; (2) direct FRAME children of each Section (one level only). Excludes [NO_INDEX].
 function getTopLevelFrameIds(page) {
@@ -1413,6 +1423,11 @@ figma.ui.onmessage = async (msg) => {
           await loadUserLimitsToUI(token);
         } catch (_) {}
       }
+      figma.ui.postMessage({ type: 'upload-started' });
+      await postIndexProgress('Loading Figma pages...', {
+        selectedPagesCount: selectedIds.length,
+        framesDone: 0,
+      });
       await figma.loadAllPagesAsync();
       const allPages = figma.root.children
         .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
@@ -1437,6 +1452,11 @@ figma.ui.onmessage = async (msg) => {
       if (!Array.isArray(indexedMeta)) indexedMeta = [];
 
       // Determine which selected pages have changes (dirty) — skip unchanged
+      await postIndexProgress('Scanning selected pages for changes...', {
+        selectedPagesCount: selectedIds.length,
+        pageCount: selectedIds.length,
+        framesDone: 0,
+      });
       var dirtyPageIds = [];
       for (var di = 0; di < selectedIds.length; di++) {
         var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
@@ -1446,10 +1466,30 @@ figma.ui.onmessage = async (msg) => {
         var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
         if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
         dirtyPageIds.push(pageNode.id);
+        if (di === 0 || (di + 1) % 4 === 0 || di === selectedIds.length - 1) {
+          figma.ui.postMessage({
+            type: 'upload-progress',
+            step: 'Scanning selected pages for changes... (' + (di + 1) + '/' + selectedIds.length + ')',
+            framesDone: 0
+          });
+        }
       }
+      await postIndexProgress(
+        dirtyPageIds.length > 0 ? 'Found ' + dirtyPageIds.length + ' page(s) to update' : 'No page changes detected',
+        {
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+          framesDone: 0,
+        }
+      );
 
       // Pre-flight: check guest limits against the pages that will actually be uploaded.
       if (isGuestMode && guestAnonId) {
+        await postIndexProgress('Checking guest plan limits...', {
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+          framesDone: 0,
+        });
         var estimatedFrameCount = 0;
         for (var ei = 0; ei < dirtyPageIds.length; ei++) {
           var dirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[ei]);
@@ -1488,6 +1528,11 @@ figma.ui.onmessage = async (msg) => {
       }
 
       if (!isGuestMode && token) {
+        await postIndexProgress('Checking account limits...', {
+          selectedPagesCount: selectedIds.length,
+          pageCount: dirtyPageIds.length,
+          framesDone: 0,
+        });
         var estimatedConnectedFrameCount = 0;
         for (var cei = 0; cei < dirtyPageIds.length; cei++) {
           var connectedDirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[cei]);
@@ -1524,14 +1569,15 @@ figma.ui.onmessage = async (msg) => {
         }
       }
 
-      figma.ui.postMessage({ type: 'upload-started' });
-      figma.ui.postMessage({ type: 'upload-progress', step: 'Preparing...', framesDone: 0 });
-      await logIndexStage('Preparing...', { selectedPagesCount: selectedIds.length });
-
-      figma.ui.postMessage({ type: 'upload-progress', step: 'Exporting ' + dirtyPageIds.length + ' page(s)...', framesDone: 0 });
-      await logIndexStage('Exporting ' + dirtyPageIds.length + ' page(s)...', {
+      await postIndexProgress('Preparing export…', {
         selectedPagesCount: selectedIds.length,
         pageCount: dirtyPageIds.length,
+        framesDone: 0,
+      });
+      await postIndexProgress('Exporting ' + dirtyPageIds.length + ' page(s)...', {
+        selectedPagesCount: selectedIds.length,
+        pageCount: dirtyPageIds.length,
+        framesDone: 0,
       });
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
@@ -1542,6 +1588,11 @@ figma.ui.onmessage = async (msg) => {
         for (var pi = 0; pi < dirtyPageIds.length; pi++) {
           var page = await figma.getNodeByIdAsync(dirtyPageIds[pi]);
           if (!page || page.type !== 'PAGE') continue;
+          await postIndexProgress('Exporting page ' + (pi + 1) + '/' + dirtyPageIds.length + ': ' + (page.name || 'Untitled'), {
+            selectedPagesCount: selectedIds.length,
+            pageCount: dirtyPageIds.length,
+            framesDone: allPageFrames.length,
+          });
           var frameIds = getTopLevelFrameIds(page);
           for (var fi = 0; fi < frameIds.length; fi++) {
             try {
@@ -1717,11 +1768,11 @@ figma.ui.onmessage = async (msg) => {
       var lastViewToken = null;
       var res = null;
       var finalChunkError = null;
-      figma.ui.postMessage({ type: 'upload-progress', step: 'Uploading to FigDex...', framesDone: totalUploaded });
-      await logIndexStage('Uploading to FigDex...', {
+      await postIndexProgress('Uploading to FigDex...', {
         selectedPagesCount: selectedIds.length,
         pageCount: dirtyPageIds.length,
         frameCount: allPageFrames.length,
+        framesDone: totalUploaded,
       });
       for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         totalChunks = chunkSpecs.length;
