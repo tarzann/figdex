@@ -323,19 +323,10 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
     if (pageCountError) throw pageCountError;
   }
 
-  if (finalizeSet.size > 0 && normalizedPageIds.length > 0 && normalizedPageIds.every((pageId) => finalizeSet.has(pageId))) {
-    const stalePages = (currentPagesRows || [])
-      .filter((row: any) => !normalizedPageIds.includes(String(row.figma_page_id)))
-      .map((row: any) => String(row.id));
-
-    if (stalePages.length > 0) {
-      const { error: stalePagesDeleteError } = await supabaseAdmin
-        .from('indexed_pages')
-        .delete()
-        .in('id', stalePages);
-      if (stalePagesDeleteError) throw stalePagesDeleteError;
-    }
-  }
+  // Important: do not delete pages that are not present in the current chunk.
+  // Partial plugin updates can finalize one page at a time, and pruning "stale"
+  // pages here causes unrelated pages from the same file to disappear mid-sync.
+  // Page removal should only happen in an explicit full-file replacement flow.
 
   const { data: filePages, error: filePagesError } = await supabaseAdmin
     .from('indexed_pages')

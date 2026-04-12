@@ -349,7 +349,7 @@ function splitChunkPagesInHalf(chunkPages) {
 function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
   var specs = Array.isArray(chunkSpecs) ? chunkSpecs.slice() : [];
   var normalized = [];
-  var maxBytes = options && options.maxBytes ? options.maxBytes : 7 * 1024 * 1024;
+  var maxBytes = options && options.maxBytes ? options.maxBytes : 3 * 1024 * 1024;
   while (specs.length > 0) {
     var chunkPages = specs.shift();
     var chunkBody = {
@@ -1024,6 +1024,7 @@ figma.ui.onmessage = async (msg) => {
     // Use stored indexed pages metadata (per document) to mark pages that were already indexed
     let indexedMeta = [];
     try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
+    var serverIndexedPageIdMap = {};
     if (globalFileKey) {
       try {
         var tokenForIndexState = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
@@ -1035,7 +1036,9 @@ figma.ui.onmessage = async (msg) => {
         } else if (serverIndexState && serverIndexState.exists && Array.isArray(serverIndexState.indexedPageIds)) {
           var allowedPageIds = {};
           for (var spi = 0; spi < serverIndexState.indexedPageIds.length; spi++) {
-            allowedPageIds[String(serverIndexState.indexedPageIds[spi])] = true;
+            var indexedPageId = String(serverIndexState.indexedPageIds[spi]);
+            allowedPageIds[indexedPageId] = true;
+            serverIndexedPageIdMap[indexedPageId] = true;
           }
           var reconciledMeta = Array.isArray(indexedMeta)
             ? indexedMeta.filter(function (m) { return m && m.pageId && !!allowedPageIds[String(m.pageId)]; })
@@ -1047,6 +1050,7 @@ figma.ui.onmessage = async (msg) => {
         }
       } catch (e) {}
     }
+    var indexedMetaChanged = false;
     const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
     const pages = [];
     for (var pi = 0; pi < allPages.length; pi++) {
@@ -1059,8 +1063,8 @@ figma.ui.onmessage = async (msg) => {
       } else if (p.isIndexPage) {
         status = 'index_page';
         icon = '📄';
-      } else if (metaByPage[p.id]) {
-        var stored = metaByPage[p.id];
+      } else if (metaByPage[p.id] || serverIndexedPageIdMap[p.id]) {
+        var stored = metaByPage[p.id] || null;
         try {
           var pageNode = await figma.getNodeByIdAsync(p.id);
           if (pageNode && pageNode.type === 'PAGE') {
@@ -1070,8 +1074,20 @@ figma.ui.onmessage = async (msg) => {
               status = 'up_to_date';
               icon = '✅';
             } else {
-              status = 'needs_update';
-              icon = '🔄';
+              if (serverIndexedPageIdMap[p.id] && !storedSigs) {
+                status = 'up_to_date';
+                icon = '✅';
+                indexedMetaChanged = true;
+                metaByPage[p.id] = {
+                  pageId: p.id,
+                  pageName: p.name,
+                  lastIndexedAt: Date.now(),
+                  frameSignatures: currentSigs
+                };
+              } else {
+                status = 'needs_update';
+                icon = '🔄';
+              }
             }
           } else {
             status = 'up_to_date';
@@ -1093,6 +1109,10 @@ figma.ui.onmessage = async (msg) => {
         status: status,
         icon: icon
       });
+    }
+    if (indexedMetaChanged) {
+      indexedMeta = Object.keys(metaByPage).map(function (pageId) { return metaByPage[pageId]; });
+      try { await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta); } catch (e) {}
     }
     var savedSelectedIds = [];
     try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, []); } catch (e) { savedSelectedIds = []; }
@@ -1576,20 +1596,24 @@ figma.ui.onmessage = async (msg) => {
         mergePages: mergePages,
         replacePageIds: dirtyPageIds,
         anonId: isGuestMode && guestAnonId ? guestAnonId : null,
-        maxBytes: 7 * 1024 * 1024
+        maxBytes: 3 * 1024 * 1024
       });
+
+      function buildLastChunkIndexByPageId(specs) {
+        var indexByPageId = {};
+        for (var specIndex = 0; specIndex < specs.length; specIndex++) {
+          var specPages = specs[specIndex];
+          for (var specPageIndex = 0; specPageIndex < specPages.length; specPageIndex++) {
+            var specPage = specPages[specPageIndex];
+            var specPageId = specPage.pageId || specPage.id;
+            if (specPageId) indexByPageId[specPageId] = specIndex;
+          }
+        }
+        return indexByPageId;
+      }
 
       var totalChunks = chunkSpecs.length;
       var uploadSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-      var lastChunkIndexByPageId = {};
-      for (var lci = 0; lci < chunkSpecs.length; lci++) {
-        var chunkSpecPages = chunkSpecs[lci];
-        for (var lpi = 0; lpi < chunkSpecPages.length; lpi++) {
-          var chunkSpecPage = chunkSpecPages[lpi];
-          var chunkSpecPageId = chunkSpecPage.pageId || chunkSpecPage.id;
-          if (chunkSpecPageId) lastChunkIndexByPageId[chunkSpecPageId] = lci;
-        }
-      }
       var totalUploaded = 0;
       var lastViewToken = null;
       var res = null;
@@ -1601,6 +1625,8 @@ figma.ui.onmessage = async (msg) => {
         frameCount: allPageFrames.length,
       });
       for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        totalChunks = chunkSpecs.length;
+        var lastChunkIndexByPageId = buildLastChunkIndexByPageId(chunkSpecs);
         var chunkPages = mergePages ? chunkSpecs[chunkIndex] : chunkSpecs[chunkIndex];
         var chunkPayload = { pages: chunkPages };
         var replacePageIds = mergePages ? chunkPages.map(function (p) { return p.pageId || p.id; }) : undefined;
@@ -1662,6 +1688,31 @@ figma.ui.onmessage = async (msg) => {
         });
         res = chunkAttempt.response || null;
         finalChunkError = chunkAttempt.error || null;
+        if ((!chunkAttempt.ok || !res || !res.ok) && res && res.status === 413) {
+          var splitChunkSpecs = splitChunkPagesInHalf(chunkPages);
+          if (splitChunkSpecs && splitChunkSpecs.length === 2) {
+            pluginWarn('Chunk exceeded request limit, splitting and retrying', {
+              runId: activeIndexRunId,
+              chunkNumber: chunkIndex + 1,
+              totalChunks: totalChunks,
+              chunkFrameCount: chunkFrameCount,
+              status: res.status
+            });
+            chunkSpecs.splice(chunkIndex, 1, splitChunkSpecs[0], splitChunkSpecs[1]);
+            totalChunks = chunkSpecs.length;
+            figma.notify('Payload too large. Retrying with smaller chunks...', { timeout: 1600 });
+            figma.ui.postMessage({ type: 'upload-progress', step: 'Payload too large. Splitting upload...', framesDone: totalUploaded });
+            await logIndexStage('Retrying smaller upload chunks...', {
+              selectedPagesCount: selectedIds.length,
+              pageCount: dirtyPageIds.length,
+              frameCount: allPageFrames.length,
+              chunkNumber: chunkIndex + 1,
+              totalChunks: totalChunks,
+            });
+            chunkIndex -= 1;
+            continue;
+          }
+        }
         if (!chunkAttempt.ok || !res || !res.ok) {
           totalChunks = -1;
           break;
