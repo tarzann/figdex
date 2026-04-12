@@ -62,6 +62,27 @@ function isIgnorableStorageError(error: any) {
   );
 }
 
+async function tryResetStoragePrefix(
+  supabaseAdmin: any,
+  bucket: string,
+  prefix: string,
+  warnings: string[]
+) {
+  try {
+    await Promise.race([
+      removeStoragePrefix(supabaseAdmin, bucket, prefix),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out cleaning ${prefix}`)), 1500)),
+    ]);
+  } catch (storageError: any) {
+    const storageMessage = `storage: ${String(storageError?.message || storageError)}`;
+    if (isIgnorableStorageError(storageError) || String(storageError?.message || '').toLowerCase().includes('timed out')) {
+      warnings.push(storageMessage);
+      return;
+    }
+    warnings.push(storageMessage);
+  }
+}
+
 async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -114,17 +135,8 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
         cleanupIssues.push(`usage stats: ${usageErr.message}`);
       }
 
-      try {
-        await removeStoragePrefix(supabaseAdmin, storageBucket, `guest/${anonId}`);
-        await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`);
-      } catch (storageError: any) {
-        const storageMessage = `storage: ${String(storageError?.message || storageError)}`;
-        if (isIgnorableStorageError(storageError)) {
-          cleanupWarnings.push(storageMessage);
-        } else {
-          cleanupIssues.push(storageMessage);
-        }
-      }
+      await tryResetStoragePrefix(supabaseAdmin, storageBucket, `guest/${anonId}`, cleanupWarnings);
+      await tryResetStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`, cleanupWarnings);
 
       if (cleanupIssues.length > 0) {
         return res.status(500).json({
@@ -177,18 +189,9 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       cleanupIssues.push(`usage stats: ${usageErr.message}`);
     }
 
-    try {
-      await removeStoragePrefix(supabaseAdmin, storageBucket, `${userId}`);
-      await removeStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`);
-      await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`);
-    } catch (storageError: any) {
-      const storageMessage = `storage: ${String(storageError?.message || storageError)}`;
-      if (isIgnorableStorageError(storageError)) {
-        cleanupWarnings.push(storageMessage);
-      } else {
-        cleanupIssues.push(storageMessage);
-      }
-    }
+    await tryResetStoragePrefix(supabaseAdmin, storageBucket, `${userId}`, cleanupWarnings);
+    await tryResetStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`, cleanupWarnings);
+    await tryResetStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`, cleanupWarnings);
 
     if (cleanupIssues.length > 0) {
       return res.status(500).json({
