@@ -53,6 +53,26 @@ interface User {
   max_frames_total?: number | null;
 }
 
+type PendingAction =
+  | {
+      type: 'delete';
+      userId: string;
+      email: string;
+      isGuest: boolean;
+    }
+  | {
+      type: 'reset';
+      userId: string;
+      email: string;
+      isGuest: boolean;
+    }
+  | {
+      type: 'purge';
+      userId: string;
+      email: string;
+      isGuest: boolean;
+    };
+
 export default function AdminUsers() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -61,6 +81,10 @@ export default function AdminUsers() {
   const [error, setError] = useState('');
   const [editDialog, setEditDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [editForm, setEditForm] = useState({
     full_name: '',
     is_active: true,
@@ -192,10 +216,10 @@ export default function AdminUsers() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
+    setPendingAction({ type: 'delete', userId, email: users.find((user) => user.id === userId)?.email || '', isGuest: false });
+  };
 
+  const performDelete = async (userId: string) => {
     try {
       const userData = localStorage.getItem('figma_web_user');
       const apiKey = userData ? JSON.parse(userData).api_key : null;
@@ -208,6 +232,7 @@ export default function AdminUsers() {
       const data = await response.json();
       if (data.success) {
         await loadUsers();
+        setSuccessMessage('User deactivated successfully');
       } else {
         setError(data.error || 'Failed to delete user');
       }
@@ -218,14 +243,11 @@ export default function AdminUsers() {
   };
 
   const handlePurge = async (userId: string, email: string, isGuest = false) => {
-    const entityLabel = isGuest ? `guest ${email}` : `user ${email}`;
-    const impactLabel = isGuest
-      ? 'This will remove all guest indices for this anon user.'
-      : 'This will remove account, indices and storage.';
-    const step1 = confirm(`Delete permanently the ${entityLabel}? ${impactLabel} This action cannot be undone.`);
-    if (!step1) return;
-    const step2 = prompt('Type DELETE to confirm permanent deletion');
-    if (step2 !== 'DELETE') return;
+    setConfirmText('');
+    setPendingAction({ type: 'purge', userId, email, isGuest });
+  };
+
+  const performPurge = async (userId: string, isGuest = false) => {
     try {
       const userData = localStorage.getItem('figma_web_user');
       const apiKey = userData ? JSON.parse(userData).api_key : null;
@@ -235,7 +257,7 @@ export default function AdminUsers() {
       const data = await response.json();
       if (data.success) {
         await loadUsers();
-        alert(isGuest ? 'Guest deleted permanently' : 'User deleted permanently');
+        setSuccessMessage(isGuest ? 'Guest deleted permanently' : 'User deleted permanently');
       } else {
         setError(data.error || 'Failed to delete user permanently');
       }
@@ -246,13 +268,10 @@ export default function AdminUsers() {
   };
 
   const handleResetIndices = async (userId: string, email: string, isGuest = false) => {
-    const entityLabel = isGuest ? `guest ${email}` : `user ${email}`;
-    const impactLabel = isGuest
-      ? 'This will remove all guest indices and reset guest usage stats.'
-      : 'This will remove all indices and usage stats, but keep the account and plan.';
-    const confirmed = confirm(`Reset indices for ${entityLabel}? ${impactLabel}`);
-    if (!confirmed) return;
+    setPendingAction({ type: 'reset', userId, email, isGuest });
+  };
 
+  const performResetIndices = async (userId: string, email: string, isGuest = false) => {
     try {
       const access = await requireAdminClientAccess();
       const apiKey = access.apiKey;
@@ -283,9 +302,9 @@ export default function AdminUsers() {
         }
         await loadUsers();
         const warningText = Array.isArray(data.warnings) && data.warnings.length > 0
-          ? `\n\nWarnings:\n${data.warnings.join('\n')}`
+          ? ` Warnings: ${data.warnings.join(' | ')}`
           : '';
-        alert(`${isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully'}${warningText}`);
+        setSuccessMessage(`${isGuest ? 'Guest indices reset successfully' : `User indices reset successfully for ${email}`}.${warningText}`);
       } else {
         setError(data.error || data.details || 'Failed to reset user indices');
       }
@@ -293,6 +312,36 @@ export default function AdminUsers() {
       console.error('Failed to reset user indices:', error);
       setError(error instanceof Error ? error.message : 'Failed to reset user indices');
     }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!pendingAction) return;
+    if (pendingAction.type === 'purge' && confirmText !== 'DELETE') {
+      setError('Type DELETE to confirm permanent deletion');
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+    try {
+      if (pendingAction.type === 'delete') {
+        await performDelete(pendingAction.userId);
+      } else if (pendingAction.type === 'reset') {
+        await performResetIndices(pendingAction.userId, pendingAction.email, pendingAction.isGuest);
+      } else if (pendingAction.type === 'purge') {
+        await performPurge(pendingAction.userId, pendingAction.isGuest);
+      }
+      setPendingAction(null);
+      setConfirmText('');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const closeActionDialog = () => {
+    if (actionLoading) return;
+    setPendingAction(null);
+    setConfirmText('');
   };
 
   if (loading) {
@@ -337,6 +386,12 @@ export default function AdminUsers() {
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
           {error}
+        </Alert>
+      )}
+
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMessage('')}>
+          {successMessage}
         </Alert>
       )}
 
@@ -513,6 +568,55 @@ export default function AdminUsers() {
           <Button onClick={() => setEditDialog(false)}>Cancel</Button>
           <Button onClick={handleSaveEdit} variant="contained">
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(pendingAction)} onClose={closeActionDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {pendingAction?.type === 'reset' && 'Reset Indices'}
+          {pendingAction?.type === 'delete' && 'Deactivate User'}
+          {pendingAction?.type === 'purge' && 'Delete Permanently'}
+        </DialogTitle>
+        <DialogContent>
+          {pendingAction?.type === 'reset' && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              {pendingAction.isGuest
+                ? `This will remove all guest indices and reset guest usage stats for ${pendingAction.email}.`
+                : `This will remove all indices and usage stats for ${pendingAction.email}, but keep the account and plan.`}
+            </Alert>
+          )}
+          {pendingAction?.type === 'delete' && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              This will deactivate {pendingAction.email}. This action can affect access immediately.
+            </Alert>
+          )}
+          {pendingAction?.type === 'purge' && (
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert severity="error">
+                {pendingAction.isGuest
+                  ? `This will permanently delete guest ${pendingAction.email} and all guest indices.`
+                  : `This will permanently delete ${pendingAction.email}, their indices, storage, and account.`}
+              </Alert>
+              <TextField
+                label="Type DELETE to confirm"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                fullWidth
+                autoFocus
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeActionDialog} disabled={actionLoading}>Cancel</Button>
+          <Button
+            onClick={handleConfirmAction}
+            variant="contained"
+            color={pendingAction?.type === 'purge' ? 'error' : pendingAction?.type === 'reset' ? 'warning' : 'primary'}
+            disabled={actionLoading || (pendingAction?.type === 'purge' && confirmText !== 'DELETE')}
+          >
+            {actionLoading ? 'Working...' : pendingAction?.type === 'purge' ? 'Delete permanently' : pendingAction?.type === 'reset' ? 'Reset indices' : 'Deactivate'}
           </Button>
         </DialogActions>
       </Dialog>
