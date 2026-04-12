@@ -52,6 +52,16 @@ function isIgnorableDeleteError(error: any) {
   );
 }
 
+function isIgnorableStorageError(error: any) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('bucket not found') ||
+    message.includes('not found') ||
+    message.includes('does not exist') ||
+    message.includes('no such bucket')
+  );
+}
+
 async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -76,6 +86,7 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       if (!anonId) return res.status(400).json({ success: false, error: 'Missing guest anon id' });
 
       const cleanupIssues: string[] = [];
+      const cleanupWarnings: string[] = [];
 
       const { error: legacyErr } = await supabaseAdmin
         .from('index_files')
@@ -107,7 +118,12 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
         await removeStoragePrefix(supabaseAdmin, storageBucket, `guest/${anonId}`);
         await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`);
       } catch (storageError: any) {
-        cleanupIssues.push(`storage: ${String(storageError?.message || storageError)}`);
+        const storageMessage = `storage: ${String(storageError?.message || storageError)}`;
+        if (isIgnorableStorageError(storageError)) {
+          cleanupWarnings.push(storageMessage);
+        } else {
+          cleanupIssues.push(storageMessage);
+        }
       }
 
       if (cleanupIssues.length > 0) {
@@ -125,9 +141,14 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
         status: 'completed',
         ownerAnonId: anonId,
         message: 'Guest indices reset from admin',
+        metadata: cleanupWarnings.length > 0 ? { cleanupWarnings } : {},
       });
 
-      return res.status(200).json({ success: true, resetGuestAnonId: anonId });
+      return res.status(200).json({
+        success: true,
+        resetGuestAnonId: anonId,
+        warnings: cleanupWarnings,
+      });
     }
 
     const { data: user, error: userErr } = await supabaseAdmin
@@ -139,6 +160,7 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
     const cleanupIssues: string[] = [];
+    const cleanupWarnings: string[] = [];
 
     const { error: legacyErr } = await supabaseAdmin.from('index_files').delete().eq('user_id', userId);
     if (legacyErr && !isIgnorableDeleteError(legacyErr)) {
@@ -160,7 +182,12 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       await removeStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`);
       await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`);
     } catch (storageError: any) {
-      cleanupIssues.push(`storage: ${String(storageError?.message || storageError)}`);
+      const storageMessage = `storage: ${String(storageError?.message || storageError)}`;
+      if (isIgnorableStorageError(storageError)) {
+        cleanupWarnings.push(storageMessage);
+      } else {
+        cleanupIssues.push(storageMessage);
+      }
     }
 
     if (cleanupIssues.length > 0) {
@@ -181,6 +208,7 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       message: 'User indices reset from admin',
       metadata: {
         preservedPlan: user.is_admin ? 'unlimited' : (user.plan || 'free'),
+        ...(cleanupWarnings.length > 0 ? { cleanupWarnings } : {}),
       },
     });
 
@@ -188,6 +216,7 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       success: true,
       resetUserId: userId,
       preservedPlan: user.is_admin ? 'unlimited' : (user.plan || 'free'),
+      warnings: cleanupWarnings,
     });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: 'Internal server error', details: e?.message });

@@ -282,7 +282,10 @@ export default function AdminUsers() {
           });
         }
         await loadUsers();
-        alert(isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully');
+        const warningText = Array.isArray(data.warnings) && data.warnings.length > 0
+          ? `\n\nWarnings:\n${data.warnings.join('\n')}`
+          : '';
+        alert(`${isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully'}${warningText}`);
       } else {
         setError(data.error || data.details || 'Failed to reset user indices');
       }
