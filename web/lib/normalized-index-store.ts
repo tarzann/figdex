@@ -159,6 +159,139 @@ export async function clearNormalizedOwnerUsage(
   await query;
 }
 
+export async function removeNormalizedIndexedPages(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  params: {
+    owner: Owner;
+    fileKey: string;
+    pageIds: string[];
+  }
+): Promise<{
+  removedPageIds: string[];
+  removedPagesCount: number;
+  removedFramesCount: number;
+  fileDeleted: boolean;
+}> {
+  const { owner, fileKey } = params;
+  const pageIds = Array.from(new Set((params.pageIds || []).map((pageId) => normalizeText(pageId)).filter(Boolean)));
+
+  if (!fileKey || pageIds.length === 0) {
+    return {
+      removedPageIds: [],
+      removedPagesCount: 0,
+      removedFramesCount: 0,
+      fileDeleted: false,
+    };
+  }
+
+  let fileQuery = supabaseAdmin
+    .from('indexed_files')
+    .select('id')
+    .eq('figma_file_key', fileKey)
+    .limit(1);
+
+  if (owner.type === 'user') {
+    fileQuery = fileQuery.eq('user_id', owner.userId);
+  } else {
+    fileQuery = fileQuery.is('user_id', null).eq('owner_anon_id', owner.anonId);
+  }
+
+  const { data: fileRow, error: fileError } = await fileQuery.maybeSingle();
+  if (fileError) throw fileError;
+  if (!fileRow?.id) {
+    return {
+      removedPageIds: [],
+      removedPagesCount: 0,
+      removedFramesCount: 0,
+      fileDeleted: false,
+    };
+  }
+
+  const fileId = String(fileRow.id);
+  const { data: removablePages, error: removablePagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .select('id, figma_page_id, frame_count')
+    .eq('file_id', fileId)
+    .in('figma_page_id', pageIds);
+  if (removablePagesError) throw removablePagesError;
+
+  const removablePageRows = Array.isArray(removablePages) ? removablePages : [];
+  if (removablePageRows.length === 0) {
+    return {
+      removedPageIds: [],
+      removedPagesCount: 0,
+      removedFramesCount: 0,
+      fileDeleted: false,
+    };
+  }
+
+  const removedPageIds = removablePageRows.map((row: any) => String(row.figma_page_id)).filter(Boolean);
+  const removedPageRowIds = removablePageRows.map((row: any) => String(row.id)).filter(Boolean);
+
+  let removedFramesCount = removablePageRows.reduce((sum: number, row: any) => {
+    return sum + (typeof row?.frame_count === 'number' ? row.frame_count : 0);
+  }, 0);
+
+  if (removedPageRowIds.length > 0) {
+    const { count: actualFrameCount, error: actualFrameCountError } = await supabaseAdmin
+      .from('indexed_frames')
+      .select('id', { count: 'exact', head: true })
+      .in('page_id', removedPageRowIds);
+    if (!actualFrameCountError && typeof actualFrameCount === 'number') {
+      removedFramesCount = actualFrameCount;
+    }
+  }
+
+  const { error: deletePagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .delete()
+    .eq('file_id', fileId)
+    .in('figma_page_id', removedPageIds);
+  if (deletePagesError) throw deletePagesError;
+
+  const nowIso = new Date().toISOString();
+  const { data: filePages, error: filePagesError } = await supabaseAdmin
+    .from('indexed_pages')
+    .select('frame_count')
+    .eq('file_id', fileId);
+  if (filePagesError) throw filePagesError;
+
+  const indexedPagesCount = Array.isArray(filePages) ? filePages.length : 0;
+  const totalFrames = Array.isArray(filePages)
+    ? filePages.reduce((sum: number, row: any) => sum + (typeof row?.frame_count === 'number' ? row.frame_count : 0), 0)
+    : 0;
+
+  let fileDeleted = false;
+  if (indexedPagesCount === 0) {
+    const { error: deleteFileError } = await supabaseAdmin
+      .from('indexed_files')
+      .delete()
+      .eq('id', fileId);
+    if (deleteFileError) throw deleteFileError;
+    fileDeleted = true;
+  } else {
+    const { error: updateFileError } = await supabaseAdmin
+      .from('indexed_files')
+      .update({
+        total_frames: totalFrames,
+        indexed_pages_count: indexedPagesCount,
+        updated_at: nowIso,
+        last_indexed_at: nowIso,
+      })
+      .eq('id', fileId);
+    if (updateFileError) throw updateFileError;
+  }
+
+  await refreshNormalizedOwnerUsage(supabaseAdmin, owner);
+
+  return {
+    removedPageIds,
+    removedPagesCount: removedPageIds.length,
+    removedFramesCount,
+    fileDeleted,
+  };
+}
+
 export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise<void> {
   const {
     supabaseAdmin,
