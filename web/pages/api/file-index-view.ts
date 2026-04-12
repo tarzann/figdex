@@ -89,6 +89,9 @@ const resolveFramePreview = (frameRow: any, payload: any) => {
   const existingThumb = typeof frameRow?.thumb_url === 'string' && frameRow.thumb_url
     ? frameRow.thumb_url
     : (typeof payload?.thumb_url === 'string' && payload.thumb_url ? payload.thumb_url : null);
+  const existingImage = typeof frameRow?.image_url === 'string' && frameRow.image_url
+    ? frameRow.image_url
+    : (typeof payload?.image === 'string' && payload.image ? payload.image : null);
 
   if (existingThumb) {
     return { thumbUrl: existingThumb, listImage: existingThumb };
@@ -96,7 +99,7 @@ const resolveFramePreview = (frameRow: any, payload: any) => {
 
   return {
     thumbUrl: null,
-    listImage: null,
+    listImage: existingImage,
   };
 };
 
@@ -277,7 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const { data: normalizedFrames } = await svc
           .from('indexed_frames')
-          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order, frame_url:frame_payload->>url')
+          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order, frame_url:frame_payload->>url')
           .eq('page_id', normalizedPage.id)
           .range(offset, offset + limit - 1)
           .order('sort_order', { ascending: true });
@@ -371,7 +374,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pattern = `%${searchSeed}%`;
         const { data: searchFrames } = await svc
           .from('indexed_frames')
-          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, thumb_url, sort_order, frame_url:frame_payload->>url')
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order, frame_url:frame_payload->>url')
           .in('page_id', pageIds)
           .or(`frame_name.ilike.${pattern},search_text.ilike.${pattern}`)
           .order('sort_order', { ascending: true })

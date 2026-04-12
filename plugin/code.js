@@ -401,21 +401,6 @@ function getAdaptiveExportScale(width, height) {
   return Math.max(0.18, scale);
 }
 
-function getAdaptiveThumbnailScale(width, height) {
-  var w = Math.max(1, Number(width) || 1);
-  var h = Math.max(1, Number(height) || 1);
-  var longestSide = Math.max(w, h);
-  var pixelArea = w * h;
-  var scale = 0.75;
-  if (longestSide > 24000 || pixelArea > 120000000) scale = Math.min(scale, 0.18);
-  else if (longestSide > 18000 || pixelArea > 80000000) scale = Math.min(scale, 0.22);
-  else if (longestSide > 14000 || pixelArea > 50000000) scale = Math.min(scale, 0.28);
-  else if (longestSide > 10000 || pixelArea > 25000000) scale = Math.min(scale, 0.38);
-  else if (longestSide > 7000 || pixelArea > 12000000) scale = Math.min(scale, 0.5);
-  else if (longestSide > 5000 || pixelArea > 6000000) scale = Math.min(scale, 0.62);
-  return Math.max(0.18, scale);
-}
-
 async function exportFrameImageData(frame, width, height) {
   var attempts = [getAdaptiveExportScale(width, height), 0.67, 0.5, 0.4, 0.33, 0.25, 0.18];
   var tried = {};
@@ -432,25 +417,6 @@ async function exportFrameImageData(frame, width, height) {
     } catch (e) {}
   }
   throw new Error('FRAME_EXPORT_FAILED');
-}
-
-async function exportFrameThumbnailData(frame, width, height) {
-  var baseScale = getAdaptiveThumbnailScale(width, height);
-  var attempts = [baseScale, 0.62, 0.5, 0.38, 0.28, 0.22, 0.18];
-  var tried = {};
-  for (var i = 0; i < attempts.length; i++) {
-    var scale = Math.max(0.18, Math.min(0.75, attempts[i]));
-    var key = scale.toFixed(3);
-    if (tried[key]) continue;
-    tried[key] = true;
-    try {
-      var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: scale } });
-      if (bytes && bytes.length > 0) {
-        return 'data:image/jpeg;base64,' + figma.base64Encode(bytes);
-      }
-    } catch (e) {}
-  }
-  return null;
 }
 
 let globalFileKey = '';
@@ -1611,7 +1577,6 @@ figma.ui.onmessage = async (msg) => {
               var exportResult = await exportFrameImageData(frame, w, h);
               var bytes = exportResult.bytes;
               var b64 = figma.base64Encode(bytes);
-              var thumbDataUrl = await exportFrameThumbnailData(frame, w, h);
               var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
               var frameItem = {
                 id: frame.id,
@@ -1626,7 +1591,7 @@ figma.ui.onmessage = async (msg) => {
                 textContent: textContent,
                 searchTokens: searchTokens,
                 image: 'data:image/jpeg;base64,' + b64,
-                thumb_url: thumbDataUrl
+                thumb_url: null
               };
               allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: frameItem });
               var totalEst = frameIds.length;
