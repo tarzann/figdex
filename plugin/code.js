@@ -633,33 +633,22 @@ function getContentHint(node) {
   } catch (e) { return '0'; }
 }
 
-// Text content signature: collect text from all TEXT descendants (for change detection)
-async function getTextHintAsync(node, depth, acc) {
-  if (!node || depth > 5 || (acc && acc.length > 600)) return acc;
+// Lightweight text signature: avoid loading fonts during indexing because it is very expensive.
+// If characters cannot be read safely, we still keep structural hints and skip the text payload.
+function getTextHint(node, depth, acc) {
+  if (!node || depth > 4 || (acc && acc.length > 250)) return acc;
   acc = acc || [];
   if (node.type === 'TEXT') {
     try {
-      var fontName = node.fontName;
-      if (fontName && fontName !== figma.mixed) {
-        await figma.loadFontAsync(fontName);
-      } else if (node.getRangeAllFontNames) {
-        try {
-          var len = node.characters ? node.characters.length : 0;
-          if (len > 0) {
-            var fonts = node.getRangeAllFontNames(0, len);
-            for (var fi = 0; fi < fonts.length; fi++) {
-              await figma.loadFontAsync(fonts[fi]);
-            }
-          }
-        } catch (e2) { /* mixed font: chars may throw before load */ }
-      }
       var chars = node.characters;
-      if (typeof chars === 'string') acc.push(chars.slice(0, 150));
-    } catch (e) { /* skip on font/read error */ }
+      if (typeof chars === 'string' && chars.trim()) {
+        acc.push(chars.slice(0, 120));
+      }
+    } catch (e) { /* skip on guarded text read */ }
   }
   if ('children' in node && node.children) {
     for (var i = 0; i < node.children.length; i++) {
-      await getTextHintAsync(node.children[i], depth + 1, acc);
+      getTextHint(node.children[i], depth + 1, acc);
     }
   }
   return acc;
@@ -674,7 +663,7 @@ async function getFrameSignaturesForPage(page) {
       var frame = await figma.getNodeByIdAsync(frameIds[i]);
       if (!frame || frame.type !== 'FRAME') continue;
       if (typeof frame.loadAsync === 'function') await frame.loadAsync();
-      var textParts = await getTextHintAsync(frame, 0, []);
+      var textParts = getTextHint(frame, 0, []);
       var textHint = textParts.join('|').slice(0, 500);
       sigs.push({
         id: frame.id,
@@ -1458,14 +1447,20 @@ figma.ui.onmessage = async (msg) => {
         framesDone: 0,
       });
       var dirtyPageIds = [];
+      var dirtyPageNodesById = {};
+      var pageSignaturesById = {};
+      var frameIdsByPageId = {};
       for (var di = 0; di < selectedIds.length; di++) {
         var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
         if (!pageNode || pageNode.type !== 'PAGE') continue;
+        dirtyPageNodesById[pageNode.id] = pageNode;
         var currentSigs = await getFrameSignaturesForPage(pageNode);
+        pageSignaturesById[pageNode.id] = currentSigs;
         var stored = indexedMeta.find(function (m) { return m.pageId === pageNode.id; });
         var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
         if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
         dirtyPageIds.push(pageNode.id);
+        frameIdsByPageId[pageNode.id] = getTopLevelFrameIds(pageNode);
         if (di === 0 || (di + 1) % 4 === 0 || di === selectedIds.length - 1) {
           figma.ui.postMessage({
             type: 'upload-progress',
@@ -1492,8 +1487,9 @@ figma.ui.onmessage = async (msg) => {
         });
         var estimatedFrameCount = 0;
         for (var ei = 0; ei < dirtyPageIds.length; ei++) {
-          var dirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[ei]);
-          if (dirtyPageNode && dirtyPageNode.type === 'PAGE') estimatedFrameCount += getTopLevelFrameIds(dirtyPageNode).length;
+          var guestPageId = dirtyPageIds[ei];
+          var guestFrameIds = frameIdsByPageId[guestPageId];
+          if (Array.isArray(guestFrameIds)) estimatedFrameCount += guestFrameIds.length;
         }
         try {
           var checkRes = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
@@ -1535,8 +1531,9 @@ figma.ui.onmessage = async (msg) => {
         });
         var estimatedConnectedFrameCount = 0;
         for (var cei = 0; cei < dirtyPageIds.length; cei++) {
-          var connectedDirtyPageNode = await figma.getNodeByIdAsync(dirtyPageIds[cei]);
-          if (connectedDirtyPageNode && connectedDirtyPageNode.type === 'PAGE') estimatedConnectedFrameCount += getTopLevelFrameIds(connectedDirtyPageNode).length;
+          var connectedPageId = dirtyPageIds[cei];
+          var connectedFrameIds = frameIdsByPageId[connectedPageId];
+          if (Array.isArray(connectedFrameIds)) estimatedConnectedFrameCount += connectedFrameIds.length;
         }
         try {
           var connectedCheckRes = await fetchWithTimeout('https://www.figdex.com/api/create-index-from-figma', {
@@ -1586,14 +1583,14 @@ figma.ui.onmessage = async (msg) => {
       var newSignaturesByPage = {};
       try {
         for (var pi = 0; pi < dirtyPageIds.length; pi++) {
-          var page = await figma.getNodeByIdAsync(dirtyPageIds[pi]);
+          var page = dirtyPageNodesById[dirtyPageIds[pi]] || await figma.getNodeByIdAsync(dirtyPageIds[pi]);
           if (!page || page.type !== 'PAGE') continue;
           await postIndexProgress('Exporting page ' + (pi + 1) + '/' + dirtyPageIds.length + ': ' + (page.name || 'Untitled'), {
             selectedPagesCount: selectedIds.length,
             pageCount: dirtyPageIds.length,
             framesDone: allPageFrames.length,
           });
-          var frameIds = getTopLevelFrameIds(page);
+          var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
           for (var fi = 0; fi < frameIds.length; fi++) {
             try {
               var frame = await figma.getNodeByIdAsync(frameIds[fi]);
@@ -1927,8 +1924,10 @@ figma.ui.onmessage = async (msg) => {
         });
         for (var ni = 0; ni < dirtyPageIds.length; ni++) {
           var dpid = dirtyPageIds[ni];
-          var pageNodeForMeta = await figma.getNodeByIdAsync(dpid);
-          var sigsToStore = (pageNodeForMeta && pageNodeForMeta.type === 'PAGE') ? await getFrameSignaturesForPage(pageNodeForMeta) : (newSignaturesByPage[dpid] || []);
+          var pageNodeForMeta = dirtyPageNodesById[dpid] || await figma.getNodeByIdAsync(dpid);
+          var sigsToStore = Array.isArray(pageSignaturesById[dpid])
+            ? pageSignaturesById[dpid]
+            : ((pageNodeForMeta && pageNodeForMeta.type === 'PAGE') ? await getFrameSignaturesForPage(pageNodeForMeta) : (newSignaturesByPage[dpid] || []));
           nextMeta.push({
             pageId: dpid,
             pageName: idToName[dpid] || 'Page',
