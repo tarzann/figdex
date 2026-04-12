@@ -116,8 +116,8 @@ export default function AdminUsers() {
 
   const loadUsers = async () => {
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      const apiKey = userData ? JSON.parse(userData).api_key : null;
+      const access = await requireAdminClientAccess();
+      const apiKey = access.apiKey;
       if (!apiKey) {
         setError('No API key found. Please login again.');
         return;
@@ -254,11 +254,11 @@ export default function AdminUsers() {
     if (!confirmed) return;
 
     try {
-      const userData = localStorage.getItem('figma_web_user');
-      const apiKey = userData ? JSON.parse(userData).api_key : null;
+      const access = await requireAdminClientAccess();
+      const apiKey = access.apiKey;
       const headers: Record<string, string> = {};
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      const response = await fetch(`/api/admin/users/${userId}/reset-indices`, { method: 'POST', headers });
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/reset-indices`, { method: 'POST', headers });
       const data = await response.json();
       if (data.success) {
         setUsers((prev) => {
@@ -284,11 +284,11 @@ export default function AdminUsers() {
         await loadUsers();
         alert(isGuest ? 'Guest indices reset successfully' : 'User indices reset successfully');
       } else {
-        setError(data.error || 'Failed to reset user indices');
+        setError(data.error || data.details || 'Failed to reset user indices');
       }
     } catch (error) {
       console.error('Failed to reset user indices:', error);
-      setError('Failed to reset user indices');
+      setError(error instanceof Error ? error.message : 'Failed to reset user indices');
     }
   };
 

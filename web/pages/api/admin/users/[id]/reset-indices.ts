@@ -44,6 +44,14 @@ async function removeStoragePrefix(
   await walk(normalizedPrefix);
 }
 
+function isIgnorableDeleteError(error: any) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('does not exist') ||
+    message.includes('relation') && message.includes('does not exist')
+  );
+}
+
 async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -67,29 +75,48 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
       const anonId = userId.slice(guestPrefix.length).trim();
       if (!anonId) return res.status(400).json({ success: false, error: 'Missing guest anon id' });
 
+      const cleanupIssues: string[] = [];
+
       const { error: legacyErr } = await supabaseAdmin
         .from('index_files')
         .delete()
         .eq('owner_anon_id', anonId)
         .is('user_id', null);
-      if (legacyErr) return res.status(500).json({ success: false, error: `Failed to reset guest index_files: ${legacyErr.message}` });
+      if (legacyErr && !isIgnorableDeleteError(legacyErr)) {
+        cleanupIssues.push(`legacy indices: ${legacyErr.message}`);
+      }
 
       const { error: normalizedErr } = await supabaseAdmin
         .from('indexed_files')
         .delete()
         .eq('owner_anon_id', anonId)
         .is('user_id', null);
-      if (normalizedErr) return res.status(500).json({ success: false, error: `Failed to reset guest normalized indices: ${normalizedErr.message}` });
+      if (normalizedErr && !isIgnorableDeleteError(normalizedErr)) {
+        cleanupIssues.push(`normalized indices: ${normalizedErr.message}`);
+      }
 
-      await supabaseAdmin
+      const { error: usageErr } = await supabaseAdmin
         .from('indexed_owner_usage')
         .delete()
         .eq('owner_anon_id', anonId);
+      if (usageErr && !isIgnorableDeleteError(usageErr)) {
+        cleanupIssues.push(`usage stats: ${usageErr.message}`);
+      }
 
       try {
         await removeStoragePrefix(supabaseAdmin, storageBucket, `guest/${anonId}`);
         await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/guest/${anonId}`);
-      } catch {}
+      } catch (storageError: any) {
+        cleanupIssues.push(`storage: ${String(storageError?.message || storageError)}`);
+      }
+
+      if (cleanupIssues.length > 0) {
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fully reset guest indices',
+          details: cleanupIssues.join(' | '),
+        });
+      }
 
       await logIndexActivity(supabaseAdmin, {
         requestId: `reset_guest_${anonId}`,
@@ -111,19 +138,38 @@ async function resetIndicesHandler(req: NextApiRequest, res: NextApiResponse) {
     if (userErr) return res.status(500).json({ success: false, error: userErr.message });
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
+    const cleanupIssues: string[] = [];
+
     const { error: legacyErr } = await supabaseAdmin.from('index_files').delete().eq('user_id', userId);
-    if (legacyErr) return res.status(500).json({ success: false, error: `Failed to reset index_files: ${legacyErr.message}` });
+    if (legacyErr && !isIgnorableDeleteError(legacyErr)) {
+      cleanupIssues.push(`legacy indices: ${legacyErr.message}`);
+    }
 
     const { error: normalizedErr } = await supabaseAdmin.from('indexed_files').delete().eq('user_id', userId);
-    if (normalizedErr) return res.status(500).json({ success: false, error: `Failed to reset normalized indices: ${normalizedErr.message}` });
+    if (normalizedErr && !isIgnorableDeleteError(normalizedErr)) {
+      cleanupIssues.push(`normalized indices: ${normalizedErr.message}`);
+    }
 
-    await supabaseAdmin.from('indexed_owner_usage').delete().eq('user_id', userId);
+    const { error: usageErr } = await supabaseAdmin.from('indexed_owner_usage').delete().eq('user_id', userId);
+    if (usageErr && !isIgnorableDeleteError(usageErr)) {
+      cleanupIssues.push(`usage stats: ${usageErr.message}`);
+    }
 
     try {
       await removeStoragePrefix(supabaseAdmin, storageBucket, `${userId}`);
       await removeStoragePrefix(supabaseAdmin, storageBucket, `user/${userId}`);
       await removeStoragePrefix(supabaseAdmin, storageBucket, `index-data/user/${userId}`);
-    } catch {}
+    } catch (storageError: any) {
+      cleanupIssues.push(`storage: ${String(storageError?.message || storageError)}`);
+    }
+
+    if (cleanupIssues.length > 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fully reset user indices',
+        details: cleanupIssues.join(' | '),
+      });
+    }
 
     await logIndexActivity(supabaseAdmin, {
       requestId: `reset_user_${userId}`,
