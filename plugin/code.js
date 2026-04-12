@@ -1545,6 +1545,7 @@ figma.ui.onmessage = async (msg) => {
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
       const FRAMES_PER_CHUNK = 10;
+      const FRAME_EXPORT_CONCURRENCY = 2;
       var allPageFrames = [];
       var newSignaturesByPage = {};
       try {
@@ -1557,47 +1558,62 @@ figma.ui.onmessage = async (msg) => {
             framesDone: allPageFrames.length,
           });
           var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
-          for (var fi = 0; fi < frameIds.length; fi++) {
-            try {
-              var frame = await figma.getNodeByIdAsync(frameIds[fi]);
-              if (!frame || frame.type !== 'FRAME') continue;
-              if (typeof frame.loadAsync === 'function') await frame.loadAsync();
-              var w = Math.round(frame.width);
-              var h = Math.round(frame.height);
-              if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
-              newSignaturesByPage[page.id].push({ id: frame.id, name: (frame.name || '').trim(), width: w, height: h });
-              var sizeTag = w + 'x' + h;
-              var visibleTexts = collectVisibleTextsFromFrame(frame);
-              var ancestorNames = collectAncestorNames(frame);
-              var allTexts = [frame.name || ''].concat(ancestorNames, visibleTexts);
-              var textContent = allTexts.join(' ');
-              var searchTokens = buildSearchTokens(allTexts);
-              var sectionName = getSectionNameForFrame(frame);
-              var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
-              var exportResult = await exportFrameImageData(frame, w, h);
-              var bytes = exportResult.bytes;
-              var b64 = figma.base64Encode(bytes);
-              var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
-              var frameItem = {
-                id: frame.id,
-                name: displayName,
-                x: Math.round(frame.x),
-                y: Math.round(frame.y),
-                width: w,
-                height: h,
-                index: allPageFrames.length,
-                tags: [sizeTag],
-                url: frameUrl,
-                textContent: textContent,
-                searchTokens: searchTokens,
-                image: 'data:image/jpeg;base64,' + b64,
-                thumb_url: null
-              };
-              allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: frameItem });
-              var totalEst = frameIds.length;
-              figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + allPageFrames.length + ' frame(s)...', framesDone: allPageFrames.length });
-              if (allPageFrames.length % 5 === 0) await new Promise(function (r) { setTimeout(r, 0); });
-            } catch (err) { /* skip frame on export error */ }
+          if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
+          for (var fi = 0; fi < frameIds.length; fi += FRAME_EXPORT_CONCURRENCY) {
+            var frameBatch = frameIds.slice(fi, fi + FRAME_EXPORT_CONCURRENCY);
+            var batchResults = await Promise.all(frameBatch.map(async function (frameId, batchIndex) {
+              try {
+                var frame = await figma.getNodeByIdAsync(frameId);
+                if (!frame || frame.type !== 'FRAME') return null;
+                if (typeof frame.loadAsync === 'function') await frame.loadAsync();
+                var w = Math.round(frame.width);
+                var h = Math.round(frame.height);
+                var sizeTag = w + 'x' + h;
+                var visibleTexts = collectVisibleTextsFromFrame(frame);
+                var ancestorNames = collectAncestorNames(frame);
+                var allTexts = [frame.name || ''].concat(ancestorNames, visibleTexts);
+                var textContent = allTexts.join(' ');
+                var searchTokens = buildSearchTokens(allTexts);
+                var sectionName = getSectionNameForFrame(frame);
+                var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
+                var exportResult = await exportFrameImageData(frame, w, h);
+                var bytes = exportResult.bytes;
+                var b64 = figma.base64Encode(bytes);
+                var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
+                return {
+                  localIndex: fi + batchIndex,
+                  signature: { id: frame.id, name: (frame.name || '').trim(), width: w, height: h },
+                  frameItem: {
+                    id: frame.id,
+                    name: displayName,
+                    x: Math.round(frame.x),
+                    y: Math.round(frame.y),
+                    width: w,
+                    height: h,
+                    tags: [sizeTag],
+                    url: frameUrl,
+                    textContent: textContent,
+                    searchTokens: searchTokens,
+                    image: 'data:image/jpeg;base64,' + b64,
+                    thumb_url: null
+                  }
+                };
+              } catch (err) {
+                return null;
+              }
+            }));
+
+            batchResults
+              .filter(function (entry) { return !!entry; })
+              .sort(function (a, b) { return a.localIndex - b.localIndex; })
+              .forEach(function (entry) {
+                newSignaturesByPage[page.id].push(entry.signature);
+                entry.frameItem.index = allPageFrames.length;
+                allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: entry.frameItem });
+              });
+
+            figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + allPageFrames.length + ' frame(s)...', framesDone: allPageFrames.length });
+            await new Promise(function (r) { setTimeout(r, 0); });
           }
         }
         if (allPageFrames.length === 0) {
