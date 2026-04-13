@@ -1162,7 +1162,6 @@ figma.ui.onmessage = async (msg) => {
         }
       } catch (e) {}
     }
-      var indexedMetaChanged = false;
       const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
       const pages = [];
       for (var pi = 0; pi < allPages.length; pi++) {
@@ -1176,39 +1175,10 @@ figma.ui.onmessage = async (msg) => {
           status = 'index_page';
           icon = '📄';
         } else if (metaByPage[p.id] || serverIndexedPageIdMap[p.id]) {
-          var stored = metaByPage[p.id] || null;
-          try {
-            var pageNode = await figma.getNodeByIdAsync(p.id);
-            if (pageNode && pageNode.type === 'PAGE') {
-              var currentSigs = await getFrameSignaturesForPage(pageNode);
-              var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
-              if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) {
-                status = 'up_to_date';
-                icon = '✅';
-              } else {
-                if (serverIndexedPageIdMap[p.id] && !storedSigs) {
-                  status = 'up_to_date';
-                  icon = '✅';
-                  indexedMetaChanged = true;
-                  metaByPage[p.id] = {
-                    pageId: p.id,
-                    pageName: p.name,
-                    lastIndexedAt: Date.now(),
-                    frameSignatures: currentSigs
-                  };
-                } else {
-                  status = 'needs_update';
-                  icon = '🔄';
-                }
-              }
-            } else {
-              status = 'up_to_date';
-              icon = '✅';
-            }
-          } catch (e) {
-            status = 'up_to_date';
-            icon = '✅';
-          }
+          // Keep page loading fast: existence is enough for refresh.
+          // Change detection still happens during indexing for the selected pages.
+          status = 'up_to_date';
+          icon = '✅';
         }
         pages.push({
           id: p.id,
@@ -1221,10 +1191,6 @@ figma.ui.onmessage = async (msg) => {
           status: status,
           icon: icon
         });
-      }
-      if (indexedMetaChanged) {
-        indexedMeta = Object.keys(metaByPage).map(function (pageId) { return metaByPage[pageId]; });
-        try { await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta); } catch (e) {}
       }
       var savedSelectedIds = null;
       try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, null); } catch (e) { savedSelectedIds = null; }
