@@ -464,6 +464,8 @@ let lastLoggedIndexStage = '';
 let pagesRefreshInFlight = false;
 let lastPagesRefreshHandledAt = 0;
 let lastPagesPayloadSignature = '';
+let lastPostedFileKeySignature = '';
+let lastPostedIdentitySignature = '';
 
 function createPagesPayloadSignature(pageMessage) {
   try {
@@ -487,6 +489,40 @@ function createPagesPayloadSignature(pageMessage) {
   } catch (error) {
     return '';
   }
+}
+
+function createFileKeyMessageSignature(fileKey, source) {
+  return JSON.stringify({
+    fileKey: fileKey || '',
+    source: source || 'none'
+  });
+}
+
+function postFileKeyToUI(fileKey, source) {
+  var signature = createFileKeyMessageSignature(fileKey, source);
+  if (signature === lastPostedFileKeySignature) {
+    return false;
+  }
+  var posted = postToUI({ type: 'set-file-key', fileKey: fileKey || '', source: source || 'none' });
+  if (posted) lastPostedFileKeySignature = signature;
+  return posted;
+}
+
+function createIdentityMessageSignature(token, user) {
+  return JSON.stringify({
+    token: token || null,
+    userId: user && typeof user === 'object' ? (user.id || user.email || null) : null
+  });
+}
+
+function postIdentityToUI(token, user) {
+  var signature = createIdentityMessageSignature(token, user);
+  if (signature === lastPostedIdentitySignature) {
+    return false;
+  }
+  var posted = postToUI({ type: 'WEB_ACCOUNT_DATA_LOADED', token: token || null, user: user || null });
+  if (posted) lastPostedIdentitySignature = signature;
+  return posted;
 }
 
 async function sendPluginTelemetryEvent(eventName, meta) {
@@ -787,24 +823,20 @@ async function getCoverImageDataUrl() {
 // --- Bootstrap: load storage and send to UI ---
 function sendStoredIdentityToUI(webToken, webUser) {
   if (mockConnectedIdentity) {
-    figma.ui.postMessage({
-      type: 'WEB_ACCOUNT_DATA_LOADED',
-      token: 'mock_token_' + Date.now(),
-      user: { email: 'mock@figdex.local', name: 'Mock User' }
-    });
+    postIdentityToUI('mock_token_' + Date.now(), { email: 'mock@figdex.local', name: 'Mock User' });
   } else if (webToken && typeof webToken === 'string' && webToken.length >= 10) {
     // Token alone is enough for indexing; UI needs minimal user for "Connected" display
     var user = webUser && typeof webUser === 'object' ? webUser : { id: 'connected', email: 'Account connected' };
-    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: webToken, user: user });
+    postIdentityToUI(webToken, user);
   } else {
-    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+    postIdentityToUI(null, null);
   }
 }
 
 async function clearStoredWebIdentity() {
   await setStored(STORAGE_KEYS.WEB_TOKEN, null);
   await setStored(STORAGE_KEYS.WEB_USER, null);
-  figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+  postIdentityToUI(null, null);
   figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
 }
 
@@ -945,7 +977,7 @@ async function loadUserLimitsToUI(webToken) {
   if (savedKey) {
     globalFileKey = savedKey;
     sessionFileKey = savedKey;
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: savedKey, source: globalFileKeySource });
+    postFileKeyToUI(savedKey, globalFileKeySource);
   }
   var webToken = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
   var webUser = await getStored(STORAGE_KEYS.WEB_USER, null);
@@ -1043,7 +1075,7 @@ figma.ui.onmessage = async (msg) => {
       source: globalFileKeySource,
       hasFileKey: !!resolvedFileKey.fileKey
     });
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedFileKey.fileKey || '', source: globalFileKeySource });
+    postFileKeyToUI(resolvedFileKey.fileKey || '', globalFileKeySource);
     return;
   }
   if (msg.type === 'get_anon_id') {
@@ -1064,7 +1096,7 @@ figma.ui.onmessage = async (msg) => {
       });
       return;
     }
-    if (msg.type === 'refresh-pages' && (refreshStartedAt - lastPagesRefreshHandledAt) < 1200) {
+    if (msg.type === 'refresh-pages' && (refreshStartedAt - lastPagesRefreshHandledAt) < 5000) {
       pluginTrace('Skipping duplicate pages refresh because it arrived too soon', {
         source: globalFileKeySource || 'none',
         elapsedMs: refreshStartedAt - lastPagesRefreshHandledAt
@@ -1243,8 +1275,8 @@ figma.ui.onmessage = async (msg) => {
     globalFileKey = '';
     sessionFileKey = '';
     globalFileKeySource = 'none';
-    figma.ui.postMessage({ type: 'set-file-key', fileKey: '', source: 'none' });
-    figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: null, user: null });
+    postFileKeyToUI('', 'none');
+    postIdentityToUI(null, null);
     figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
     return;
   }
@@ -1350,7 +1382,7 @@ figma.ui.onmessage = async (msg) => {
               debugLog('[FigDex] claim_by_anon_id claimed=' + claimData.claimed);
             }
           } catch (_) {}
-          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
+          postIdentityToUI(data.token, connectedUser);
           await loadUserLimitsToUI(data.token);
           return;
         }
@@ -1398,7 +1430,7 @@ figma.ui.onmessage = async (msg) => {
           const connectedUser = typeof data.user === 'object' && data.user ? data.user : (typeof data.userId === 'object' ? data.userId : { id: data.userId });
           await setStored(STORAGE_KEYS.WEB_TOKEN, data.token);
           await setStored(STORAGE_KEYS.WEB_USER, connectedUser);
-          figma.ui.postMessage({ type: 'WEB_ACCOUNT_DATA_LOADED', token: data.token, user: connectedUser });
+          postIdentityToUI(data.token, connectedUser);
           await loadUserLimitsToUI(data.token);
           return;
         }
