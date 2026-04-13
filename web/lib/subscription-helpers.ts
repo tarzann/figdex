@@ -23,7 +23,7 @@ export interface CanCreateIndexResult {
 // Temporarily disable daily index limits until they are counted per logical file.
 const DAILY_INDEX_LIMITS_ENABLED = false;
 const REINDEX_COOLDOWN_MS = 2 * 60 * 1000;
-const RAPID_REINDEX_THRESHOLD = 8;
+const RAPID_REINDEX_THRESHOLD = 10;
 const SESSION_COLLAPSE_MS = 30 * 1000;
 
 /**
@@ -150,32 +150,20 @@ export async function checkFileIndexCooldown(
 
   const timestamps: number[] = [];
 
-  const { data: normalizedRow } = await supabaseAdmin
-    .from('indexed_files')
-    .select('updated_at')
-    .eq('user_id', userId)
-    .eq('figma_file_key', normalizedFileKey)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (normalizedRow?.updated_at) {
-    const normalizedMs = new Date(normalizedRow.updated_at).getTime();
-    if (!Number.isNaN(normalizedMs)) {
-      timestamps.push(normalizedMs);
-    }
-  }
-
   const { data: jobRows } = await supabaseAdmin
     .from('index_jobs')
-    .select('created_at')
+    .select('created_at,status')
     .eq('user_id', userId)
     .eq('file_key', normalizedFileKey)
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(30);
 
   if (Array.isArray(jobRows)) {
     for (const row of jobRows) {
+      const status = String((row as any)?.status || '').toLowerCase();
+      if (status === 'failed' || status === 'cancelled') {
+        continue;
+      }
       const valueMs = new Date((row as any)?.created_at || '').getTime();
       if (!Number.isNaN(valueMs)) {
         timestamps.push(valueMs);
@@ -183,19 +171,37 @@ export async function checkFileIndexCooldown(
     }
   }
 
-  const { data: legacyRows } = await supabaseAdmin
-    .from('index_files')
-    .select('uploaded_at')
-    .eq('user_id', userId)
-    .eq('figma_file_key', normalizedFileKey)
-    .order('uploaded_at', { ascending: false })
-    .limit(50);
+  if (timestamps.length === 0) {
+    const { data: normalizedRow } = await supabaseAdmin
+      .from('indexed_files')
+      .select('updated_at')
+      .eq('user_id', userId)
+      .eq('figma_file_key', normalizedFileKey)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (Array.isArray(legacyRows)) {
-    for (const row of legacyRows) {
-      const valueMs = new Date((row as any)?.uploaded_at || '').getTime();
-      if (!Number.isNaN(valueMs)) {
-        timestamps.push(valueMs);
+    if (normalizedRow?.updated_at) {
+      const normalizedMs = new Date(normalizedRow.updated_at).getTime();
+      if (!Number.isNaN(normalizedMs)) {
+        timestamps.push(normalizedMs);
+      }
+    }
+
+    const { data: legacyRows } = await supabaseAdmin
+      .from('index_files')
+      .select('uploaded_at')
+      .eq('user_id', userId)
+      .eq('figma_file_key', normalizedFileKey)
+      .order('uploaded_at', { ascending: false })
+      .limit(20);
+
+    if (Array.isArray(legacyRows)) {
+      for (const row of legacyRows) {
+        const valueMs = new Date((row as any)?.uploaded_at || '').getTime();
+        if (!Number.isNaN(valueMs)) {
+          timestamps.push(valueMs);
+        }
       }
     }
   }
