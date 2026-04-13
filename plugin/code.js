@@ -539,7 +539,7 @@ async function sendPluginTelemetryEvent(eventName, meta) {
     var userId = webUser && typeof webUser === 'object'
       ? (webUser.id || webUser.email || null)
       : null;
-    await fetch('https://www.figdex.com/api/telemetry', {
+    fetch('https://www.figdex.com/api/telemetry', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -555,7 +555,7 @@ async function sendPluginTelemetryEvent(eventName, meta) {
         userId: typeof userId === 'string' ? userId : null,
         meta: meta || {},
       })
-    });
+    }).catch(function () {});
   } catch (e) {}
 }
 
@@ -579,12 +579,6 @@ async function logIndexStage(step, meta) {
     step: step || '',
     runId: activeIndexRunId || null,
     fileKeySource: globalFileKeySource || 'none'
-  }, meta || {}));
-  await sendPluginTelemetryEvent('index_stage', Object.assign({
-    runId: activeIndexRunId,
-    stage: stage,
-    step: step || '',
-    fileKeySource: globalFileKeySource || 'none',
   }, meta || {}));
 }
 
