@@ -386,7 +386,7 @@ function splitChunkPagesInHalf(chunkPages) {
 function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
   var specs = Array.isArray(chunkSpecs) ? chunkSpecs.slice() : [];
   var normalized = [];
-  var maxBytes = options && options.maxBytes ? options.maxBytes : 3 * 1024 * 1024;
+  var maxBytes = options && options.maxBytes ? options.maxBytes : Math.floor(1.5 * 1024 * 1024);
   while (specs.length > 0) {
     var chunkPages = specs.shift();
     var chunkBody = {
@@ -395,7 +395,7 @@ function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
       fileName: options.fileName,
       chunkIndex: 0,
       totalChunks: 1,
-      selectedPages: options.selectedPages,
+      selectedPages: options.includeSelectionMetadata ? options.selectedPages : undefined,
       source: 'figma-plugin',
       version: options.version,
       galleryOnly: true,
@@ -1636,7 +1636,7 @@ figma.ui.onmessage = async (msg) => {
       });
 
       // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
-      const FRAMES_PER_CHUNK = 10;
+      const FRAMES_PER_CHUNK = 6;
       const FRAME_EXPORT_CONCURRENCY = 2;
       var allPageFrames = [];
       var newSignaturesByPage = {};
@@ -1813,10 +1813,11 @@ figma.ui.onmessage = async (msg) => {
         version: PLUGIN_VERSION,
         coverImageDataUrl: coverImageDataUrl,
         includeCover: !!coverImageDataUrl,
+        includeSelectionMetadata: true,
         mergePages: mergePages,
         replacePageIds: dirtyPageIds,
         anonId: isGuestMode && guestAnonId ? guestAnonId : null,
-        maxBytes: 3 * 1024 * 1024
+        maxBytes: Math.floor(1.5 * 1024 * 1024)
       });
 
       function buildLastChunkIndexByPageId(specs) {
@@ -1863,7 +1864,7 @@ figma.ui.onmessage = async (msg) => {
           fileName: chunkFileName,
           chunkIndex: chunkIndex,
           totalChunks: totalChunks,
-          selectedPages: selectedPages,
+          selectedPages: chunkIndex === 0 ? selectedPages : undefined,
           source: 'figma-plugin',
           version: PLUGIN_VERSION,
           syncId: uploadSessionId,
