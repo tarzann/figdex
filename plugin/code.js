@@ -424,31 +424,38 @@ function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
   return normalized;
 }
 
-function getAdaptiveExportScale(width, height) {
+function getAdaptiveExportScales(width, height) {
   var w = Math.max(1, Number(width) || 1);
   var h = Math.max(1, Number(height) || 1);
   var longestSide = Math.max(w, h);
-  var pixelArea = w * h;
-  var scale = 0.75;
-  if (longestSide > 22000 || pixelArea > 120000000) scale = Math.min(scale, 0.18);
-  else if (longestSide > 18000 || pixelArea > 80000000) scale = Math.min(scale, 0.25);
-  else if (longestSide > 14000 || pixelArea > 50000000) scale = Math.min(scale, 0.33);
-  else if (longestSide > 10000 || pixelArea > 25000000) scale = Math.min(scale, 0.5);
-  else if (longestSide > 7000 || pixelArea > 12000000) scale = Math.min(scale, 0.67);
-  return Math.max(0.18, scale);
+  var targetLongestSides = [2000, 1600, 1200, 900, 700, 500];
+  var scales = [];
+  if (longestSide <= 2000) {
+    scales.push(1);
+  }
+  for (var i = 0; i < targetLongestSides.length; i++) {
+    var target = targetLongestSides[i];
+    var scale = Math.min(1, target / longestSide);
+    if (scale > 0) scales.push(Math.max(0.08, scale));
+  }
+  return scales;
 }
 
 async function exportFrameImageData(frame, width, height) {
-  var attempts = [getAdaptiveExportScale(width, height), 0.67, 0.5, 0.4, 0.33, 0.25, 0.18];
+  var attempts = getAdaptiveExportScales(width, height).concat([0.4, 0.25, 0.18, 0.12, 0.08]);
   var tried = {};
+  var maxBytes = 900 * 1024;
   for (var i = 0; i < attempts.length; i++) {
-    var scale = Math.max(0.18, Math.min(1, attempts[i]));
+    var scale = Math.max(0.08, Math.min(1, attempts[i]));
     var key = scale.toFixed(3);
     if (tried[key]) continue;
     tried[key] = true;
     try {
       var bytes = await frame.exportAsync({ format: 'JPG', constraint: { type: 'SCALE', value: scale } });
       if (bytes && bytes.length > 0) {
+        if (bytes.length > maxBytes && i < attempts.length - 1) {
+          continue;
+        }
         return { bytes: bytes, scale: scale };
       }
     } catch (e) {}
