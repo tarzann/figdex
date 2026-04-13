@@ -31,6 +31,18 @@ function pluginWarn(message, meta) {
 function pluginError(message, meta) {
   pluginConsoleLog('error', message, meta);
 }
+function postToUI(message) {
+  try {
+    figma.ui.postMessage(message);
+    return true;
+  } catch (error) {
+    pluginWarn('Skipped UI postMessage because no UI is available', {
+      type: message && message.type ? message.type : 'unknown',
+      error: error && error.message ? error.message : String(error || '')
+    });
+    return false;
+  }
+}
 
 try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {}
 setTimeout(() => { try { figma.ui.postMessage({ type: 'plugin-version', version: PLUGIN_VERSION }); } catch (e) {} }, 500);
@@ -79,7 +91,7 @@ function getCurrentDocumentId() {
 }
 figma.ui.postMessage({ type: 'set-document-id', documentId: getCurrentDocumentId() });
 figma.on('currentpagechange', () => {
-  figma.ui.postMessage({ type: 'set-document-id', documentId: getCurrentDocumentId() });
+  postToUI({ type: 'set-document-id', documentId: getCurrentDocumentId() });
 });
 
 figma.on('selectionchange', () => {
@@ -87,7 +99,7 @@ figma.on('selectionchange', () => {
   const hasSelection = selection.length > 0;
   const hasFrameSelection = selection.some(n => n.type === 'FRAME');
   const selectedFrames = selection.filter(n => n.type === 'FRAME').map(n => n.id);
-  figma.ui.postMessage({ type: 'selection-status', hasSelection, hasFrameSelection, selectedFrames });
+  postToUI({ type: 'selection-status', hasSelection, hasFrameSelection, selectedFrames });
 });
 
 // --- Dev: simulate connected identity (no UI flag) ---
@@ -678,14 +690,13 @@ async function exportFrameAsDataUrl(frame) {
   return null;
 }
 
-// Same cover as plugin UI (Cover page/frame or current page, largest frame). Used for get-file-thumbnail and create-index cover.
+// Same cover as plugin UI (prefer explicit Cover page/frame, otherwise stable file order). Used for get-file-thumbnail and create-index cover.
 async function getCoverImageDataUrl() {
   await figma.loadAllPagesAsync();
   var pages = figma.root.children.filter(function (p) { return p.type === 'PAGE' && p.name !== 'FigDex'; });
   var coverPage = pages.find(function (p) { return (p.name || '').trim().toLowerCase() === 'cover'; }) || null;
   var pagesToTry = [];
   if (coverPage) pagesToTry.push(coverPage);
-  if (figma.currentPage) pagesToTry.push(figma.currentPage);
   pages.forEach(function (p) { if (!pagesToTry.some(function (t) { return t.id === p.id; })) pagesToTry.push(p); });
   if (pagesToTry.length === 0) return null;
   var framesToTry = [];
@@ -710,7 +721,7 @@ async function getCoverImageDataUrl() {
   if (dataUrl) return dataUrl;
   if (!explicitCover) {
     try {
-      var pageNode = coverPage || figma.currentPage;
+      var pageNode = coverPage || pagesToTry[0] || null;
       if (pageNode) {
         var pageBytes = await pageNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.25 } });
         var pageDataUrl = 'data:image/png;base64,' + figma.base64Encode(pageBytes);
@@ -1012,9 +1023,6 @@ figma.ui.onmessage = async (msg) => {
     if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== sessionFileKey) {
       sessionFileKey = resolvedRefreshFileKey.fileKey;
     }
-    if (resolvedRefreshFileKey.fileKey) {
-      figma.ui.postMessage({ type: 'set-file-key', fileKey: resolvedRefreshFileKey.fileKey, source: globalFileKeySource });
-    }
     await figma.loadAllPagesAsync();
     const allPages = figma.root.children
       .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
@@ -1118,10 +1126,15 @@ figma.ui.onmessage = async (msg) => {
       indexedMeta = Object.keys(metaByPage).map(function (pageId) { return metaByPage[pageId]; });
       try { await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta); } catch (e) {}
     }
-    var savedSelectedIds = [];
-    try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, []); } catch (e) { savedSelectedIds = []; }
-    if (!Array.isArray(savedSelectedIds)) savedSelectedIds = [];
-    figma.ui.postMessage({ type: 'pages', pages: pages, selectedPageIds: savedSelectedIds });
+    var savedSelectedIds = null;
+    try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, null); } catch (e) { savedSelectedIds = null; }
+    var hasSavedSelectedIds = Array.isArray(savedSelectedIds);
+    if (!hasSavedSelectedIds) savedSelectedIds = [];
+    var pageMessage = { type: 'pages', pages: pages };
+    if (hasSavedSelectedIds) {
+      pageMessage.selectedPageIds = savedSelectedIds;
+    }
+    postToUI(pageMessage);
     return;
   }
   if (msg.type === 'save-web-system-token') {
@@ -1319,13 +1332,13 @@ figma.ui.onmessage = async (msg) => {
     try {
       var dataUrl = await getCoverImageDataUrl();
       if (dataUrl) {
-        figma.ui.postMessage({ type: 'file-thumbnail', thumbnailDataUrl: dataUrl });
+        postToUI({ type: 'file-thumbnail', thumbnailDataUrl: dataUrl });
       } else {
-        figma.ui.postMessage({ type: 'file-thumbnail-error', error: 'No pages or frames found' });
+        postToUI({ type: 'file-thumbnail-error', error: 'No pages or frames found' });
       }
     } catch (error) {
       console.error('[code.js] get-file-thumbnail error:', error);
-      figma.ui.postMessage({ type: 'file-thumbnail-error', error: error.message });
+      postToUI({ type: 'file-thumbnail-error', error: error.message });
     }
     return;
   }

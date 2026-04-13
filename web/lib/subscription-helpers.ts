@@ -22,8 +22,8 @@ export interface CanCreateIndexResult {
 
 // Temporarily disable daily index limits until they are counted per logical file.
 const DAILY_INDEX_LIMITS_ENABLED = false;
-const REINDEX_COOLDOWN_MS = 3 * 60 * 1000;
-const RAPID_REINDEX_THRESHOLD = 5;
+const REINDEX_COOLDOWN_MS = 2 * 60 * 1000;
+const RAPID_REINDEX_THRESHOLD = 8;
 const SESSION_COLLAPSE_MS = 30 * 1000;
 
 /**
