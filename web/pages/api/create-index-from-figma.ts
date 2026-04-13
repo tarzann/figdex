@@ -27,6 +27,22 @@ export const config = {
 const ALLOWED_FRAME_PARENTS = new Set(['PAGE', 'CANVAS', 'SECTION']);
 const INDEX_DATA_INLINE_MAX_BYTES = 700 * 1024;
 
+function sanitizeExternalServiceErrorMessage(details: unknown): string | undefined {
+  const text = typeof details === 'string' ? details.trim() : '';
+  if (!text) return undefined;
+  const lower = text.toLowerCase();
+  if (
+    lower.includes('<!doctype html') ||
+    lower.includes('<html') ||
+    lower.includes('web server is down') ||
+    lower.includes('error code 521') ||
+    lower.includes('cloudflare')
+  ) {
+    return 'Storage service is temporarily unavailable. Please try again in a minute.';
+  }
+  return text;
+}
+
 function isMissingColumnError(error: any, columnName: string): boolean {
   const message = String(error?.message || '');
   return message.includes(columnName) || message.includes(`column ${columnName}`) || message.includes(`"${columnName}"`);
@@ -618,7 +634,11 @@ export default async function handler(
           });
           if (insertErr) {
             console.error(`[${requestId}] guest insert page error:`, insertErr);
-            return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
+            return res.status(500).json({
+              success: false,
+              error: 'Failed to create gallery',
+              details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+            });
           }
         }
       }
@@ -1054,7 +1074,11 @@ export default async function handler(
               });
               if (insertErr) {
                 console.error(`[${requestId}] auth insert page error:`, insertErr);
-                return res.status(500).json({ success: false, error: 'Failed to create gallery', details: insertErr?.message });
+                return res.status(500).json({
+                  success: false,
+                  error: 'Failed to create gallery',
+                  details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+                });
               }
             }
           }

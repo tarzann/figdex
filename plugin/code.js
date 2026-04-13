@@ -247,6 +247,31 @@ function fetchWithTimeout(url, opts) {
   ]);
 }
 
+function normalizeExternalErrorMessage(status, errJson, errText, fallbackMessage) {
+  var fallback = fallbackMessage || 'Index failed';
+  if (errJson && errJson.error) {
+    var baseMessage = String(errJson.error);
+    var details = errJson.details ? String(errJson.details) : '';
+    var detailsLower = details.toLowerCase();
+    if (details && (detailsLower.indexOf('<!doctype html') >= 0 || detailsLower.indexOf('<html') >= 0 || detailsLower.indexOf('web server is down') >= 0 || detailsLower.indexOf('error code 521') >= 0)) {
+      return 'Storage service is temporarily unavailable. Please try again in a minute.';
+    }
+    if (details && baseMessage !== details) {
+      return baseMessage + ' — ' + details;
+    }
+    return baseMessage;
+  }
+  var raw = typeof errText === 'string' ? errText.trim() : '';
+  var rawLower = raw.toLowerCase();
+  if (status === 521 || rawLower.indexOf('error code 521') >= 0 || rawLower.indexOf('web server is down') >= 0 || rawLower.indexOf('cloudflare') >= 0) {
+    return 'Storage service is temporarily unavailable. Please try again in a minute.';
+  }
+  if (raw && (rawLower.indexOf('<!doctype html') >= 0 || rawLower.indexOf('<html') >= 0)) {
+    return 'The server returned an unexpected HTML error page. Please try again in a minute.';
+  }
+  return fallback;
+}
+
 async function postChunkWithRetry(url, requestOptions, meta) {
   var lastError = null;
   var lastResponse = null;
@@ -1546,7 +1571,7 @@ figma.ui.onmessage = async (msg) => {
             try { errText = await checkRes.text(); } catch (_) {}
             var errJson = null;
             try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
-            var errMsg = (errJson && errJson.error) ? String(errJson.error) : 'Index failed';
+            var errMsg = normalizeExternalErrorMessage(checkRes.status, errJson, errText, 'Could not verify limits. Please try again.');
             figma.notify(errMsg, { error: true });
             figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
             return;
@@ -1589,7 +1614,7 @@ figma.ui.onmessage = async (msg) => {
             try { connectedErrText = await connectedCheckRes.text(); } catch (_) {}
             var connectedErrJson = null;
             try { connectedErrJson = connectedErrText ? JSON.parse(connectedErrText) : null; } catch (_) {}
-            var connectedErrMsg = (connectedErrJson && connectedErrJson.error) ? String(connectedErrJson.error) : 'Index failed';
+            var connectedErrMsg = normalizeExternalErrorMessage(connectedCheckRes.status, connectedErrJson, connectedErrText, 'Could not verify limits. Please try again.');
             figma.notify(connectedErrMsg, { error: true });
             figma.ui.postMessage({ type: 'error', message: connectedErrMsg, code: connectedErrJson ? connectedErrJson.code : null, upgradeUrl: connectedErrJson ? connectedErrJson.upgradeUrl : null });
             return;
@@ -1927,10 +1952,8 @@ figma.ui.onmessage = async (msg) => {
         try { if (res && typeof res.text === 'function') errText = await res.text(); } catch (_) {}
         var errJson = null;
         try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
-        var errMsg = (errJson && errJson.error) ? String(errJson.error) : 'Index failed';
-        if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message) errMsg = String(finalChunkError.message);
-        if (errMsg !== 'Index failed' && errJson && errJson.details) errMsg += ' — ' + String(errJson.details);
-        if (errMsg === 'Index failed') errMsg = 'Index failed (' + ((res && res.status) || '') + ')';
+        var errMsg = normalizeExternalErrorMessage(res ? res.status : null, errJson, errText, 'Index failed (' + ((res && res.status) || '') + ')');
+        if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message && (!errText || errText.trim() === '')) errMsg = String(finalChunkError.message);
         var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
         pluginError('Index run failed', {
           runId: activeIndexRunId,
