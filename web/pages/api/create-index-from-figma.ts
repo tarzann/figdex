@@ -827,9 +827,15 @@ export default async function handler(
       coverImageDataUrl: coverImageDataUrlBody,
       syncId: syncIdBody,
       finalizePageIds: finalizePageIdsBody,
+      chunkIndex: chunkIndexBody,
+      totalChunks: totalChunksBody,
     } = req.body;
     activityFileKey = typeof fileKeyInput === 'string' ? fileKeyInput : activityFileKey;
     const syncId = typeof syncIdBody === 'string' ? syncIdBody.trim().slice(0, 120) : '';
+    const chunkIndex = typeof chunkIndexBody === 'number' ? chunkIndexBody : Number(chunkIndexBody || 0);
+    const totalChunks = typeof totalChunksBody === 'number' ? totalChunksBody : Number(totalChunksBody || 1);
+    const isChunkedUpload = Number.isFinite(totalChunks) && totalChunks > 1;
+    const isFirstUploadChunk = !isChunkedUpload || !Number.isFinite(chunkIndex) || chunkIndex <= 0;
     const finalizePageIds = Array.isArray(finalizePageIdsBody)
       ? finalizePageIdsBody.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)
       : [];
@@ -942,7 +948,7 @@ export default async function handler(
           const hasAuthExistingForFile = normalizedExisting.hasExistingForFile || authExistingByPageId.size > 0 || authExistingRows.length > 0;
           const isNewFile = !hasAuthExistingForFile;
 
-          if (!user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
+          if (isFirstUploadChunk && !user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
             const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
           if (currentFiles >= limits.maxFiles) {
             await logRateLimitEvent('FILE_LIMIT_REACHED', `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`, { currentFiles, maxFiles: limits.maxFiles, context: 'gallery' });
@@ -954,7 +960,7 @@ export default async function handler(
             });
           }
           }
-          if (!user.bypass_indexing_limits && limits.maxFrames !== null) {
+          if (isFirstUploadChunk && !user.bypass_indexing_limits && limits.maxFrames !== null) {
             const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
             if (currentTotalFrames + framesInPayload > limits.maxFrames) {
               await logRateLimitEvent('FRAME_LIMIT_REACHED', `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`, { currentTotalFrames, framesInPayload, maxFrames: limits.maxFrames, context: 'gallery' });
@@ -966,34 +972,36 @@ export default async function handler(
             });
           }
           }
-          const cooldownCheck = await checkFileIndexCooldown(
-            supabaseAdmin,
-            user.id,
-            fileKeyTrim,
-            Boolean(user.bypass_indexing_limits),
-            Boolean(user.is_admin)
-          );
-          if (!cooldownCheck.allowed) {
-            await logRateLimitEvent('INDEX_COOLDOWN_ACTIVE', cooldownCheck.reason || 'Please wait before indexing this file again.', { waitUntil: cooldownCheck.waitUntil?.toISOString(), context: 'gallery' });
-            return res.status(429).json({
-              success: false,
-              error: cooldownCheck.reason || 'Please wait before indexing this file again.',
-              code: 'INDEX_COOLDOWN_ACTIVE',
-              waitUntil: cooldownCheck.waitUntil?.toISOString(),
-            });
-          }
+          if (isFirstUploadChunk) {
+            const cooldownCheck = await checkFileIndexCooldown(
+              supabaseAdmin,
+              user.id,
+              fileKeyTrim,
+              Boolean(user.bypass_indexing_limits),
+              Boolean(user.is_admin)
+            );
+            if (!cooldownCheck.allowed) {
+              await logRateLimitEvent('INDEX_COOLDOWN_ACTIVE', cooldownCheck.reason || 'Please wait before indexing this file again.', { waitUntil: cooldownCheck.waitUntil?.toISOString(), context: 'gallery' });
+              return res.status(429).json({
+                success: false,
+                error: cooldownCheck.reason || 'Please wait before indexing this file again.',
+                code: 'INDEX_COOLDOWN_ACTIVE',
+                waitUntil: cooldownCheck.waitUntil?.toISOString(),
+              });
+            }
 
-          const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
-          if (!canIndex.allowed) {
-            await logRateLimitEvent('RATE_LIMIT_EXCEEDED', canIndex.reason || 'Daily index limit reached', { currentCount: canIndex.currentCount, maxCount: canIndex.maxCount, waitUntil: canIndex.waitUntil?.toISOString(), context: 'gallery' });
-            return res.status(429).json({
-              success: false,
-              error: canIndex.reason || 'Daily index limit reached',
-              code: 'RATE_LIMIT_EXCEEDED',
-            });
-          }
-          if (!user.bypass_indexing_limits) {
-            await incrementDailyIndexCount(supabaseAdmin, user.id);
+            const canIndex = await canCreateIndex(supabaseAdmin, user.id, user.plan, user.is_admin);
+            if (!canIndex.allowed) {
+              await logRateLimitEvent('RATE_LIMIT_EXCEEDED', canIndex.reason || 'Daily index limit reached', { currentCount: canIndex.currentCount, maxCount: canIndex.maxCount, waitUntil: canIndex.waitUntil?.toISOString(), context: 'gallery' });
+              return res.status(429).json({
+                success: false,
+                error: canIndex.reason || 'Daily index limit reached',
+                code: 'RATE_LIMIT_EXCEEDED',
+              });
+            }
+            if (!user.bypass_indexing_limits) {
+              await incrementDailyIndexCount(supabaseAdmin, user.id);
+            }
           }
 
           const coverImageDataUrl = typeof coverImageDataUrlBody === 'string' ? coverImageDataUrlBody : null;
