@@ -436,6 +436,33 @@ let sessionFileKey = '';
 let globalFileKeySource = 'none';
 let activeIndexRunId = null;
 let lastLoggedIndexStage = '';
+let pagesRefreshInFlight = false;
+let lastPagesRefreshHandledAt = 0;
+let lastPagesPayloadSignature = '';
+
+function createPagesPayloadSignature(pageMessage) {
+  try {
+    return JSON.stringify({
+      type: pageMessage && pageMessage.type ? pageMessage.type : 'pages',
+      selectedPageIds: Array.isArray(pageMessage && pageMessage.selectedPageIds) ? pageMessage.selectedPageIds : null,
+      pages: Array.isArray(pageMessage && pageMessage.pages)
+        ? pageMessage.pages.map(function (page) {
+            return [
+              page.id,
+              page.name,
+              page.status,
+              page.icon,
+              !!page.hasFrames,
+              !!page.isIndexPage,
+              !!page.isCoverPage
+            ];
+          })
+        : []
+    });
+  } catch (error) {
+    return '';
+  }
+}
 
 async function sendPluginTelemetryEvent(eventName, meta) {
   try {
@@ -1005,34 +1032,50 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
   if (msg.type === 'refresh-pages' || msg.type === 'get-pages') {
-    var resolvedRefreshFileKey = await resolveCurrentFileKey();
-    globalFileKeySource = resolvedRefreshFileKey.source || globalFileKeySource || 'none';
-    pluginTrace('Refreshing pages', {
-      source: globalFileKeySource,
-      hasFileKey: !!resolvedRefreshFileKey.fileKey
-    });
-    if (!resolvedRefreshFileKey.fileKey) {
-      pluginWarn('Pages refresh is using manual-link mode without a saved file link', {
-        source: 'none',
-        hasFileKey: false
+    var refreshStartedAt = Date.now();
+    if (pagesRefreshInFlight) {
+      pluginTrace('Skipping pages refresh because another refresh is already in flight', {
+        source: globalFileKeySource || 'none'
       });
+      return;
     }
-    if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== globalFileKey) {
-      globalFileKey = resolvedRefreshFileKey.fileKey;
+    if (msg.type === 'refresh-pages' && (refreshStartedAt - lastPagesRefreshHandledAt) < 1200) {
+      pluginTrace('Skipping duplicate pages refresh because it arrived too soon', {
+        source: globalFileKeySource || 'none',
+        elapsedMs: refreshStartedAt - lastPagesRefreshHandledAt
+      });
+      return;
     }
-    if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== sessionFileKey) {
-      sessionFileKey = resolvedRefreshFileKey.fileKey;
-    }
-    await figma.loadAllPagesAsync();
-    const allPages = figma.root.children
-      .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
-      .map(p => ({
-        id: p.id,
-        name: p.name,
-        hasFrames: p.children && p.children.some(n => n.type === 'FRAME' || (n.type === 'SECTION' && n.children && n.children.some(c => c.type === 'FRAME'))),
-        isIndexPage: p.name === 'Frame-Index',
-        isCoverPage: (p.name || '').trim().toLowerCase() === 'cover'
-      }));
+    pagesRefreshInFlight = true;
+    try {
+      var resolvedRefreshFileKey = await resolveCurrentFileKey();
+      globalFileKeySource = resolvedRefreshFileKey.source || globalFileKeySource || 'none';
+      pluginTrace('Refreshing pages', {
+        source: globalFileKeySource,
+        hasFileKey: !!resolvedRefreshFileKey.fileKey
+      });
+      if (!resolvedRefreshFileKey.fileKey) {
+        pluginWarn('Pages refresh is using manual-link mode without a saved file link', {
+          source: 'none',
+          hasFileKey: false
+        });
+      }
+      if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== globalFileKey) {
+        globalFileKey = resolvedRefreshFileKey.fileKey;
+      }
+      if (resolvedRefreshFileKey.fileKey && resolvedRefreshFileKey.fileKey !== sessionFileKey) {
+        sessionFileKey = resolvedRefreshFileKey.fileKey;
+      }
+      await figma.loadAllPagesAsync();
+      const allPages = figma.root.children
+        .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          hasFrames: p.children && p.children.some(n => n.type === 'FRAME' || (n.type === 'SECTION' && n.children && n.children.some(c => c.type === 'FRAME'))),
+          isIndexPage: p.name === 'Frame-Index',
+          isCoverPage: (p.name || '').trim().toLowerCase() === 'cover'
+        }));
     // Use stored indexed pages metadata (per document) to mark pages that were already indexed
     let indexedMeta = [];
     try { indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []); } catch (e) { indexedMeta = []; }
@@ -1062,80 +1105,93 @@ figma.ui.onmessage = async (msg) => {
         }
       } catch (e) {}
     }
-    var indexedMetaChanged = false;
-    const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
-    const pages = [];
-    for (var pi = 0; pi < allPages.length; pi++) {
-      var p = allPages[pi];
-      var status = 'not_indexed';
-      var icon = '➕';
-      if (!p.hasFrames) {
-        status = 'folder';
-        icon = '📁';
-      } else if (p.isIndexPage) {
-        status = 'index_page';
-        icon = '📄';
-      } else if (metaByPage[p.id] || serverIndexedPageIdMap[p.id]) {
-        var stored = metaByPage[p.id] || null;
-        try {
-          var pageNode = await figma.getNodeByIdAsync(p.id);
-          if (pageNode && pageNode.type === 'PAGE') {
-            var currentSigs = await getFrameSignaturesForPage(pageNode);
-            var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
-            if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) {
-              status = 'up_to_date';
-              icon = '✅';
-            } else {
-              if (serverIndexedPageIdMap[p.id] && !storedSigs) {
+      var indexedMetaChanged = false;
+      const metaByPage = Array.isArray(indexedMeta) ? Object.fromEntries(indexedMeta.map(m => [m.pageId, m])) : {};
+      const pages = [];
+      for (var pi = 0; pi < allPages.length; pi++) {
+        var p = allPages[pi];
+        var status = 'not_indexed';
+        var icon = '➕';
+        if (!p.hasFrames) {
+          status = 'folder';
+          icon = '📁';
+        } else if (p.isIndexPage) {
+          status = 'index_page';
+          icon = '📄';
+        } else if (metaByPage[p.id] || serverIndexedPageIdMap[p.id]) {
+          var stored = metaByPage[p.id] || null;
+          try {
+            var pageNode = await figma.getNodeByIdAsync(p.id);
+            if (pageNode && pageNode.type === 'PAGE') {
+              var currentSigs = await getFrameSignaturesForPage(pageNode);
+              var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
+              if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) {
                 status = 'up_to_date';
                 icon = '✅';
-                indexedMetaChanged = true;
-                metaByPage[p.id] = {
-                  pageId: p.id,
-                  pageName: p.name,
-                  lastIndexedAt: Date.now(),
-                  frameSignatures: currentSigs
-                };
               } else {
-                status = 'needs_update';
-                icon = '🔄';
+                if (serverIndexedPageIdMap[p.id] && !storedSigs) {
+                  status = 'up_to_date';
+                  icon = '✅';
+                  indexedMetaChanged = true;
+                  metaByPage[p.id] = {
+                    pageId: p.id,
+                    pageName: p.name,
+                    lastIndexedAt: Date.now(),
+                    frameSignatures: currentSigs
+                  };
+                } else {
+                  status = 'needs_update';
+                  icon = '🔄';
+                }
               }
+            } else {
+              status = 'up_to_date';
+              icon = '✅';
             }
-          } else {
+          } catch (e) {
             status = 'up_to_date';
             icon = '✅';
           }
-        } catch (e) {
-          status = 'up_to_date';
-          icon = '✅';
         }
+        pages.push({
+          id: p.id,
+          name: p.name,
+          hasFrames: p.hasFrames,
+          displayName: p.name,
+          isFolder: !p.hasFrames,
+          isIndexPage: p.isIndexPage,
+          isCoverPage: p.isCoverPage,
+          status: status,
+          icon: icon
+        });
       }
-      pages.push({
-        id: p.id,
-        name: p.name,
-        hasFrames: p.hasFrames,
-        displayName: p.name,
-        isFolder: !p.hasFrames,
-        isIndexPage: p.isIndexPage,
-        isCoverPage: p.isCoverPage,
-        status: status,
-        icon: icon
-      });
+      if (indexedMetaChanged) {
+        indexedMeta = Object.keys(metaByPage).map(function (pageId) { return metaByPage[pageId]; });
+        try { await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta); } catch (e) {}
+      }
+      var savedSelectedIds = null;
+      try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, null); } catch (e) { savedSelectedIds = null; }
+      var hasSavedSelectedIds = Array.isArray(savedSelectedIds);
+      if (!hasSavedSelectedIds) savedSelectedIds = [];
+      var pageMessage = { type: 'pages', pages: pages };
+      if (hasSavedSelectedIds) {
+        pageMessage.selectedPageIds = savedSelectedIds;
+      }
+      var nextPayloadSignature = createPagesPayloadSignature(pageMessage);
+      if (nextPayloadSignature && nextPayloadSignature === lastPagesPayloadSignature) {
+        pluginTrace('Skipping pages UI update because payload did not change', {
+          source: globalFileKeySource,
+          hasFileKey: !!resolvedRefreshFileKey.fileKey
+        });
+      } else {
+        postToUI(pageMessage);
+        lastPagesPayloadSignature = nextPayloadSignature;
+      }
+      lastPagesRefreshHandledAt = refreshStartedAt;
+      return;
+    } finally {
+      pagesRefreshInFlight = false;
     }
-    if (indexedMetaChanged) {
-      indexedMeta = Object.keys(metaByPage).map(function (pageId) { return metaByPage[pageId]; });
-      try { await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta); } catch (e) {}
-    }
-    var savedSelectedIds = null;
-    try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, null); } catch (e) { savedSelectedIds = null; }
-    var hasSavedSelectedIds = Array.isArray(savedSelectedIds);
-    if (!hasSavedSelectedIds) savedSelectedIds = [];
-    var pageMessage = { type: 'pages', pages: pages };
-    if (hasSavedSelectedIds) {
-      pageMessage.selectedPageIds = savedSelectedIds;
-    }
-    postToUI(pageMessage);
-    return;
   }
   if (msg.type === 'save-web-system-token') {
     await setStored(STORAGE_KEYS.WEB_TOKEN, msg.token);
