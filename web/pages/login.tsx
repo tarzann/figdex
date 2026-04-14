@@ -135,12 +135,29 @@ export default function Login() {
       setIsLoading(true);
       setError('');
 
-      const { error: signInError } = await supabase.auth.signInWithOAuth({
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: getOAuthRedirectUrl() },
+        options: {
+          redirectTo: getOAuthRedirectUrl(),
+          skipBrowserRedirect: true,
+        },
       });
 
       if (signInError) throw signInError;
+      if (!data?.url) {
+        throw new Error('Google sign-in URL was not returned');
+      }
+
+      const popup = window.open(data.url, '_blank', 'noopener,noreferrer');
+      if (!popup) {
+        const isEmbedded = window.self !== window.top;
+        if (isEmbedded) {
+          throw new Error('Google sign-in was blocked in this embedded view. Please allow pop-ups and try again.');
+        }
+        window.location.assign(data.url);
+      }
+
+      setIsLoading(false);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
       setIsLoading(false);
