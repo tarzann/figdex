@@ -253,6 +253,13 @@ function fetchWithTimeout(url, opts) {
 
 function normalizeExternalErrorMessage(status, errJson, errText, fallbackMessage) {
   var fallback = fallbackMessage || 'Index failed';
+  if (status === 401) {
+    var authMessage = errJson && errJson.error ? String(errJson.error) : '';
+    if (!authMessage && typeof errText === 'string') authMessage = errText.trim();
+    if (/invalid api key|api key required|invalid account token|authorization required/i.test(authMessage || '')) {
+      return 'Your FigDex connection expired. Please reconnect your account and try again.';
+    }
+  }
   if (errJson && errJson.error) {
     var baseMessage = String(errJson.error);
     var details = errJson.details ? String(errJson.details) : '';
@@ -274,6 +281,32 @@ function normalizeExternalErrorMessage(status, errJson, errText, fallbackMessage
     return 'The server returned an unexpected HTML error page. Please try again in a minute.';
   }
   return fallback;
+}
+
+async function ensureValidIndexingToken(webToken) {
+  if (!webToken || typeof webToken !== 'string' || webToken.length < 10) {
+    return { ok: false, message: 'Connect your FigDex account before indexing.' };
+  }
+  if (!webToken.startsWith('figdex_')) {
+    await clearStoredWebIdentity();
+    return { ok: false, message: 'Your FigDex connection needs to be refreshed. Please reconnect and try again.' };
+  }
+  try {
+    var validateRes = await fetchWithTimeout('https://www.figdex.com/api/validate-api-key', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + webToken }
+    });
+    if (!validateRes.ok) {
+      if (validateRes.status === 401 || validateRes.status === 404) {
+        await clearStoredWebIdentity();
+        return { ok: false, message: 'Your FigDex connection expired. Please reconnect and try again.' };
+      }
+      return { ok: false, message: 'Could not verify your FigDex connection. Please try again.' };
+    }
+    return { ok: true };
+  } catch (_) {
+    return { ok: false, message: 'Could not verify your FigDex connection. Please try again.' };
+  }
 }
 
 async function postChunkWithRetry(url, requestOptions, meta) {
@@ -1444,6 +1477,15 @@ figma.ui.onmessage = async (msg) => {
       });
       await setStored(STORAGE_KEYS.SELECTED_PAGES, selectedIds);
       const token = await getStored(STORAGE_KEYS.WEB_TOKEN, null);
+      if (!isGuestMode) {
+        var tokenValidation = await ensureValidIndexingToken(token);
+        if (!tokenValidation.ok) {
+          figma.notify(tokenValidation.message, { error: true });
+          figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
+          figma.ui.postMessage({ type: 'error', message: tokenValidation.message, code: 'AUTH_EXPIRED' });
+          return;
+        }
+      }
       var storedDocKey = await getStored(STORAGE_KEYS.FILE_KEY, null);
       if (typeof storedDocKey !== 'string') storedDocKey = '';
       storedDocKey = storedDocKey ? storedDocKey.trim() : '';
@@ -1900,6 +1942,10 @@ figma.ui.onmessage = async (msg) => {
           var errJson = null;
           try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
           var errMsg = normalizeExternalErrorMessage(res ? res.status : null, errJson, errText, 'Index failed (' + ((res && res.status) || '') + ')');
+          if (res && res.status === 401) {
+            await clearStoredWebIdentity();
+            figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
+          }
           if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message && (!errText || errText.trim() === '')) errMsg = String(finalChunkError.message);
           figma.notify('Stopped after ' + completedPageIds.length + ' completed page(s). ' + errMsg, { error: true });
           figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
