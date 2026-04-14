@@ -1,6 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
+const withTimeout = async <T,>(promise: PromiseLike<T>, fallback: T): Promise<T> => {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), 2500)),
+    ]);
+  } catch {
+    return fallback;
+  }
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -38,10 +49,11 @@ export default async function handler(
   const admin = createClient(serviceUrl, serviceKey);
 
   try {
-    let { email, password, name, action } = req.body || {};
+    let { email, password, name, action, userId: providedUserId } = req.body || {};
     if (typeof email === 'string') {
       email = email.trim().toLowerCase();
     }
+    const authUserId = typeof providedUserId === 'string' ? providedUserId.trim() : '';
     const displayName = name || (typeof email === 'string' ? email.split('@')[0] : '');
     console.log('[auth/signup] incoming request', { action, email });
 
@@ -304,15 +316,34 @@ export default async function handler(
 
     } else if (action === 'login') {
       // Find existing user or create new one
-      console.log('[auth/signup] login start', { email });
+      console.log('[auth/signup] login start', { email, authUserId });
       let user: any = null;
       
-      // Try to find user
-      const { data: foundUser, error: findError } = await admin
-        .from('users')
-        .select('id, email, full_name, plan, is_admin, api_key')
-        .eq('email', email)
-        .maybeSingle();
+      // Try to find user by id first when Auth already gave us one.
+      const byIdResult = authUserId
+        ? await withTimeout(
+            admin
+              .from('users')
+              .select('id, email, full_name, plan, is_admin, api_key')
+              .eq('id', authUserId)
+              .maybeSingle(),
+            { data: null, error: null } as any
+          )
+        : null;
+
+      const byEmailResult = !byIdResult?.data
+        ? await withTimeout(
+            admin
+              .from('users')
+              .select('id, email, full_name, plan, is_admin, api_key')
+              .eq('email', email)
+              .maybeSingle(),
+            { data: null, error: { message: 'User email lookup timed out' } } as any
+          )
+        : null;
+
+      const foundUser = byIdResult?.data || byEmailResult?.data || null;
+      const findError = byIdResult?.error || byEmailResult?.error || null;
       if (foundUser) {
         console.log('[auth/signup] found existing user', { email });
       }
@@ -324,9 +355,14 @@ export default async function handler(
       // If user doesn't exist, create it
       if (!user) {
         const apiKeyNew = `figdex_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`.slice(0, 36);
+        const insertPayload: any = { email, api_key: apiKeyNew, full_name: displayName, plan: 'free' };
+        if (authUserId) {
+          insertPayload.id = authUserId;
+        }
+
         const { data: created, error: createErr } = await admin
           .from('users')
-          .insert({ email, api_key: apiKeyNew, full_name: displayName, plan: 'free' })
+          .insert(insertPayload)
           .select('id, email, full_name, plan, is_admin, api_key')
           .single();
         
@@ -334,11 +370,24 @@ export default async function handler(
           console.error('[auth/signup] create user error', createErr);
           // If user already exists (race condition), fetch them
           if (createErr.code === '23505' || createErr.message?.includes('duplicate') || createErr.message?.includes('unique')) {
-            const { data: existing } = await admin
-              .from('users')
-              .select('id, email, full_name, plan, is_admin, api_key')
-              .eq('email', email)
-              .maybeSingle();
+            const existingResult = authUserId
+              ? await withTimeout(
+                  admin
+                    .from('users')
+                    .select('id, email, full_name, plan, is_admin, api_key')
+                    .eq('id', authUserId)
+                    .maybeSingle(),
+                  { data: null, error: null } as any
+                )
+              : await withTimeout(
+                  admin
+                    .from('users')
+                    .select('id, email, full_name, plan, is_admin, api_key')
+                    .eq('email', email)
+                    .maybeSingle(),
+                  { data: null, error: null } as any
+                );
+            const existing = existingResult?.data || null;
             if (existing) {
               console.log('[auth/signup] existing user fetched after duplicate insert', { email });
             } else {

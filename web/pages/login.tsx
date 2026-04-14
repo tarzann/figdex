@@ -63,7 +63,7 @@ export default function Login() {
         const response = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'login', email: normalizedEmail, password: 'oauth' }),
+          body: JSON.stringify({ action: 'login', email: normalizedEmail, password: 'oauth', userId: user.id }),
         });
 
         if (!response.ok) {
@@ -170,7 +170,7 @@ export default function Login() {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', email: normalizedEmail, password }),
+        body: JSON.stringify({ action: 'login', email: normalizedEmail, password, userId: authData.user.id }),
       });
 
       if (!response.ok) {
