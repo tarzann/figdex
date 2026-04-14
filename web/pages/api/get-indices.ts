@@ -56,7 +56,7 @@ const mergeIndexLists = (preferred: any[], fallback: any[]) => {
     merged.set(key, {
       ...(existing || {}),
       ...item,
-      id: existing?.id || item.id,
+      id: item.id || existing?.id,
       normalized_index_id: item.id || existing?.normalized_index_id || null,
       legacy_index_id: existing?.legacy_index_id || null,
       file_thumbnail_url: item.file_thumbnail_url || existing?.file_thumbnail_url || null,
@@ -239,6 +239,31 @@ export default async function handler(
     console.log(`✅ User found: ${user.email || userEmailStr || 'unknown'} (id: ${user.id}, type: ${typeof user.id})`);
 
     if (directUserId) {
+      const normalizedFastResult = await withTimeout(
+        svc
+          .from('indexed_files')
+          .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
+          .eq('user_id', user.id)
+          .order('last_indexed_at', { ascending: false })
+          .limit(500),
+        { data: [], error: { message: 'Fast normalized index query timed out' } } as any
+      );
+
+      const normalizedFastRows = Array.isArray(normalizedFastResult?.data) ? normalizedFastResult.data : [];
+      const normalizedFastList = await Promise.all(normalizedFastRows.map(async (idx: any) => ({
+        id: idx.id,
+        user_id: idx.user_id,
+        project_id: idx.project_id,
+        figma_file_key: idx.figma_file_key,
+        file_name: idx.file_name,
+        uploaded_at: idx.last_indexed_at,
+        file_size: 0,
+        frame_count: typeof idx.total_frames === 'number' ? idx.total_frames : 0,
+        source: 'Plugin',
+        file_thumbnail_url: await signStorageLikeUrl(svc, idx.cover_image_url) || idx.cover_image_url || null,
+        normalized_index_id: idx.id,
+      })));
+
       const legacyFastResult = await withTimeout(
         svc
           .from('index_files')
@@ -264,16 +289,22 @@ export default async function handler(
         legacy_index_id: idx.id,
       }));
 
+      const fastList = mergeIndexLists(normalizedFastList, legacyFastList);
+      const warningParts = [
+        normalizedFastResult?.error ? String(normalizedFastResult.error.message || normalizedFastResult.error) : '',
+        legacyFastResult?.error ? String(legacyFastResult.error.message || legacyFastResult.error) : '',
+      ].filter(Boolean);
+
       return res.status(200).json({
         success: true,
-        data: legacyFastList,
+        data: fastList,
         user: {
           id: user.id,
           email: user.email || userEmailStr || null,
           full_name: user.full_name || null,
           api_key: user.api_key || null,
         },
-        warning: legacyFastResult?.error ? String(legacyFastResult.error.message || legacyFastResult.error) : undefined,
+        warning: warningParts.length > 0 ? warningParts.join(' | ') : undefined,
       });
     }
 

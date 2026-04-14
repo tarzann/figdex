@@ -346,7 +346,10 @@ export async function removeNormalizedIndexedPages(
     if (updateFileError) throw updateFileError;
   }
 
-  await refreshNormalizedOwnerUsage(supabaseAdmin, owner);
+  await applyNormalizedOwnerUsageDelta(supabaseAdmin, owner, {
+    deltaFiles: fileDeleted ? -1 : 0,
+    deltaFrames: -removedFramesCount,
+  });
 
   return {
     removedPageIds,

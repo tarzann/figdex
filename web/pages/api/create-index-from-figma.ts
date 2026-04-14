@@ -478,20 +478,21 @@ export default async function handler(
       const guestTotalFrames = await getGuestTotalFrames(supabaseAdmin, guestAnonId);
 
       const existingByPageId = new Map<string, { id?: string; index_data: any; pageCount: number }>();
-      const normalizedExisting = await loadNormalizedExistingFile(
-        supabaseAdmin,
-        { type: 'guest', anonId: guestAnonId },
-        fileKeyTrim
-      );
-      normalizedExisting.existingByPageId.forEach((value, key) => {
-        existingByPageId.set(key, value);
-      });
-      let existingFileCoverUrl: string | null = normalizedExisting.coverImageUrl;
-      let existingRows: any[] = [];
-      if (!normalizedExisting.hasExistingForFile) {
-        const { data: legacyRows } = await supabaseAdmin
-          .from('index_files')
-          .select('id, index_data, project_id, figma_file_key, frame_count')
+          const normalizedExisting = await loadNormalizedExistingFile(
+            supabaseAdmin,
+            { type: 'guest', anonId: guestAnonId },
+            fileKeyTrim
+          );
+          const shouldMirrorGuestLegacyRows = !normalizedExisting.hasExistingForFile;
+          normalizedExisting.existingByPageId.forEach((value, key) => {
+            existingByPageId.set(key, value);
+          });
+          let existingFileCoverUrl: string | null = normalizedExisting.coverImageUrl;
+          let existingRows: any[] = [];
+          if (shouldMirrorGuestLegacyRows) {
+            const { data: legacyRows } = await supabaseAdmin
+              .from('index_files')
+              .select('id, index_data, project_id, figma_file_key, frame_count')
           .is('user_id', null)
           .eq('owner_anon_id', guestAnonId)
           .eq('figma_file_key', fileKeyTrim)
@@ -573,72 +574,74 @@ export default async function handler(
           ? { coverImageUrl: existingFileCoverUrl, pages: singlePageData }
           : { pages: singlePageData };
 
-        const existingForPage = pageId ? existingByPageId.get(pageId) : null;
-        const pageFileName = fileName || 'Untitled';
-        const nowIso = now.toISOString();
+        if (shouldMirrorGuestLegacyRows) {
+          const existingForPage = pageId ? existingByPageId.get(pageId) : null;
+          const pageFileName = fileName || 'Untitled';
+          const nowIso = now.toISOString();
 
-        // Only update if existing row has exactly one page (one-index-per-page). Else insert new to avoid overwriting other pages.
-        if (existingForPage?.id && existingForPage.pageCount === 1) {
-          const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
-          const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
-          const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
-          const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
-          const incomingFrames = Array.isArray(page.frames) ? page.frames : [];
-          const frameIds = new Set(existingFrames.map((f: any) => f.id).filter(Boolean));
-          for (const f of incomingFrames) {
-            if (f.id && !frameIds.has(f.id)) { existingFrames.push(f); frameIds.add(f.id); } else if (!f.id) { existingFrames.push(f); }
-          }
-          const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
-          const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
-          const mergedData = keepCover
-            ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
-            : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
-          const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
-            indexData: mergedData,
-            ownerType: 'guest',
-            ownerId: guestAnonId,
-            fileKey: fileKeyTrim,
-            pageId,
-            now,
-          });
-          const { error: updateErr } = await supabaseAdmin.from('index_files').update({
-            file_name: pageFileName,
-            project_id: String(docId),
-            figma_file_key: fileKeyTrim,
-            frame_count: countFramesInPages([mergedPage]),
-            uploaded_at: nowIso,
-            index_data: persistedMergedData,
-          }).eq('id', existingForPage.id);
-          if (updateErr) {
-            console.error(`[${requestId}] guest update page error:`, updateErr);
-            return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
-          }
-        } else {
-          const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
-            indexData: indexDataForPage,
-            ownerType: 'guest',
-            ownerId: guestAnonId,
-            fileKey: fileKeyTrim,
-            pageId,
-            now,
-          });
-          const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
-            user_id: null,
-            owner_anon_id: guestAnonId,
-            figma_file_key: fileKeyTrim,
-            file_name: pageFileName,
-            project_id: String(docId),
-            frame_count: countFramesInPages(singlePageData),
-            index_data: persistedIndexData,
-            uploaded_at: nowIso,
-          });
-          if (insertErr) {
-            console.error(`[${requestId}] guest insert page error:`, insertErr);
-            return res.status(500).json({
-              success: false,
-              error: 'Failed to create gallery',
-              details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+          // Only update if existing row has exactly one page (one-index-per-page). Else insert new to avoid overwriting other pages.
+          if (existingForPage?.id && existingForPage.pageCount === 1) {
+            const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
+            const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
+            const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
+            const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
+            const incomingFrames = Array.isArray(page.frames) ? page.frames : [];
+            const frameIds = new Set(existingFrames.map((f: any) => f.id).filter(Boolean));
+            for (const f of incomingFrames) {
+              if (f.id && !frameIds.has(f.id)) { existingFrames.push(f); frameIds.add(f.id); } else if (!f.id) { existingFrames.push(f); }
+            }
+            const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
+            const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
+            const mergedData = keepCover
+              ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
+              : (existingFileCoverUrl ? { coverImageUrl: existingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+            const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
+              indexData: mergedData,
+              ownerType: 'guest',
+              ownerId: guestAnonId,
+              fileKey: fileKeyTrim,
+              pageId,
+              now,
             });
+            const { error: updateErr } = await supabaseAdmin.from('index_files').update({
+              file_name: pageFileName,
+              project_id: String(docId),
+              figma_file_key: fileKeyTrim,
+              frame_count: countFramesInPages([mergedPage]),
+              uploaded_at: nowIso,
+              index_data: persistedMergedData,
+            }).eq('id', existingForPage.id);
+            if (updateErr) {
+              console.error(`[${requestId}] guest update page error:`, updateErr);
+              return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
+            }
+          } else {
+            const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
+              indexData: indexDataForPage,
+              ownerType: 'guest',
+              ownerId: guestAnonId,
+              fileKey: fileKeyTrim,
+              pageId,
+              now,
+            });
+            const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
+              user_id: null,
+              owner_anon_id: guestAnonId,
+              figma_file_key: fileKeyTrim,
+              file_name: pageFileName,
+              project_id: String(docId),
+              frame_count: countFramesInPages(singlePageData),
+              index_data: persistedIndexData,
+              uploaded_at: nowIso,
+            });
+            if (insertErr) {
+              console.error(`[${requestId}] guest insert page error:`, insertErr);
+              return res.status(500).json({
+                success: false,
+                error: 'Failed to create gallery',
+                details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+              });
+            }
           }
         }
       }
@@ -931,12 +934,13 @@ export default async function handler(
             { type: 'user', userId: user.id },
             fileKeyTrim
           );
+          const shouldMirrorAuthLegacyRows = !normalizedExisting.hasExistingForFile;
           normalizedExisting.existingByPageId.forEach((value, key) => {
             authExistingByPageId.set(key, value);
           });
           let authExistingFileCoverUrl: string | null = normalizedExisting.coverImageUrl;
           let authExistingRows: any[] = [];
-          if (!normalizedExisting.hasExistingForFile) {
+          if (shouldMirrorAuthLegacyRows) {
             const { data: legacyAuthRows } = await supabaseAdmin
               .from('index_files')
               .select('id, index_data, project_id, figma_file_key, frame_count')
@@ -1032,70 +1036,72 @@ export default async function handler(
               ? { coverImageUrl: authExistingFileCoverUrl, pages: singlePageData }
               : { pages: singlePageData };
 
-            const existingForPage = pageId ? authExistingByPageId.get(pageId) : null;
-            const pageFileName = fileName || 'Untitled';
-            const nowIso = now.toISOString();
+            if (shouldMirrorAuthLegacyRows) {
+              const existingForPage = pageId ? authExistingByPageId.get(pageId) : null;
+              const pageFileName = fileName || 'Untitled';
+              const nowIso = now.toISOString();
 
-            if (existingForPage?.id && existingForPage.pageCount === 1) {
-              const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
-              const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
-              const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
-              const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
-              const incomingFrames = Array.isArray(page.frames) ? page.frames : [];
-              const frameIds = new Set(existingFrames.map((f: any) => f.id).filter(Boolean));
-              for (const f of incomingFrames) {
-                if (f.id && !frameIds.has(f.id)) { existingFrames.push(f); frameIds.add(f.id); } else if (!f.id) { existingFrames.push(f); }
-              }
-              const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
-              const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
-              const mergedData = keepCover
-                ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
-                : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
-              const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
-                indexData: mergedData,
-                ownerType: 'user',
-                ownerId: user.id,
-                fileKey: fileKeyTrim,
-                pageId,
-                now,
-              });
-              const { error: updateErr } = await supabaseAdmin.from('index_files').update({
-                file_name: pageFileName,
-                project_id: String(docId),
-                figma_file_key: fileKeyTrim,
-                frame_count: countFramesInPages([mergedPage]),
-                uploaded_at: nowIso,
-                index_data: persistedMergedData,
-              }).eq('id', existingForPage.id);
-              if (updateErr) {
-                console.error(`[${requestId}] auth update page error:`, updateErr);
-                return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
-              }
-            } else {
-              const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
-                indexData: indexDataForPage,
-                ownerType: 'user',
-                ownerId: user.id,
-                fileKey: fileKeyTrim,
-                pageId,
-                now,
-              });
-              const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
-                user_id: user.id,
-                figma_file_key: fileKeyTrim,
-                file_name: pageFileName,
-                project_id: String(docId),
-                frame_count: countFramesInPages(singlePageData),
-                index_data: persistedIndexData,
-                uploaded_at: nowIso,
-              });
-              if (insertErr) {
-                console.error(`[${requestId}] auth insert page error:`, insertErr);
-                return res.status(500).json({
-                  success: false,
-                  error: 'Failed to create gallery',
-                  details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+              if (existingForPage?.id && existingForPage.pageCount === 1) {
+                const existingData = await resolveIndexDataForRead(supabaseAdmin, existingForPage.index_data);
+                const existingPages = Array.isArray(existingData) ? existingData : (existingData?.pages ?? []);
+                const existingPage = existingPages.find((p: any) => (p?.id || p?.pageId) === pageId);
+                const existingFrames = Array.isArray(existingPage?.frames) ? existingPage.frames : [];
+                const incomingFrames = Array.isArray(page.frames) ? page.frames : [];
+                const frameIds = new Set(existingFrames.map((f: any) => f.id).filter(Boolean));
+                for (const f of incomingFrames) {
+                  if (f.id && !frameIds.has(f.id)) { existingFrames.push(f); frameIds.add(f.id); } else if (!f.id) { existingFrames.push(f); }
+                }
+                const mergedPage = { ...page, id: pageId, name: pageName, pageId, frames: existingFrames };
+                const keepCover = existingData && typeof existingData === 'object' && existingData.coverImageUrl;
+                const mergedData = keepCover
+                  ? { coverImageUrl: existingData.coverImageUrl, pages: [mergedPage] }
+                  : (authExistingFileCoverUrl ? { coverImageUrl: authExistingFileCoverUrl, pages: [mergedPage] } : { pages: [mergedPage] });
+                const persistedMergedData = await persistIndexDataForWrite(supabaseAdmin, {
+                  indexData: mergedData,
+                  ownerType: 'user',
+                  ownerId: user.id,
+                  fileKey: fileKeyTrim,
+                  pageId,
+                  now,
                 });
+                const { error: updateErr } = await supabaseAdmin.from('index_files').update({
+                  file_name: pageFileName,
+                  project_id: String(docId),
+                  figma_file_key: fileKeyTrim,
+                  frame_count: countFramesInPages([mergedPage]),
+                  uploaded_at: nowIso,
+                  index_data: persistedMergedData,
+                }).eq('id', existingForPage.id);
+                if (updateErr) {
+                  console.error(`[${requestId}] auth update page error:`, updateErr);
+                  return res.status(500).json({ success: false, error: 'Failed to update gallery', details: updateErr?.message });
+                }
+              } else {
+                const persistedIndexData = await persistIndexDataForWrite(supabaseAdmin, {
+                  indexData: indexDataForPage,
+                  ownerType: 'user',
+                  ownerId: user.id,
+                  fileKey: fileKeyTrim,
+                  pageId,
+                  now,
+                });
+                const { error: insertErr } = await supabaseAdmin.from('index_files').insert({
+                  user_id: user.id,
+                  figma_file_key: fileKeyTrim,
+                  file_name: pageFileName,
+                  project_id: String(docId),
+                  frame_count: countFramesInPages(singlePageData),
+                  index_data: persistedIndexData,
+                  uploaded_at: nowIso,
+                });
+                if (insertErr) {
+                  console.error(`[${requestId}] auth insert page error:`, insertErr);
+                  return res.status(500).json({
+                    success: false,
+                    error: 'Failed to create gallery',
+                    details: sanitizeExternalServiceErrorMessage(insertErr?.message),
+                  });
+                }
               }
             }
           }

@@ -24,6 +24,13 @@ export async function logIndexActivity(
   input: IndexActivityInput
 ): Promise<void> {
   try {
+    if (
+      input.eventType === 'gallery_loaded' ||
+      input.eventType === 'job_started'
+    ) {
+      return;
+    }
+
     const now = new Date().toISOString();
     const payload = {
       request_id: input.requestId || null,
@@ -46,7 +53,13 @@ export async function logIndexActivity(
       updated_at: now,
     };
 
-    const { error } = await supabaseAdmin.from('index_activity_log').insert(payload);
+    const insertResult = await Promise.race([
+      supabaseAdmin.from('index_activity_log').insert(payload),
+      new Promise<{ error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ error: { message: 'activity log write timed out' } }), 250)
+      ),
+    ]);
+    const { error } = insertResult;
     if (error) {
       console.warn('[index-activity-log] failed to write activity log:', error.message);
     }
