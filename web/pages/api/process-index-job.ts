@@ -7,6 +7,29 @@ import { sendJobNotificationEmail, sendJobNotificationToAdmin } from '../../lib/
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 import { logIndexActivity } from '../../lib/index-activity-log';
 
+const buildLightweightLegacyIndexData = () => ({ pages: [] as any[] });
+
+async function shouldStoreFullLegacyIndexData(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  userId: string,
+  fileKey: string
+): Promise<boolean> {
+  if (!userId || !fileKey) return true;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('indexed_files')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('figma_file_key', fileKey)
+      .limit(1)
+      .maybeSingle();
+    if (error) return true;
+    return !data?.id;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Merge multiple job manifests into a single index
  * Called when all jobs in a split group have completed
@@ -118,13 +141,18 @@ async function mergeSplitJobs(
   });
   
   const fileSizeBytes = Buffer.byteLength(JSON.stringify(mergedManifest), 'utf8');
+  const storeFullLegacyIndexData = await shouldStoreFullLegacyIndexData(
+    supabaseAdmin,
+    parentJob.user_id,
+    parentJob.file_key
+  );
   
   const indexData: any = {
     user_id: parentJob.user_id,
     project_id: parentJob.project_id,
     figma_file_key: parentJob.file_key,
     file_name: parentJob.file_name,
-    index_data: mergedManifest,
+    index_data: storeFullLegacyIndexData ? mergedManifest : buildLightweightLegacyIndexData(),
     frame_count: Array.isArray(mergedManifest)
       ? mergedManifest.reduce((sum: number, page: any) => sum + (Array.isArray(page?.frames) ? page.frames.length : 0), 0)
       : 0,
@@ -1998,13 +2026,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!figmaVersion || !figmaLastModified) {
         console.warn(`[${requestId}] ⚠️ Version info missing from job (job created before migration?). Version info will be NULL in index.`);
       }
+
+      const storeFullLegacyIndexData = await shouldStoreFullLegacyIndexData(
+        supabaseAdmin,
+        job.user_id,
+        job.file_key
+      );
       
       const indexData: any = {
         user_id: job.user_id,
         project_id: documentId,
         figma_file_key: job.file_key,
         file_name: job.file_name,
-        index_data: manifest,
+        index_data: storeFullLegacyIndexData ? manifest : buildLightweightLegacyIndexData(),
         frame_count: frameIds.length,
         uploaded_at: new Date().toISOString(),
         frame_tags: Array.from(allFrameTags),

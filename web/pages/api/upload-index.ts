@@ -2,6 +2,29 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
+
+const buildLightweightLegacyIndexData = () => ({ pages: [] as any[] });
+
+async function shouldStoreFullLegacyIndexData(
+  supabaseAdmin: any,
+  userId: string,
+  fileKey: string
+): Promise<boolean> {
+  if (!userId || !fileKey) return true;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('indexed_files')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('figma_file_key', fileKey)
+      .limit(1)
+      .maybeSingle();
+    if (error) return true;
+    return !data?.id;
+  } catch {
+    return true;
+  }
+}
 // Local helpers mirroring plugin logic
 function deriveNamingTags(rawName: string): string[] {
   try {
@@ -209,13 +232,19 @@ async function mergeChunksIfComplete(userId: string, fileKey: string, validFileK
       final: mergedFileSizeBytes
     });
     
+    const storeFullLegacyIndexData = await shouldStoreFullLegacyIndexData(
+      svc,
+      userId,
+      preferredKey
+    );
+
     // Create merged index
     const mergedIndex = {
       user_id: userId,
       project_id: baseDocumentId,
       figma_file_key: preferredKey,
       file_name: baseFileName,
-      index_data: mergedPages,
+      index_data: storeFullLegacyIndexData ? mergedPages : buildLightweightLegacyIndexData(),
       uploaded_at: mergedUploadedAt,
       file_size: mergedFileSizeBytes, // Add file size in bytes
       frame_tags: frameTags,
@@ -624,13 +653,20 @@ export default async function handler(
       uploaded_at: uploadedAt || new Date().toISOString()
     });
     
+    const storeFullLegacyIndexData = await shouldStoreFullLegacyIndexData(
+      supabaseAdmin,
+      user.id,
+      validFileKey
+    );
+    const legacyIndexDataPayload = storeFullLegacyIndexData ? pages : buildLightweightLegacyIndexData();
+
     // Try to insert with tags first, fallback to basic insert if columns don't exist
     let insertData: any = {
       user_id: user.id,
       project_id: documentId,
       figma_file_key: validFileKey,
       file_name: finalFileName,
-      index_data: pages,
+      index_data: legacyIndexDataPayload,
       uploaded_at: uploadedAt || new Date().toISOString(),
       file_size: fileSizeBytes // Add file size in bytes
     };
@@ -701,7 +737,7 @@ export default async function handler(
           project_id: documentId,
           figma_file_key: validFileKey,
           file_name: finalFileName,
-          index_data: pages,
+          index_data: legacyIndexDataPayload,
           uploaded_at: uploadedAt || new Date().toISOString()
         };
         

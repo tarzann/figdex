@@ -27,6 +27,13 @@ const hasRenderablePages = (data: any) => {
   return pages.some((page: any) => Array.isArray(page?.frames) && page.frames.length > 0);
 };
 
+const getLogicalFileId = (projectId?: string | null, fileKey?: string | null) => {
+  const normalizedFileKey = typeof fileKey === 'string' ? fileKey.trim() : '';
+  const normalizedProjectId = typeof projectId === 'string' ? projectId.trim() : '';
+  const stableProjectId = normalizedProjectId && normalizedProjectId !== '0:0' ? normalizedProjectId : '';
+  return normalizedFileKey || stableProjectId || '';
+};
+
 const signStorageRef = async (svc: any, value: string | null | undefined): Promise<string | null> => {
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -221,6 +228,53 @@ export default async function handler(
       indexDebug(`[get-index-data] Index ${indexId} not found`);
       return res.status(404).json({ success: false, error: 'Index not found' });
     }
+
+    const resolveNormalizedCompanion = async () => {
+      const logicalFileId = getLogicalFileId(indexData.project_id, indexData.figma_file_key);
+      if (!logicalFileId) return null;
+
+      let companionQuery = svc
+        .from('indexed_files')
+        .select('id, user_id, file_name, project_id, figma_file_key, share_token, cover_image_url, total_frames, last_indexed_at')
+        .eq('logical_file_id', logicalFileId)
+        .limit(1);
+
+      if (indexData.user_id) {
+        companionQuery = companionQuery.eq('user_id', indexData.user_id);
+      } else {
+        companionQuery = companionQuery.is('user_id', null);
+      }
+
+      const { data: companion, error: companionError } = await companionQuery.maybeSingle();
+      if (companionError || !companion) return null;
+
+      const companionData = await buildNormalizedPayload(companion);
+      const signedCompanionCover = await signStorageRef(svc, companionData.coverImageUrl);
+      if (signedCompanionCover) {
+        companionData.coverImageUrl = signedCompanionCover;
+      }
+
+      if (!hasRenderablePages(companionData) && !companionData.coverImageUrl) {
+        return null;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: companion.id,
+          user_id: companion.user_id,
+          file_name: companion.file_name,
+          index_data: companionData,
+          uploaded_at: companion.last_indexed_at,
+          project_id: companion.project_id,
+          figma_file_key: companion.figma_file_key,
+          share_token: companion.share_token,
+          frame_count: companion.total_frames,
+          coverImageUrl: companionData.coverImageUrl,
+          legacy_index_id: indexData.id,
+        },
+      });
+    };
 
     // Helper: from a Supabase storage URL, derive bucket+path and return a fresh signed URL
     const parseImageUrl = (imageUrl: string): { bucket: string; path: string } | null => {
@@ -610,6 +664,13 @@ export default async function handler(
         pagesArray = Array.isArray(indexData.index_data.pages) ? indexData.index_data.pages : [];
         // Get coverImageUrl from index_data
         coverImageUrlFromIndex = indexData.index_data.coverImageUrl || null;
+      }
+
+      if (pagesArray.length === 0 && !coverImageUrlFromIndex) {
+        const companionResponse = await resolveNormalizedCompanion();
+        if (companionResponse) {
+          return companionResponse;
+        }
       }
       
       // If index_data is array or has pages, normalize image fields and resolve storage refs
