@@ -78,6 +78,15 @@ export default function IndexManagement() {
     }
   };
 
+  const parseApiJson = async (response: Response) => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(text && text.length < 240 ? text : `Request failed (${response.status})`);
+    }
+  };
+
   const loadIndexFiles = async () => {
     try {
       setLoading(true);
@@ -90,7 +99,7 @@ export default function IndexManagement() {
       }
 
       const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
-      const data = await response.json();
+      const data = await parseApiJson(response);
 
       if (!data.success) {
         setError(data.error || 'Failed to load indices');
@@ -305,7 +314,7 @@ export default function IndexManagement() {
       if (!user.api_key && !retryAfterRefresh) {
         // Try to refresh session from get-indices
         const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
-        const refreshData = await refreshRes.json();
+        const refreshData = await parseApiJson(refreshRes);
         if (refreshData.user?.api_key) {
           const stored = { ...user, api_key: refreshData.user.api_key, full_name: refreshData.user.full_name || user.full_name };
           localStorage.setItem('figma_web_user', JSON.stringify(stored));
@@ -337,7 +346,7 @@ export default function IndexManagement() {
         if (isInvalidKey && !retryAfterRefresh) {
           // Refresh session from get-indices and retry once (api_key may have been regenerated)
           const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
-          const refreshData = await refreshRes.json();
+          const refreshData = await parseApiJson(refreshRes);
           if (refreshData.user?.api_key) {
             const stored = { ...user, api_key: refreshData.user.api_key, full_name: refreshData.user.full_name || user.full_name };
             localStorage.setItem('figma_web_user', JSON.stringify(stored));

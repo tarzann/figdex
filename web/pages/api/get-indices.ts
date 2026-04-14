@@ -244,6 +244,9 @@ export default async function handler(
 
     const normalizedIndices = normalizedResult?.data;
     const normalizedIndicesError = normalizedResult?.error;
+    const normalizedTimedOut = Boolean(
+      normalizedIndicesError && /timed out|timeout/i.test(String(normalizedIndicesError.message || normalizedIndicesError))
+    );
 
     const normalizedList = !normalizedIndicesError && Array.isArray(normalizedIndices)
       ? await Promise.all(normalizedIndices.map(async (idx: any) => ({
@@ -270,20 +273,28 @@ export default async function handler(
       const selectWithMeta = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count';
       const selectBasic = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
 
-      let { data: indicesByUserId, error: indicesByUserIdError }: { data: any[] | null; error: any } = await svc
-        .from('index_files')
-        .select(selectWithMeta)
-        .eq('user_id', user.id)
-        .order('uploaded_at', { ascending: false })
-        .limit(500);
-
-      if (indicesByUserIdError && /(file_size|frame_count)/i.test(indicesByUserIdError.message || '')) {
-        const fallbackIndices = await svc
+      let legacyResult = await withTimeout(
+        svc
           .from('index_files')
-          .select(selectBasic)
+          .select(selectWithMeta)
           .eq('user_id', user.id)
           .order('uploaded_at', { ascending: false })
-          .limit(500);
+          .limit(500),
+        { data: null, error: { message: 'Legacy indices query timed out' } } as any
+      );
+      let indicesByUserId = legacyResult.data as any[] | null;
+      let indicesByUserIdError = legacyResult.error as any;
+
+      if (indicesByUserIdError && /(file_size|frame_count)/i.test(indicesByUserIdError.message || '')) {
+        const fallbackIndices = await withTimeout(
+          svc
+            .from('index_files')
+            .select(selectBasic)
+            .eq('user_id', user.id)
+            .order('uploaded_at', { ascending: false })
+            .limit(500),
+          { data: null, error: { message: 'Legacy fallback query timed out' } } as any
+        );
         indicesByUserId = fallbackIndices.data;
         indicesByUserIdError = fallbackIndices.error;
       }
@@ -302,40 +313,50 @@ export default async function handler(
     }
 
     // Check which indices were created via API (have index_jobs entry)
-    const indexIds = indices.map((idx: any) => idx.id).filter(Boolean);
     const apiIndexIds = new Set<string>();
-    if (indexIds.length > 0) {
-      try {
-        const { data: jobs, error: jobsError } = await svc
-          .from('index_jobs')
-          .select('index_file_id')
-          .in('index_file_id', indexIds)
-          .not('index_file_id', 'is', null);
-        
-        if (!jobsError && Array.isArray(jobs)) {
-          jobs.forEach((job: any) => {
-            if (job.index_file_id) {
-              apiIndexIds.add(job.index_file_id);
-            }
-          });
-          console.log(`📊 Found ${apiIndexIds.size} indices created via API out of ${indexIds.length} total`);
+    if (!normalizedTimedOut) {
+      const indexIds = indices.map((idx: any) => idx.id).filter(Boolean);
+      if (indexIds.length > 0) {
+        try {
+          const jobsResult = await withTimeout(
+            svc
+              .from('index_jobs')
+              .select('index_file_id')
+              .in('index_file_id', indexIds)
+              .not('index_file_id', 'is', null),
+            { data: null, error: { message: 'index_jobs query timed out' } } as any
+          );
+          
+          if (!jobsResult.error && Array.isArray(jobsResult.data)) {
+            jobsResult.data.forEach((job: any) => {
+              if (job.index_file_id) {
+                apiIndexIds.add(job.index_file_id);
+              }
+            });
+            console.log(`📊 Found ${apiIndexIds.size} indices created via API out of ${indexIds.length} total`);
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not check index_jobs for source detection:', e);
         }
-      } catch (e) {
-        console.warn('⚠️ Could not check index_jobs for source detection:', e);
       }
     }
 
     // Fetch file_thumbnail_url from saved_connections for each index
     const fileKeyToThumbnail = new Map<string, string | null>();
-    if (indices.length > 0 && user.id) {
+    if (!normalizedTimedOut && indices.length > 0 && user.id) {
       try {
         const fileKeys = indices.map((idx: any) => idx.figma_file_key).filter(Boolean);
         if (fileKeys.length > 0) {
-          const { data: connections, error: connectionsError } = await svc
-            .from('saved_connections')
-            .select('file_key, file_thumbnail_url')
-            .eq('user_id', user.id)
-            .in('file_key', fileKeys);
+          const connectionsResult = await withTimeout(
+            svc
+              .from('saved_connections')
+              .select('file_key, file_thumbnail_url')
+              .eq('user_id', user.id)
+              .in('file_key', fileKeys),
+            { data: null, error: { message: 'saved_connections query timed out' } } as any
+          );
+          const connections = connectionsResult.data;
+          const connectionsError = connectionsResult.error;
           
           if (!connectionsError && Array.isArray(connections)) {
             connections.forEach((conn: any) => {
@@ -383,7 +404,7 @@ export default async function handler(
     }
 
     // If no indices found, check if there are indices with null user_id that might belong to this user
-    if (indices.length === 0) {
+    if (!normalizedTimedOut && indices.length === 0) {
       console.log('⚠️ No indices found by user_id, checking for null user_id indices...');
       const { data: nullUserIdIndices, error: nullUserIdError } = await svc
         .from('index_files')
@@ -424,7 +445,7 @@ export default async function handler(
       });
     }
 
-    await logIndexActivity(svc, {
+    void logIndexActivity(svc, {
       requestId: `gallery_${user.id}_${Date.now()}`,
       source: 'web',
       eventType: 'gallery_loaded',
@@ -437,7 +458,7 @@ export default async function handler(
         mode: normalizedList.length > 0 ? 'normalized' : 'legacy',
         warning: indicesQueryError || null,
       },
-    });
+    }).catch(() => {});
 
     res.status(200).json({ success: true, data: indices || [], user: user || null });
   } catch (error) {

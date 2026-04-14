@@ -718,7 +718,7 @@ export default function Home() {
           if (useGuestPath && anonId) {
             setCurrentIndexFile('guest');
             const response = await fetch(`/api/get-indices?anonId=${encodeURIComponent(anonId)}`);
-            const data = await response.json();
+            const data = await parseJsonResponse(response, 'Failed to load guest indices');
           if (data.success && Array.isArray(data.data)) {
             if (data.plan) {
               setGuestPlan(data.plan);
@@ -745,7 +745,7 @@ export default function Home() {
         }
         setCurrentIndexFile(user.email);
         const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
-        const data = await response.json();
+        const data = await parseJsonResponse(response, 'Failed to load gallery indices');
         galleryDebug('Get indices response:', data);
         
         // Check for warning message (indices with null user_id or no user found)
