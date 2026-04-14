@@ -108,6 +108,7 @@ export default function RegisterPage() {
       localStorage.setItem(
         'figma_web_user',
         JSON.stringify({
+          id: result.user?.id || '',
           email: email.trim().toLowerCase(),
           api_key: result.user?.api_key,
           full_name: fullName.trim(),

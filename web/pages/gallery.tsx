@@ -677,6 +677,7 @@ export default function Home() {
         const data = await resp.json();
         const user = data?.user || {};
         const storedUser = {
+          id: user.id || '',
           email: user.email || '',
           full_name: user.full_name || user.name || 'Guest',
           api_key: apiKey,

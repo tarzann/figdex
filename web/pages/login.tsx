@@ -78,6 +78,7 @@ export default function Login() {
         localStorage.setItem(
           'figma_web_user',
           JSON.stringify({
+            id: ensured.id || user.id,
             email: normalizedEmail,
             api_key: apiKey,
             full_name: ensured.name || user.user_metadata?.full_name || null,
@@ -184,6 +185,7 @@ export default function Login() {
       localStorage.setItem(
         'figma_web_user',
         JSON.stringify({
+          id: ensured.id || authData.user.id,
           email: normalizedEmail,
           api_key: apiKey,
           full_name: ensured.name || authData.user.user_metadata?.full_name || null,

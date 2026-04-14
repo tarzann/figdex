@@ -41,6 +41,7 @@ export default function AuthCallback() {
           
           // Store user info in localStorage
           const userData = {
+            id: user.id,
             email: user.email,
             name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0],
             provider: user.app_metadata?.provider || 'oauth',
