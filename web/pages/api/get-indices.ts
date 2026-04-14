@@ -3,6 +3,19 @@ import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { logIndexActivity } from '../../lib/index-activity-log';
 
+const QUERY_TIMEOUT_MS = 3000;
+
+const withTimeout = async <T,>(promise: PromiseLike<T>, fallback: T): Promise<T> => {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), QUERY_TIMEOUT_MS)),
+    ]);
+  } catch {
+    return fallback;
+  }
+};
+
 const signStorageLikeUrl = async (svc: any, value: string | null | undefined): Promise<string | null> => {
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -34,7 +47,7 @@ const mergeIndexLists = (preferred: any[], fallback: any[]) => {
   const merged = new Map<string, any>();
 
   fallback.forEach((item: any) => {
-    merged.set(getStableLogicalFileId(item), item);
+    merged.set(getStableLogicalFileId(item), { ...item, legacy_index_id: item.id || null });
   });
 
   preferred.forEach((item: any) => {
@@ -43,6 +56,9 @@ const mergeIndexLists = (preferred: any[], fallback: any[]) => {
     merged.set(key, {
       ...(existing || {}),
       ...item,
+      id: existing?.id || item.id,
+      normalized_index_id: item.id || existing?.normalized_index_id || null,
+      legacy_index_id: existing?.legacy_index_id || null,
       file_thumbnail_url: item.file_thumbnail_url || existing?.file_thumbnail_url || null,
       frame_count: typeof item.frame_count === 'number' ? item.frame_count : (existing?.frame_count ?? null),
       file_size: typeof item.file_size === 'number' ? item.file_size : (existing?.file_size ?? 0),
@@ -85,13 +101,19 @@ export default async function handler(
 
     // Guest path: fetch by owner_anon_id (user_id IS NULL)
     if (anonId) {
-      const { data: normalizedGuestIndices, error: normalizedGuestError } = await svc
-        .from('indexed_files')
-        .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
-        .is('user_id', null)
-        .eq('owner_anon_id', anonId)
-        .order('last_indexed_at', { ascending: false })
-        .limit(500);
+      const normalizedGuestResult = await withTimeout(
+        svc
+          .from('indexed_files')
+          .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
+          .is('user_id', null)
+          .eq('owner_anon_id', anonId)
+          .order('last_indexed_at', { ascending: false })
+          .limit(500),
+        { data: null, error: { message: 'Normalized guest query timed out' } } as any
+      );
+
+      const normalizedGuestIndices = normalizedGuestResult?.data;
+      const normalizedGuestError = normalizedGuestResult?.error;
 
       const normalizedGuestList = !normalizedGuestError && Array.isArray(normalizedGuestIndices)
         ? await Promise.all(normalizedGuestIndices.map(async (idx: any) => ({
@@ -210,12 +232,18 @@ export default async function handler(
 
     console.log(`✅ User found: ${user.email} (id: ${user.id}, type: ${typeof user.id})`);
 
-    const { data: normalizedIndices, error: normalizedIndicesError } = await svc
-      .from('indexed_files')
-      .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
-      .eq('user_id', user.id)
-      .order('last_indexed_at', { ascending: false })
-      .limit(500);
+    const normalizedResult = await withTimeout(
+      svc
+        .from('indexed_files')
+        .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
+        .eq('user_id', user.id)
+        .order('last_indexed_at', { ascending: false })
+        .limit(500),
+      { data: null, error: { message: 'Normalized user query timed out' } } as any
+    );
+
+    const normalizedIndices = normalizedResult?.data;
+    const normalizedIndicesError = normalizedResult?.error;
 
     const normalizedList = !normalizedIndicesError && Array.isArray(normalizedIndices)
       ? await Promise.all(normalizedIndices.map(async (idx: any) => ({

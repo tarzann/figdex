@@ -427,6 +427,17 @@ async function getNormalizedOwnerUsage(
   supabaseAdmin: SupabaseClient<any, any, any, any, any>,
   filters: { userId?: string | null; anonId?: string | null }
 ): Promise<{ totalFiles: number; totalFrames: number } | null> {
+  const safeMaybeSingle = async <T>(queryPromise: PromiseLike<T>): Promise<T | null> => {
+    try {
+      return await Promise.race([
+        queryPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+      ]);
+    } catch {
+      return null;
+    }
+  };
+
   let query = supabaseAdmin
     .from('indexed_owner_usage')
     .select('total_files, total_frames');
@@ -441,8 +452,10 @@ async function getNormalizedOwnerUsage(
     query = query.eq('owner_anon_id', filters.anonId);
   }
 
-  const { data, error } = await query.maybeSingle();
-  if (error || !data) {
+  const usageResult = await safeMaybeSingle(query.maybeSingle());
+  const data = (usageResult as any)?.data;
+  const error = (usageResult as any)?.error;
+  if (!usageResult || error || !data) {
     let filesQuery = supabaseAdmin
       .from('indexed_files')
       .select('id, total_frames');
@@ -457,7 +470,9 @@ async function getNormalizedOwnerUsage(
       filesQuery = filesQuery.eq('owner_anon_id', filters.anonId);
     }
 
-    const { data: indexedFiles, error: indexedFilesError } = await filesQuery;
+    const filesResult = await safeMaybeSingle(filesQuery as any);
+    const indexedFiles = (filesResult as any)?.data;
+    const indexedFilesError = (filesResult as any)?.error;
     if (indexedFilesError || !Array.isArray(indexedFiles) || indexedFiles.length === 0) {
       return null;
     }
