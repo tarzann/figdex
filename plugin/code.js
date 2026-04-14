@@ -209,6 +209,10 @@ async function deleteCurrentDocumentLegacyState() {
 const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for large uploads
 const CHUNK_RETRYABLE_STATUSES = { 429: true, 502: true, 503: true, 504: true };
 const MAX_CHUNK_UPLOAD_ATTEMPTS = 4;
+const LARGE_FILE_TRIGGER_PAGES = 6;
+const LARGE_FILE_TRIGGER_FRAMES = 120;
+const LARGE_FILE_BATCH_MAX_PAGES = 3;
+const LARGE_FILE_BATCH_MAX_FRAMES = 60;
 
 function sleep(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -1537,6 +1541,50 @@ figma.ui.onmessage = async (msg) => {
         }
       );
 
+      var dirtyFrameCount = 0;
+      for (var dfi = 0; dfi < dirtyPageIds.length; dfi++) {
+        var dirtyFrameIds = frameIdsByPageId[dirtyPageIds[dfi]];
+        if (Array.isArray(dirtyFrameIds)) dirtyFrameCount += dirtyFrameIds.length;
+      }
+
+      var useLargeFileBatchMode = dirtyPageIds.length >= LARGE_FILE_TRIGGER_PAGES || dirtyFrameCount >= LARGE_FILE_TRIGGER_FRAMES;
+      var remainingDirtyPageIds = [];
+      if (useLargeFileBatchMode && dirtyPageIds.length > 0) {
+        var limitedDirtyPageIds = [];
+        var limitedFrameCount = 0;
+        for (var ldi = 0; ldi < dirtyPageIds.length; ldi++) {
+          var candidatePageId = dirtyPageIds[ldi];
+          var candidateFrameCount = Array.isArray(frameIdsByPageId[candidatePageId]) ? frameIdsByPageId[candidatePageId].length : 0;
+          var wouldExceedPageLimit = limitedDirtyPageIds.length >= LARGE_FILE_BATCH_MAX_PAGES;
+          var wouldExceedFrameLimit = limitedDirtyPageIds.length > 0 && (limitedFrameCount + candidateFrameCount > LARGE_FILE_BATCH_MAX_FRAMES);
+          if (wouldExceedPageLimit || wouldExceedFrameLimit) break;
+          limitedDirtyPageIds.push(candidatePageId);
+          limitedFrameCount += candidateFrameCount;
+        }
+        if (limitedDirtyPageIds.length === 0) {
+          limitedDirtyPageIds.push(dirtyPageIds[0]);
+          limitedFrameCount = Array.isArray(frameIdsByPageId[dirtyPageIds[0]]) ? frameIdsByPageId[dirtyPageIds[0]].length : 0;
+        }
+        remainingDirtyPageIds = dirtyPageIds.slice(limitedDirtyPageIds.length);
+        dirtyPageIds = limitedDirtyPageIds;
+        dirtyFrameCount = limitedFrameCount;
+        pluginTrace('Large file batch mode enabled', {
+          runId: activeIndexRunId,
+          selectedPagesCount: selectedIds.length,
+          dirtyPageCount: dirtyPageIds.length,
+          remainingDirtyPageCount: remainingDirtyPageIds.length,
+          dirtyFrameCount: dirtyFrameCount
+        });
+        await postIndexProgress(
+          'Large file mode: indexing ' + dirtyPageIds.length + ' page(s) now, ' + remainingDirtyPageIds.length + ' remaining',
+          {
+            selectedPagesCount: selectedIds.length,
+            pageCount: dirtyPageIds.length,
+            framesDone: 0,
+          }
+        );
+      }
+
       // Pre-flight: check guest limits against the pages that will actually be uploaded.
       if (isGuestMode && guestAnonId) {
         await postIndexProgress('Checking guest plan limits...', {
@@ -2012,19 +2060,25 @@ figma.ui.onmessage = async (msg) => {
       } catch (e) { /* non-fatal */ }
       // Also notify UI so icons can update immediately without manual refresh
       try {
-        figma.ui.postMessage({ type: 'pages-indexed', pageIds: selectedIds });
+        figma.ui.postMessage({ type: 'pages-indexed', pageIds: dirtyPageIds });
       } catch (e) {}
 
       var resultUrl = 'https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(fileKey) + '&_t=' + Date.now();
       if (lastViewToken) resultUrl += '&viewToken=' + encodeURIComponent(lastViewToken);
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
       else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
-      figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      var hasRemainingDirtyPages = Array.isArray(remainingDirtyPageIds) && remainingDirtyPageIds.length > 0;
+      if (hasRemainingDirtyPages) {
+        figma.notify('Indexed ' + dirtyPageIds.length + ' page(s). ' + remainingDirtyPageIds.length + ' more need another run.', { timeout: 3500 });
+      } else {
+        figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
+      }
       pluginTrace('Index run completed', {
         runId: activeIndexRunId,
         pageCount: dirtyPageIds.length,
         frameCount: allPageFrames.length,
         totalChunks: totalChunks,
+        remainingDirtyPageCount: hasRemainingDirtyPages ? remainingDirtyPageIds.length : 0,
         resultUrl: resultUrl
       });
       await sendPluginTelemetryEvent('index_run_completed', {
@@ -2041,6 +2095,13 @@ figma.ui.onmessage = async (msg) => {
         setTimeout(function () { loadUserLimitsToUI(token); }, 4000);
       }
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
+      if (hasRemainingDirtyPages) {
+        figma.ui.postMessage({
+          type: 'upload-progress',
+          step: 'Indexed ' + dirtyPageIds.length + ' page(s). Run again to continue with ' + remainingDirtyPageIds.length + ' remaining.',
+          framesDone: totalUploaded
+        });
+      }
     } catch (e) {
       console.error('[code.js] start-advanced error:', e);
       pluginError('Unexpected indexing exception', {
