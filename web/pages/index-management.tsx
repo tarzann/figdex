@@ -98,7 +98,8 @@ export default function IndexManagement() {
         return;
       }
 
-      const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
+      const userIdParam = user?.id ? `&userId=${encodeURIComponent(user.id)}` : '';
+      const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}${userIdParam}`);
       const data = await parseApiJson(response);
 
       if (!data.success) {
@@ -313,7 +314,8 @@ export default function IndexManagement() {
       }
       if (!user.api_key && !retryAfterRefresh) {
         // Try to refresh session from get-indices
-        const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
+        const userIdParam = user?.id ? `&userId=${encodeURIComponent(user.id)}` : '';
+        const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}${userIdParam}`);
         const refreshData = await parseApiJson(refreshRes);
         if (refreshData.user?.api_key) {
           const stored = { ...user, api_key: refreshData.user.api_key, full_name: refreshData.user.full_name || user.full_name };
@@ -345,7 +347,8 @@ export default function IndexManagement() {
         const isInvalidKey = failed.some((f: any) => (f.error || '').toLowerCase().includes('invalid api key'));
         if (isInvalidKey && !retryAfterRefresh) {
           // Refresh session from get-indices and retry once (api_key may have been regenerated)
-          const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
+          const userIdParam = user?.id ? `&userId=${encodeURIComponent(user.id)}` : '';
+          const refreshRes = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}${userIdParam}`);
           const refreshData = await parseApiJson(refreshRes);
           if (refreshData.user?.api_key) {
             const stored = { ...user, api_key: refreshData.user.api_key, full_name: refreshData.user.full_name || user.full_name };

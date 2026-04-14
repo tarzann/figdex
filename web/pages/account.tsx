@@ -58,6 +58,7 @@ export default function AccountPage() {
 
         const user = JSON.parse(stored);
         const email = user.email ? user.email.trim().toLowerCase() : '';
+        const userId = typeof user.id === 'string' ? user.id : '';
         let key = user.api_key;
 
         // If no API key, get it from server using the same login endpoint
@@ -77,6 +78,7 @@ export default function AccountPage() {
           key = json.user.api_key;
           // Save to localStorage
           localStorage.setItem('figma_web_user', JSON.stringify({
+            id: userId || json.user.id || '',
             email,
             api_key: key,
             full_name: json.user.name,
@@ -89,7 +91,11 @@ export default function AccountPage() {
         // Load account data
         console.log('[account] fetching account data with key');
         const accountRes = await fetch('/api/account', {
-          headers: { 'Authorization': `Bearer ${key}` }
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'x-figdex-email': email,
+            'x-figdex-user-id': userId,
+          }
         });
         const accountJson = await accountRes.json();
         if (!accountJson.success) {
@@ -137,8 +143,14 @@ export default function AccountPage() {
         localStorage.setItem('figma_web_user', JSON.stringify(user));
       }
       // Reload account data
+      const storedAfterUpdate = localStorage.getItem('figma_web_user');
+      const parsedUser = storedAfterUpdate ? JSON.parse(storedAfterUpdate) : null;
       const accountRes = await fetch('/api/account', {
-        headers: { 'Authorization': `Bearer ${newKey}` }
+        headers: {
+          'Authorization': `Bearer ${newKey}`,
+          'x-figdex-email': parsedUser?.email || '',
+          'x-figdex-user-id': parsedUser?.id || '',
+        }
       });
       const accountJson = await accountRes.json();
       if (accountJson.success) {

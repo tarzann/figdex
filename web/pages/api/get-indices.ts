@@ -96,8 +96,9 @@ export default async function handler(
     const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
     const svc = serviceUrl && serviceKey ? createClient(serviceUrl, serviceKey) : supabase;
-    const { userEmail, anonId: queryAnonId } = req.query;
+    const { userEmail, userId: queryUserId, anonId: queryAnonId } = req.query;
     const anonId = typeof queryAnonId === 'string' ? queryAnonId.trim().slice(0, 200) : '';
+    const directUserId = typeof queryUserId === 'string' ? queryUserId.trim() : '';
 
     // Guest path: fetch by owner_anon_id (user_id IS NULL)
     if (anonId) {
@@ -188,17 +189,30 @@ export default async function handler(
     }
 
     const userEmailStr = typeof userEmail === 'string' ? userEmail : '';
-    if (!userEmailStr) {
-      return res.status(400).json({ success: false, error: 'userEmail or anonId is required' });
+    if (!userEmailStr && !directUserId) {
+      return res.status(400).json({ success: false, error: 'userEmail, userId, or anonId is required' });
     }
 
-    // Find user by email first
-    console.log(`🔍 Looking for user with email: ${userEmailStr}`);
-    const { data: user, error: userError } = await svc
-      .from('users')
-      .select('id, email, full_name, api_key')
-      .eq('email', userEmailStr)
-      .single();
+    const userLookupResult = directUserId
+      ? await withTimeout(
+          svc
+            .from('users')
+            .select('id, email, full_name, api_key')
+            .eq('id', directUserId)
+            .maybeSingle(),
+          { data: { id: directUserId, email: userEmailStr || null, full_name: null, api_key: null }, error: null } as any
+        )
+      : await withTimeout(
+          svc
+            .from('users')
+            .select('id, email, full_name, api_key')
+            .eq('email', userEmailStr)
+            .maybeSingle(),
+          { data: null, error: { message: 'User lookup timed out' } } as any
+        );
+
+    const user = userLookupResult?.data || null;
+    const userError = userLookupResult?.error;
 
     if (userError) {
       console.error('❌ Error finding user:', {
@@ -207,20 +221,12 @@ export default async function handler(
         details: userError.details,
         hint: userError.hint
       });
-      if (userError.code !== 'PGRST116') {
+      if (userError.code !== 'PGRST116' && !directUserId) {
         return res.status(500).json({ success: false, error: 'Error finding user', details: userError.message });
       }
-      // User not found
-      console.log('⚠️ User not found in database');
-      return res.status(200).json({
-        success: true,
-        data: [],
-        user: null,
-        warning: 'User not found in database'
-      });
     }
 
-    if (!user) {
+    if (!user?.id) {
       console.log('⚠️ User query returned null');
       return res.status(200).json({
         success: true,
@@ -230,7 +236,46 @@ export default async function handler(
       });
     }
 
-    console.log(`✅ User found: ${user.email} (id: ${user.id}, type: ${typeof user.id})`);
+    console.log(`✅ User found: ${user.email || userEmailStr || 'unknown'} (id: ${user.id}, type: ${typeof user.id})`);
+
+    if (directUserId) {
+      const legacyFastResult = await withTimeout(
+        svc
+          .from('index_files')
+          .select('id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count')
+          .eq('user_id', user.id)
+          .order('uploaded_at', { ascending: false })
+          .limit(500),
+        { data: [], error: { message: 'Fast legacy index query timed out' } } as any
+      );
+
+      const legacyFastRows = Array.isArray(legacyFastResult?.data) ? legacyFastResult.data : [];
+      const legacyFastList = legacyFastRows.map((idx: any) => ({
+        id: idx.id,
+        user_id: idx.user_id,
+        project_id: idx.project_id,
+        figma_file_key: idx.figma_file_key,
+        file_name: idx.file_name,
+        uploaded_at: idx.uploaded_at,
+        file_size: typeof idx.file_size === 'number' ? idx.file_size : 0,
+        frame_count: typeof idx.frame_count === 'number' ? idx.frame_count : null,
+        source: 'Plugin',
+        file_thumbnail_url: null,
+        legacy_index_id: idx.id,
+      }));
+
+      return res.status(200).json({
+        success: true,
+        data: legacyFastList,
+        user: {
+          id: user.id,
+          email: user.email || userEmailStr || null,
+          full_name: user.full_name || null,
+          api_key: user.api_key || null,
+        },
+        warning: legacyFastResult?.error ? String(legacyFastResult.error.message || legacyFastResult.error) : undefined,
+      });
+    }
 
     const normalizedResult = await withTimeout(
       svc

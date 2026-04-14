@@ -2,6 +2,17 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentFileCount, getCurrentFrameCount, getUserEffectiveLimits } from '../../../lib/subscription-helpers';
 
+const withTimeout = async <T,>(promise: PromiseLike<T>, fallback: T): Promise<T> => {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), 2500)),
+    ]);
+  } catch {
+    return fallback;
+  }
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,6 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const supabaseAdmin = createClient(serviceUrl, serviceKey);
     const authHeader = req.headers.authorization;
     const fallbackEmail = String(req.headers['x-figdex-email'] || '').trim().toLowerCase();
+    const fallbackUserId = String(req.headers['x-figdex-user-id'] || '').trim();
     let apiKey: string | null = null;
     let user: any = null;
     let shouldReturnApiKey = false; // Flag to return full API key if we created/updated it
@@ -27,12 +39,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (authHeader?.startsWith('Bearer ')) {
       apiKey = authHeader.replace('Bearer ', '');
       // Try lookup by api_key regardless of prefix/length
-    const { data: u } = await supabaseAdmin
-      .from('users')
-      .select('id, email, full_name, plan, is_admin, api_key, created_at')
-      .eq('api_key', apiKey)
-      .maybeSingle();
+    const apiKeyLookup = await withTimeout(
+      supabaseAdmin
+        .from('users')
+        .select('id, email, full_name, plan, is_admin, api_key, created_at')
+        .eq('api_key', apiKey)
+        .maybeSingle(),
+      { data: null, error: { message: 'API key lookup timed out' } } as any
+    );
+    const u = apiKeyLookup?.data;
       user = u || null;
+    }
+
+    if (!user && fallbackUserId) {
+      const idLookup = await withTimeout(
+        supabaseAdmin
+          .from('users')
+          .select('id, email, full_name, plan, is_admin, api_key, created_at')
+          .eq('id', fallbackUserId)
+          .maybeSingle(),
+        { data: { id: fallbackUserId, email: fallbackEmail || null, full_name: null, plan: 'free', is_admin: false, api_key: null, created_at: null }, error: null } as any
+      );
+      user = idLookup?.data || null;
+      apiKey = user?.api_key || apiKey;
+      if (user?.id) {
+        shouldReturnApiKey = Boolean(user?.api_key);
+      }
     }
     
     // Fallback: email header to self-heal existing users without keys OR create new user
@@ -173,25 +205,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const effectivePlan = user.is_admin ? 'unlimited' : (user.plan || 'free');
 
     const [totalFiles, totalFrames, limits] = await Promise.all([
-      getCurrentFileCount(supabaseAdmin, user.id),
-      getCurrentFrameCount(supabaseAdmin, user.id),
-      getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin),
+      withTimeout(getCurrentFileCount(supabaseAdmin, user.id), 0),
+      withTimeout(getCurrentFrameCount(supabaseAdmin, user.id), 0),
+      withTimeout(getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin), {
+        maxFiles: 0,
+        maxFrames: 0,
+        maxIndexesPerDay: null,
+      }),
     ]);
 
-    let filesQuery: any = await supabaseAdmin
-      .from('indexed_files')
-      .select('updated_at')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false })
-      .limit(1);
+    let filesQuery: any = await withTimeout(
+      supabaseAdmin
+        .from('indexed_files')
+        .select('updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+      { data: null, error: { message: 'indexed_files latest query timed out' } } as any
+    );
 
     if (filesQuery.error) {
-      filesQuery = await supabaseAdmin
-        .from('index_files')
-        .select('uploaded_at')
-        .eq('user_id', user.id)
-        .order('uploaded_at', { ascending: false })
-        .limit(1);
+      filesQuery = await withTimeout(
+        supabaseAdmin
+          .from('index_files')
+          .select('uploaded_at')
+          .eq('user_id', user.id)
+          .order('uploaded_at', { ascending: false })
+          .limit(1),
+        { data: null, error: { message: 'index_files latest query timed out' } } as any
+      );
     }
 
     const latestRow = Array.isArray(filesQuery.data) && filesQuery.data[0] ? filesQuery.data[0] : null;
@@ -230,4 +272,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-

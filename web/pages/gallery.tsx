@@ -744,7 +744,8 @@ export default function Home() {
           return;
         }
         setCurrentIndexFile(user.email);
-        const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}`);
+        const userIdParam = user?.id ? `&userId=${encodeURIComponent(user.id)}` : '';
+        const response = await fetch(`/api/get-indices?userEmail=${encodeURIComponent(user.email)}${userIdParam}`);
         const data = await parseJsonResponse(response, 'Failed to load gallery indices');
         galleryDebug('Get indices response:', data);
         
