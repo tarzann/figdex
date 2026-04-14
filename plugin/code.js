@@ -1546,37 +1546,16 @@ figma.ui.onmessage = async (msg) => {
         var dirtyFrameIds = frameIdsByPageId[dirtyPageIds[dfi]];
         if (Array.isArray(dirtyFrameIds)) dirtyFrameCount += dirtyFrameIds.length;
       }
-
-      var useLargeFileBatchMode = dirtyPageIds.length >= LARGE_FILE_TRIGGER_PAGES || dirtyFrameCount >= LARGE_FILE_TRIGGER_FRAMES;
-      var remainingDirtyPageIds = [];
-      if (useLargeFileBatchMode && dirtyPageIds.length > 0) {
-        var limitedDirtyPageIds = [];
-        var limitedFrameCount = 0;
-        for (var ldi = 0; ldi < dirtyPageIds.length; ldi++) {
-          var candidatePageId = dirtyPageIds[ldi];
-          var candidateFrameCount = Array.isArray(frameIdsByPageId[candidatePageId]) ? frameIdsByPageId[candidatePageId].length : 0;
-          var wouldExceedPageLimit = limitedDirtyPageIds.length >= LARGE_FILE_BATCH_MAX_PAGES;
-          var wouldExceedFrameLimit = limitedDirtyPageIds.length > 0 && (limitedFrameCount + candidateFrameCount > LARGE_FILE_BATCH_MAX_FRAMES);
-          if (wouldExceedPageLimit || wouldExceedFrameLimit) break;
-          limitedDirtyPageIds.push(candidatePageId);
-          limitedFrameCount += candidateFrameCount;
-        }
-        if (limitedDirtyPageIds.length === 0) {
-          limitedDirtyPageIds.push(dirtyPageIds[0]);
-          limitedFrameCount = Array.isArray(frameIdsByPageId[dirtyPageIds[0]]) ? frameIdsByPageId[dirtyPageIds[0]].length : 0;
-        }
-        remainingDirtyPageIds = dirtyPageIds.slice(limitedDirtyPageIds.length);
-        dirtyPageIds = limitedDirtyPageIds;
-        dirtyFrameCount = limitedFrameCount;
-        pluginTrace('Large file batch mode enabled', {
+      var pageBatches = dirtyPageIds.map(function (pageId) { return [pageId]; });
+      if (pageBatches.length > 1) {
+        pluginTrace('Page-by-page indexing mode enabled', {
           runId: activeIndexRunId,
           selectedPagesCount: selectedIds.length,
           dirtyPageCount: dirtyPageIds.length,
-          remainingDirtyPageCount: remainingDirtyPageIds.length,
           dirtyFrameCount: dirtyFrameCount
         });
         await postIndexProgress(
-          'Large file mode: indexing ' + dirtyPageIds.length + ' page(s) now, ' + remainingDirtyPageIds.length + ' remaining',
+          'Indexing pages one by one (' + dirtyPageIds.length + ' pages to update)',
           {
             selectedPagesCount: selectedIds.length,
             pageCount: dirtyPageIds.length,
@@ -1678,119 +1657,6 @@ figma.ui.onmessage = async (msg) => {
         pageCount: dirtyPageIds.length,
         framesDone: 0,
       });
-      await postIndexProgress('Exporting ' + dirtyPageIds.length + ' page(s)...', {
-        selectedPagesCount: selectedIds.length,
-        pageCount: dirtyPageIds.length,
-        framesDone: 0,
-      });
-
-      // Per dirty page: collect top-level frames (export). Unchanged pages are not re-indexed.
-      const FRAMES_PER_CHUNK = 6;
-      const FRAME_EXPORT_CONCURRENCY = 2;
-      var allPageFrames = [];
-      var newSignaturesByPage = {};
-      try {
-        for (var pi = 0; pi < dirtyPageIds.length; pi++) {
-          var page = dirtyPageNodesById[dirtyPageIds[pi]] || await figma.getNodeByIdAsync(dirtyPageIds[pi]);
-          if (!page || page.type !== 'PAGE') continue;
-          await postIndexProgress('Exporting page ' + (pi + 1) + '/' + dirtyPageIds.length + ': ' + (page.name || 'Untitled'), {
-            selectedPagesCount: selectedIds.length,
-            pageCount: dirtyPageIds.length,
-            framesDone: allPageFrames.length,
-          });
-          var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
-          if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
-          for (var fi = 0; fi < frameIds.length; fi += FRAME_EXPORT_CONCURRENCY) {
-            var frameBatch = frameIds.slice(fi, fi + FRAME_EXPORT_CONCURRENCY);
-            var batchResults = await Promise.all(frameBatch.map(async function (frameId, batchIndex) {
-              try {
-                var frame = await figma.getNodeByIdAsync(frameId);
-                if (!frame || frame.type !== 'FRAME') return null;
-                if (typeof frame.loadAsync === 'function') await frame.loadAsync();
-                var w = Math.round(frame.width);
-                var h = Math.round(frame.height);
-                var sizeTag = w + 'x' + h;
-                var visibleTexts = collectVisibleTextsFromFrame(frame);
-                var ancestorNames = collectAncestorNames(frame);
-                var allTexts = [frame.name || ''].concat(ancestorNames, visibleTexts);
-                var textContent = allTexts.join(' ');
-                var searchTokens = buildSearchTokens(allTexts);
-                var sectionName = getSectionNameForFrame(frame);
-                var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
-                var exportResult = await exportFrameImageData(frame, w, h);
-                var bytes = exportResult.bytes;
-                var b64 = figma.base64Encode(bytes);
-                var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
-                return {
-                  localIndex: fi + batchIndex,
-                  signature: { id: frame.id, name: (frame.name || '').trim(), width: w, height: h },
-                  frameItem: {
-                    id: frame.id,
-                    name: displayName,
-                    x: Math.round(frame.x),
-                    y: Math.round(frame.y),
-                    width: w,
-                    height: h,
-                    tags: [sizeTag],
-                    url: frameUrl,
-                    textContent: textContent,
-                    searchTokens: searchTokens,
-                    image: 'data:image/jpeg;base64,' + b64,
-                    thumb_url: null
-                  }
-                };
-              } catch (err) {
-                return null;
-              }
-            }));
-
-            batchResults
-              .filter(function (entry) { return !!entry; })
-              .sort(function (a, b) { return a.localIndex - b.localIndex; })
-              .forEach(function (entry) {
-                newSignaturesByPage[page.id].push(entry.signature);
-                entry.frameItem.index = allPageFrames.length;
-                allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: entry.frameItem });
-              });
-
-            figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + allPageFrames.length + ' frame(s)...', framesDone: allPageFrames.length });
-            await new Promise(function (r) { setTimeout(r, 0); });
-          }
-        }
-        if (allPageFrames.length === 0) {
-          if (dirtyPageIds.length === 0) {
-            figma.notify('No changes — nothing to re-index');
-            figma.ui.postMessage({ type: 'pages-indexed', pageIds: selectedIds });
-            await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
-            figma.ui.postMessage({ type: 'done' });
-            return;
-          }
-          figma.notify('No top-level frames (direct Page frames or direct Section frames)', { error: true });
-          figma.ui.postMessage({ type: 'error', message: 'No top-level frames found' });
-          return;
-        }
-      } catch (payloadErr) {
-        console.warn('[code.js] indexPayload collect error:', payloadErr);
-        await sendPluginTelemetryEvent('index_run_failed', {
-          runId: activeIndexRunId,
-          stage: 'exporting',
-          reason: 'collect_frames_failed',
-          message: payloadErr && payloadErr.message ? String(payloadErr.message) : 'Failed to collect frames',
-          selectedPagesCount: selectedIds.length,
-          pageCount: dirtyPageIds.length,
-        });
-        figma.ui.postMessage({ type: 'error', message: 'Failed to collect frames' });
-        return;
-      }
-
-      var mergePages = dirtyPageIds.length < selectedIds.length;
-      pluginTrace('Prepared index payload', {
-        runId: activeIndexRunId,
-        selectedPagesCount: selectedIds.length,
-        dirtyPageCount: dirtyPageIds.length,
-        frameCount: allPageFrames.length,
-        mergePages: mergePages
-      });
 
       // Same cover as plugin UI (only for first chunk). Fallback to first frame only if no explicit cover can be exported.
       var coverImageDataUrl = null;
@@ -1799,44 +1665,124 @@ figma.ui.onmessage = async (msg) => {
       } catch (e) {
         console.warn('[code.js] cover image error:', e);
       }
-      if (!coverImageDataUrl && allPageFrames.length > 0 && allPageFrames[0].frameItem && allPageFrames[0].frameItem.image) {
-        coverImageDataUrl = allPageFrames[0].frameItem.image;
-      }
       if (coverImageDataUrl && coverImageDataUrl.length > 4 * 1024 * 1024) {
         console.warn('[code.js] cover image too large, omitting cover upload for this run');
         coverImageDataUrl = null;
       }
-
+      const FRAMES_PER_CHUNK = 6;
+      const FRAME_EXPORT_CONCURRENCY = 2;
       var baseFileName = (fileName || '').trim() || 'Untitled';
-      // When merging by page, chunk by full pages so server can replace whole pages
-      var chunkSpecs = [];
-      if (mergePages) {
-        var pageToFrames = {};
-        for (var ci = 0; ci < allPageFrames.length; ci++) {
-          var pf = allPageFrames[ci];
-          if (!pageToFrames[pf.pageId]) pageToFrames[pf.pageId] = { pageId: pf.pageId, pageName: pf.pageName, items: [] };
-          pageToFrames[pf.pageId].items.push(pf.frameItem);
-        }
-        var acc = [];
-        var accFrames = 0;
-        for (var dpi = 0; dpi < dirtyPageIds.length; dpi++) {
-          var pid = dirtyPageIds[dpi];
-          var info = pageToFrames[pid];
-          if (!info || info.items.length === 0) continue;
-          var items = info.items;
-          for (var fi = 0; fi < items.length; fi += FRAMES_PER_CHUNK) {
-            var slice = items.slice(fi, fi + FRAMES_PER_CHUNK);
-            if (accFrames + slice.length > FRAMES_PER_CHUNK && acc.length > 0) {
-              chunkSpecs.push(acc.slice());
-              acc = [];
-              accFrames = 0;
-            }
-            acc.push({ id: pid, name: info.pageName, frames: slice });
-            accFrames += slice.length;
+      var totalUploaded = 0;
+      var completedPageIds = [];
+      var completedFrameCount = 0;
+      var lastViewToken = null;
+
+      function buildLastChunkIndexByPageId(specs) {
+        var indexByPageId = {};
+        for (var specIndex = 0; specIndex < specs.length; specIndex++) {
+          var specPages = specs[specIndex];
+          for (var specPageIndex = 0; specPageIndex < specPages.length; specPageIndex++) {
+            var specPage = specPages[specPageIndex];
+            var specPageId = specPage.pageId || specPage.id;
+            if (specPageId) indexByPageId[specPageId] = specIndex;
           }
         }
-        if (acc.length > 0) chunkSpecs.push(acc);
-      } else {
+        return indexByPageId;
+      }
+
+      for (var batchCursor = 0; batchCursor < pageBatches.length; batchCursor++) {
+        var currentPageIds = pageBatches[batchCursor];
+        var allPageFrames = [];
+        var newSignaturesByPage = {};
+        try {
+          for (var pi = 0; pi < currentPageIds.length; pi++) {
+            var currentPageId = currentPageIds[pi];
+            var page = dirtyPageNodesById[currentPageId] || await figma.getNodeByIdAsync(currentPageId);
+            if (!page || page.type !== 'PAGE') continue;
+            await postIndexProgress('Exporting page ' + (batchCursor + 1) + '/' + pageBatches.length + ': ' + (page.name || 'Untitled'), {
+              selectedPagesCount: selectedIds.length,
+              pageCount: dirtyPageIds.length,
+              framesDone: totalUploaded,
+            });
+            var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
+            if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
+            for (var fi = 0; fi < frameIds.length; fi += FRAME_EXPORT_CONCURRENCY) {
+              var frameBatch = frameIds.slice(fi, fi + FRAME_EXPORT_CONCURRENCY);
+              var batchResults = await Promise.all(frameBatch.map(async function (frameId, batchIndex) {
+                try {
+                  var frame = await figma.getNodeByIdAsync(frameId);
+                  if (!frame || frame.type !== 'FRAME') return null;
+                  if (typeof frame.loadAsync === 'function') await frame.loadAsync();
+                  var w = Math.round(frame.width);
+                  var h = Math.round(frame.height);
+                  var sizeTag = w + 'x' + h;
+                  var visibleTexts = collectVisibleTextsFromFrame(frame);
+                  var ancestorNames = collectAncestorNames(frame);
+                  var allTexts = [frame.name || ''].concat(ancestorNames, visibleTexts);
+                  var textContent = allTexts.join(' ');
+                  var searchTokens = buildSearchTokens(allTexts);
+                  var sectionName = getSectionNameForFrame(frame);
+                  var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
+                  var exportResult = await exportFrameImageData(frame, w, h);
+                  var bytes = exportResult.bytes;
+                  var b64 = figma.base64Encode(bytes);
+                  var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
+                  return {
+                    localIndex: fi + batchIndex,
+                    signature: { id: frame.id, name: (frame.name || '').trim(), width: w, height: h },
+                    frameItem: {
+                      id: frame.id,
+                      name: displayName,
+                      x: Math.round(frame.x),
+                      y: Math.round(frame.y),
+                      width: w,
+                      height: h,
+                      tags: [sizeTag],
+                      url: frameUrl,
+                      textContent: textContent,
+                      searchTokens: searchTokens,
+                      image: 'data:image/jpeg;base64,' + b64,
+                      thumb_url: null
+                    }
+                  };
+                } catch (err) {
+                  return null;
+                }
+              }));
+
+              batchResults
+                .filter(function (entry) { return !!entry; })
+                .sort(function (a, b) { return a.localIndex - b.localIndex; })
+                .forEach(function (entry) {
+                  newSignaturesByPage[page.id].push(entry.signature);
+                  entry.frameItem.index = allPageFrames.length;
+                  allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: entry.frameItem });
+                });
+
+              figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + (totalUploaded + allPageFrames.length) + ' frame(s)...', framesDone: totalUploaded + allPageFrames.length });
+              await new Promise(function (r) { setTimeout(r, 0); });
+            }
+          }
+          if (allPageFrames.length === 0) {
+            figma.notify('No top-level frames (direct Page frames or direct Section frames)', { error: true });
+            figma.ui.postMessage({ type: 'error', message: 'No top-level frames found' });
+            return;
+          }
+        } catch (payloadErr) {
+          console.warn('[code.js] indexPayload collect error:', payloadErr);
+          await sendPluginTelemetryEvent('index_run_failed', {
+            runId: activeIndexRunId,
+            stage: 'exporting',
+            reason: 'collect_frames_failed',
+            message: payloadErr && payloadErr.message ? String(payloadErr.message) : 'Failed to collect frames',
+            selectedPagesCount: selectedIds.length,
+            pageCount: currentPageIds.length,
+          });
+          figma.ui.postMessage({ type: 'error', message: 'Failed to collect frames' });
+          return;
+        }
+
+        var chunkSpecs = [];
         var start = 0;
         while (start < allPageFrames.length) {
           var end = Math.min(start + FRAMES_PER_CHUNK, allPageFrames.length);
@@ -1852,241 +1798,153 @@ figma.ui.onmessage = async (msg) => {
           chunkSpecs.push(chunkPagesList);
           start = end;
         }
-      }
 
-      chunkSpecs = normalizeChunkSpecsForRequestSize(chunkSpecs, {
-        fileKey: fileKey,
-        docId: docId,
-        fileName: baseFileName,
-        selectedPages: selectedPages,
-        version: PLUGIN_VERSION,
-        coverImageDataUrl: coverImageDataUrl,
-        includeCover: !!coverImageDataUrl,
-        includeSelectionMetadata: true,
-        mergePages: mergePages,
-        replacePageIds: dirtyPageIds,
-        anonId: isGuestMode && guestAnonId ? guestAnonId : null,
-        maxBytes: Math.floor(1.5 * 1024 * 1024)
-      });
-
-      function buildLastChunkIndexByPageId(specs) {
-        var indexByPageId = {};
-        for (var specIndex = 0; specIndex < specs.length; specIndex++) {
-          var specPages = specs[specIndex];
-          for (var specPageIndex = 0; specPageIndex < specPages.length; specPageIndex++) {
-            var specPage = specPages[specPageIndex];
-            var specPageId = specPage.pageId || specPage.id;
-            if (specPageId) indexByPageId[specPageId] = specIndex;
-          }
-        }
-        return indexByPageId;
-      }
-
-      var totalChunks = chunkSpecs.length;
-      var uploadSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-      var totalUploaded = 0;
-      var lastViewToken = null;
-      var res = null;
-      var finalChunkError = null;
-      await postIndexProgress('Uploading to FigDex...', {
-        selectedPagesCount: selectedIds.length,
-        pageCount: dirtyPageIds.length,
-        frameCount: allPageFrames.length,
-        framesDone: totalUploaded,
-      });
-      for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        totalChunks = chunkSpecs.length;
-        var lastChunkIndexByPageId = buildLastChunkIndexByPageId(chunkSpecs);
-        var chunkPages = mergePages ? chunkSpecs[chunkIndex] : chunkSpecs[chunkIndex];
-        var chunkPayload = { pages: chunkPages };
-        var replacePageIds = mergePages ? chunkPages.map(function (p) { return p.pageId || p.id; }) : undefined;
-        var finalizePageIds = [];
-        if (replacePageIds && replacePageIds.length > 0) {
-          finalizePageIds = replacePageIds.filter(function (pageId) {
-            return lastChunkIndexByPageId[pageId] === chunkIndex;
-          });
-        }
-        var chunkFileName = totalChunks > 1 ? baseFileName + ' (Part ' + (chunkIndex + 1) + '/' + totalChunks + ')' : baseFileName;
-        var body = {
+        chunkSpecs = normalizeChunkSpecsForRequestSize(chunkSpecs, {
           fileKey: fileKey,
           docId: docId,
-          fileName: chunkFileName,
-          chunkIndex: chunkIndex,
-          totalChunks: totalChunks,
-          selectedPages: chunkIndex === 0 ? selectedPages : undefined,
-          source: 'figma-plugin',
+          fileName: baseFileName,
+          selectedPages: selectedPages,
           version: PLUGIN_VERSION,
-          syncId: uploadSessionId,
-          galleryOnly: true,
-          imageQuality: 0.75,
-          indexPayload: chunkPayload,
-          coverImageDataUrl: chunkIndex === 0 ? coverImageDataUrl || undefined : undefined,
-          finalizePageIds: finalizePageIds
-        };
-        if (mergePages && replacePageIds && replacePageIds.length > 0) {
-          body.mergePages = true;
-          body.replacePageIds = replacePageIds;
-        }
-        if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
-        var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
-        pluginTrace('Uploading chunk', {
-          runId: activeIndexRunId,
-          chunkNumber: chunkIndex + 1,
-          totalChunks: totalChunks,
-          chunkFrameCount: chunkFrameCount,
-          finalizePageIds: finalizePageIds
+          coverImageDataUrl: coverImageDataUrl,
+          includeCover: !!coverImageDataUrl,
+          includeSelectionMetadata: true,
+          mergePages: true,
+          replacePageIds: currentPageIds,
+          anonId: isGuestMode && guestAnonId ? guestAnonId : null,
+          maxBytes: Math.floor(1.5 * 1024 * 1024)
         });
-        figma.notify(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks + '...' : 'Uploading to FigDex...');
-        figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', framesDone: totalUploaded });
-        await logIndexStage(totalChunks > 1 ? 'Uploading part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploading to FigDex...', {
-          selectedPagesCount: selectedIds.length,
-          pageCount: dirtyPageIds.length,
-          frameCount: allPageFrames.length,
-          chunkNumber: chunkIndex + 1,
-          totalChunks: totalChunks,
-        });
-        var headers = { 'Content-Type': 'application/json' };
-        if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
-        var chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(body)
-        }, {
-          chunkNumber: chunkIndex + 1,
-          totalChunks: totalChunks,
-          framesDone: totalUploaded
-        });
-        res = chunkAttempt.response || null;
-        finalChunkError = chunkAttempt.error || null;
-        if ((!chunkAttempt.ok || !res || !res.ok) && res && res.status === 413) {
-          var splitChunkSpecs = splitChunkPagesInHalf(chunkPages);
-          if (splitChunkSpecs && splitChunkSpecs.length === 2) {
-            pluginWarn('Chunk exceeded request limit, splitting and retrying', {
-              runId: activeIndexRunId,
-              chunkNumber: chunkIndex + 1,
-              totalChunks: totalChunks,
-              chunkFrameCount: chunkFrameCount,
-              status: res.status
-            });
-            chunkSpecs.splice(chunkIndex, 1, splitChunkSpecs[0], splitChunkSpecs[1]);
-            totalChunks = chunkSpecs.length;
-            figma.notify('Payload too large. Retrying with smaller chunks...', { timeout: 1600 });
-            figma.ui.postMessage({ type: 'upload-progress', step: 'Payload too large. Splitting upload...', framesDone: totalUploaded });
-            await logIndexStage('Retrying smaller upload chunks...', {
-              selectedPagesCount: selectedIds.length,
-              pageCount: dirtyPageIds.length,
-              frameCount: allPageFrames.length,
-              chunkNumber: chunkIndex + 1,
-              totalChunks: totalChunks,
-            });
-            chunkIndex -= 1;
-            continue;
-          }
-        }
-        if (!chunkAttempt.ok || !res || !res.ok) {
-          totalChunks = -1;
-          break;
-        }
-        totalUploaded += chunkFrameCount;
-        figma.ui.postMessage({ type: 'upload-progress', step: totalChunks > 1 ? 'Uploaded part ' + (chunkIndex + 1) + '/' + totalChunks : 'Uploaded to FigDex...', framesDone: totalUploaded });
-        try {
-          var data = await res.json();
-          if (data && data.viewToken) lastViewToken = data.viewToken;
-        } catch (_) {}
-        if (chunkIndex < totalChunks - 1) await sleep(250);
-      }
-      if (totalChunks <= 0 || !res || !res.ok) {
-        var errText = '';
-        try { if (res && typeof res.text === 'function') errText = await res.text(); } catch (_) {}
-        var errJson = null;
-        try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
-        var errMsg = normalizeExternalErrorMessage(res ? res.status : null, errJson, errText, 'Index failed (' + ((res && res.status) || '') + ')');
-        if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message && (!errText || errText.trim() === '')) errMsg = String(finalChunkError.message);
-        var isGuestLimit = errJson && (errJson.code === 'GUEST_FILE_LIMIT' || errJson.code === 'GUEST_FRAME_LIMIT');
-        pluginError('Index run failed', {
-          runId: activeIndexRunId,
-          status: res ? res.status : null,
-          code: errJson ? errJson.code : null,
-          message: errMsg
-        });
-        if (res && res.status === 401 && !isGuestLimit) {
-          await sendPluginTelemetryEvent('index_run_failed', {
-            runId: activeIndexRunId,
-            stage: lastLoggedIndexStage || 'uploading',
-            reason: 'auth_expired',
-            code: errJson ? errJson.code : null,
-            message: errMsg,
+
+        var totalChunks = chunkSpecs.length;
+        var uploadSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10) + '_' + batchCursor;
+        var res = null;
+        var finalChunkError = null;
+        for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          totalChunks = chunkSpecs.length;
+          var lastChunkIndexByPageId = buildLastChunkIndexByPageId(chunkSpecs);
+          var chunkPages = chunkSpecs[chunkIndex];
+          var chunkPayload = { pages: chunkPages };
+          var replacePageIds = chunkPages.map(function (p) { return p.pageId || p.id; });
+          var finalizePageIds = replacePageIds.filter(function (pageId) {
+            return lastChunkIndexByPageId[pageId] === chunkIndex;
           });
-          await setStored(STORAGE_KEYS.WEB_TOKEN, null);
-          await setStored(STORAGE_KEYS.WEB_USER, null);
-          figma.ui.postMessage({ type: 'WEB_ACCOUNT_LIMITS_LOADED', limits: null });
-          figma.notify('Session expired. Please reconnect.', { error: true });
-          figma.ui.postMessage({ type: 'AUTH_EXPIRED', selectedPages: selectedIds });
+          var chunkFileName = totalChunks > 1 ? baseFileName + ' (Page ' + (batchCursor + 1) + '/' + pageBatches.length + ' — Part ' + (chunkIndex + 1) + '/' + totalChunks + ')' : baseFileName;
+          var body = {
+            fileKey: fileKey,
+            docId: docId,
+            fileName: chunkFileName,
+            chunkIndex: chunkIndex,
+            totalChunks: totalChunks,
+            selectedPages: chunkIndex === 0 ? selectedPages : undefined,
+            source: 'figma-plugin',
+            version: PLUGIN_VERSION,
+            syncId: uploadSessionId,
+            galleryOnly: true,
+            imageQuality: 0.75,
+            indexPayload: chunkPayload,
+            coverImageDataUrl: chunkIndex === 0 ? coverImageDataUrl || undefined : undefined,
+            finalizePageIds: finalizePageIds,
+            mergePages: true,
+            replacePageIds: replacePageIds
+          };
+          if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
+          var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
+          figma.ui.postMessage({
+            type: 'upload-progress',
+            step: 'Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length + (totalChunks > 1 ? ' — part ' + (chunkIndex + 1) + '/' + totalChunks : ''),
+            framesDone: totalUploaded
+          });
+          await logIndexStage('Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length, {
+            selectedPagesCount: selectedIds.length,
+            pageCount: currentPageIds.length,
+            frameCount: allPageFrames.length,
+            chunkNumber: chunkIndex + 1,
+            totalChunks: totalChunks,
+          });
+          var headers = { 'Content-Type': 'application/json' };
+          if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
+          var chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body)
+          }, {
+            chunkNumber: chunkIndex + 1,
+            totalChunks: totalChunks,
+            framesDone: totalUploaded
+          });
+          res = chunkAttempt.response || null;
+          finalChunkError = chunkAttempt.error || null;
+          if ((!chunkAttempt.ok || !res || !res.ok) && res && res.status === 413) {
+            var splitChunkSpecs = splitChunkPagesInHalf(chunkPages);
+            if (splitChunkSpecs && splitChunkSpecs.length === 2) {
+              chunkSpecs.splice(chunkIndex, 1, splitChunkSpecs[0], splitChunkSpecs[1]);
+              totalChunks = chunkSpecs.length;
+              chunkIndex -= 1;
+              continue;
+            }
+          }
+          if (!chunkAttempt.ok || !res || !res.ok) {
+            break;
+          }
+          totalUploaded += chunkFrameCount;
+          try {
+            var data = await res.json();
+            if (data && data.viewToken) lastViewToken = data.viewToken;
+          } catch (_) {}
+          if (chunkIndex < totalChunks - 1) await sleep(250);
+        }
+        if (totalChunks <= 0 || !res || !res.ok) {
+          var errText = '';
+          try { if (res && typeof res.text === 'function') errText = await res.text(); } catch (_) {}
+          var errJson = null;
+          try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+          var errMsg = normalizeExternalErrorMessage(res ? res.status : null, errJson, errText, 'Index failed (' + ((res && res.status) || '') + ')');
+          if ((!errJson || !errJson.error) && finalChunkError && finalChunkError.message && (!errText || errText.trim() === '')) errMsg = String(finalChunkError.message);
+          figma.notify('Stopped after ' + completedPageIds.length + ' completed page(s). ' + errMsg, { error: true });
+          figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
           return;
         }
-        await sendPluginTelemetryEvent('index_run_failed', {
-          runId: activeIndexRunId,
-          stage: lastLoggedIndexStage || 'uploading',
-          reason: 'upload_failed',
-          code: errJson ? errJson.code : null,
-          message: errMsg,
-          selectedPagesCount: selectedIds.length,
-          pageCount: dirtyPageIds.length,
-          frameCount: allPageFrames.length,
-        });
-        figma.notify(errMsg, { error: true });
-        figma.ui.postMessage({ type: 'error', message: errMsg, code: errJson ? errJson.code : null, upgradeUrl: errJson ? errJson.upgradeUrl : null });
-        return;
-      }
-      // Persist metadata: keep skipped pages, update dirty pages with new frameSignatures (full sigs with contentHint, textHint)
-      try {
-        var nextMeta = indexedMeta.filter(function (m) {
-          return m.pageId && dirtyPageIds.indexOf(m.pageId) < 0;
-        });
-        for (var ni = 0; ni < dirtyPageIds.length; ni++) {
-          var dpid = dirtyPageIds[ni];
-          var pageNodeForMeta = dirtyPageNodesById[dpid] || await figma.getNodeByIdAsync(dpid);
-          var sigsToStore = Array.isArray(pageSignaturesById[dpid])
-            ? pageSignaturesById[dpid]
-            : ((pageNodeForMeta && pageNodeForMeta.type === 'PAGE') ? await getFrameSignaturesForPage(pageNodeForMeta) : (newSignaturesByPage[dpid] || []));
-          nextMeta.push({
-            pageId: dpid,
-            pageName: idToName[dpid] || 'Page',
-            lastIndexedAt: Date.now(),
-            frameSignatures: sigsToStore
+
+        try {
+          indexedMeta = indexedMeta.filter(function (m) {
+            return m.pageId && currentPageIds.indexOf(m.pageId) < 0;
           });
-        }
-        await setStored(STORAGE_KEYS.INDEXED_PAGES, nextMeta);
-      } catch (e) { /* non-fatal */ }
-      // Also notify UI so icons can update immediately without manual refresh
-      try {
-        figma.ui.postMessage({ type: 'pages-indexed', pageIds: dirtyPageIds });
-      } catch (e) {}
+          for (var ni = 0; ni < currentPageIds.length; ni++) {
+            var dpid = currentPageIds[ni];
+            indexedMeta.push({
+              pageId: dpid,
+              pageName: idToName[dpid] || 'Page',
+              lastIndexedAt: Date.now(),
+              frameSignatures: Array.isArray(pageSignaturesById[dpid]) ? pageSignaturesById[dpid] : (newSignaturesByPage[dpid] || [])
+            });
+          }
+          await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta);
+        } catch (e) {}
+
+        completedPageIds = completedPageIds.concat(currentPageIds);
+        completedFrameCount += allPageFrames.length;
+        try {
+          figma.ui.postMessage({ type: 'pages-indexed', pageIds: currentPageIds });
+        } catch (e) {}
+      }
 
       var resultUrl = 'https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(fileKey) + '&_t=' + Date.now();
       if (lastViewToken) resultUrl += '&viewToken=' + encodeURIComponent(lastViewToken);
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
       else if (!isGuestMode && token) resultUrl += '&apiKey=' + encodeURIComponent(token);
-      var hasRemainingDirtyPages = Array.isArray(remainingDirtyPageIds) && remainingDirtyPageIds.length > 0;
-      if (hasRemainingDirtyPages) {
-        figma.notify('Indexed ' + dirtyPageIds.length + ' page(s). ' + remainingDirtyPageIds.length + ' more need another run.', { timeout: 3500 });
-      } else {
-        figma.notify(totalUploaded > 0 ? 'Uploaded — ' + totalUploaded + ' frames to FigDex' : 'Index saved — ' + selectedPages.length + ' pages');
-      }
+      figma.notify(completedFrameCount > 0 ? 'Uploaded — ' + completedFrameCount + ' frames across ' + completedPageIds.length + ' page(s)' : 'Index saved');
       pluginTrace('Index run completed', {
         runId: activeIndexRunId,
-        pageCount: dirtyPageIds.length,
-        frameCount: allPageFrames.length,
-        totalChunks: totalChunks,
-        remainingDirtyPageCount: hasRemainingDirtyPages ? remainingDirtyPageIds.length : 0,
+        pageCount: completedPageIds.length,
+        frameCount: completedFrameCount,
+        totalChunks: completedPageIds.length,
         resultUrl: resultUrl
       });
       await sendPluginTelemetryEvent('index_run_completed', {
         runId: activeIndexRunId,
         selectedPagesCount: selectedIds.length,
-        pageCount: dirtyPageIds.length,
-        frameCount: allPageFrames.length,
-        totalChunks: totalChunks,
+        pageCount: completedPageIds.length,
+        frameCount: completedFrameCount,
+        totalChunks: completedPageIds.length,
       });
       await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
       if (!isGuestMode && token) {
@@ -2095,13 +1953,6 @@ figma.ui.onmessage = async (msg) => {
         setTimeout(function () { loadUserLimitsToUI(token); }, 4000);
       }
       figma.ui.postMessage({ type: 'WEB_INDEX_CREATED', resultUrl });
-      if (hasRemainingDirtyPages) {
-        figma.ui.postMessage({
-          type: 'upload-progress',
-          step: 'Indexed ' + dirtyPageIds.length + ' page(s). Run again to continue with ' + remainingDirtyPageIds.length + ' remaining.',
-          framesDone: totalUploaded
-        });
-      }
     } catch (e) {
       console.error('[code.js] start-advanced error:', e);
       pluginError('Unexpected indexing exception', {
