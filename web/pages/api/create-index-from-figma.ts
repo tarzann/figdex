@@ -829,6 +829,8 @@ export default async function handler(
       finalizePageIds: finalizePageIdsBody,
       chunkIndex: chunkIndexBody,
       totalChunks: totalChunksBody,
+      pageBatchIndex: pageBatchIndexBody,
+      pageBatchCount: pageBatchCountBody,
     } = req.body;
     activityFileKey = typeof fileKeyInput === 'string' ? fileKeyInput : activityFileKey;
     const syncId = typeof syncIdBody === 'string' ? syncIdBody.trim().slice(0, 120) : '';
@@ -836,6 +838,13 @@ export default async function handler(
     const totalChunks = typeof totalChunksBody === 'number' ? totalChunksBody : Number(totalChunksBody || 1);
     const isChunkedUpload = Number.isFinite(totalChunks) && totalChunks > 1;
     const isFirstUploadChunk = !isChunkedUpload || !Number.isFinite(chunkIndex) || chunkIndex <= 0;
+    const pageBatchIndex =
+      typeof pageBatchIndexBody === 'number' ? pageBatchIndexBody : Number(pageBatchIndexBody || 0);
+    const pageBatchCount =
+      typeof pageBatchCountBody === 'number' ? pageBatchCountBody : Number(pageBatchCountBody || 1);
+    const isMultiPageRun = Number.isFinite(pageBatchCount) && pageBatchCount > 1;
+    const isFirstPageBatch = !isMultiPageRun || !Number.isFinite(pageBatchIndex) || pageBatchIndex <= 0;
+    const shouldApplyIndexRunLimits = isFirstUploadChunk && isFirstPageBatch;
     const finalizePageIds = Array.isArray(finalizePageIdsBody)
       ? finalizePageIdsBody.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)
       : [];
@@ -948,7 +957,7 @@ export default async function handler(
           const hasAuthExistingForFile = normalizedExisting.hasExistingForFile || authExistingByPageId.size > 0 || authExistingRows.length > 0;
           const isNewFile = !hasAuthExistingForFile;
 
-          if (isFirstUploadChunk && !user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
+          if (shouldApplyIndexRunLimits && !user.bypass_indexing_limits && isNewFile && limits.maxFiles !== null) {
             const currentFiles = await getCurrentFileCount(supabaseAdmin, user.id);
           if (currentFiles >= limits.maxFiles) {
             await logRateLimitEvent('FILE_LIMIT_REACHED', `File limit reached (${limits.maxFiles} files). Please upgrade your plan.`, { currentFiles, maxFiles: limits.maxFiles, context: 'gallery' });
@@ -960,7 +969,7 @@ export default async function handler(
             });
           }
           }
-          if (isFirstUploadChunk && !user.bypass_indexing_limits && limits.maxFrames !== null) {
+          if (shouldApplyIndexRunLimits && !user.bypass_indexing_limits && limits.maxFrames !== null) {
             const currentTotalFrames = await getCurrentTotalFrames(supabaseAdmin, user.id);
             if (currentTotalFrames + framesInPayload > limits.maxFrames) {
               await logRateLimitEvent('FRAME_LIMIT_REACHED', `Frame limit reached (${limits.maxFrames} frames total). Please upgrade your plan.`, { currentTotalFrames, framesInPayload, maxFrames: limits.maxFrames, context: 'gallery' });
@@ -972,7 +981,7 @@ export default async function handler(
             });
           }
           }
-          if (isFirstUploadChunk) {
+          if (shouldApplyIndexRunLimits) {
             const cooldownCheck = await checkFileIndexCooldown(
               supabaseAdmin,
               user.id,

@@ -1690,6 +1690,7 @@ figma.ui.onmessage = async (msg) => {
         return indexByPageId;
       }
 
+      var pluginRunSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       for (var batchCursor = 0; batchCursor < pageBatches.length; batchCursor++) {
         var currentPageIds = pageBatches[batchCursor];
         var allPageFrames = [];
@@ -1815,7 +1816,6 @@ figma.ui.onmessage = async (msg) => {
         });
 
         var totalChunks = chunkSpecs.length;
-        var uploadSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10) + '_' + batchCursor;
         var res = null;
         var finalChunkError = null;
         for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
@@ -1834,10 +1834,12 @@ figma.ui.onmessage = async (msg) => {
             fileName: chunkFileName,
             chunkIndex: chunkIndex,
             totalChunks: totalChunks,
+            pageBatchIndex: batchCursor,
+            pageBatchCount: pageBatches.length,
             selectedPages: chunkIndex === 0 ? selectedPages : undefined,
             source: 'figma-plugin',
             version: PLUGIN_VERSION,
-            syncId: uploadSessionId,
+            syncId: pluginRunSessionId,
             galleryOnly: true,
             imageQuality: 0.75,
             indexPayload: chunkPayload,
