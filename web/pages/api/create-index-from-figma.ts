@@ -67,7 +67,10 @@ function isReservedPageName(name: string): boolean {
 function normalizeLogicalFileName(name?: string): string {
   const trimmed = (name || '').trim();
   if (!trimmed) return 'Untitled';
-  return trimmed.replace(/\s+\(Part\s+\d+\/\d+\)$/i, '').trim() || 'Untitled';
+  return trimmed
+    .replace(/\s+\(Page\s+\d+\/\d+\s+[—-]\s+Part\s+\d+\/\d+\)$/i, '')
+    .replace(/\s+\(Part\s+\d+\/\d+\)$/i, '')
+    .trim() || 'Untitled';
 }
 
 function getLogicalFileId(projectId: unknown, fileKey: unknown): string {
