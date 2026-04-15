@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { logIndexActivity } from '../../lib/index-activity-log';
 
 const QUERY_TIMEOUT_MS = 3000;
+const MAX_INDEX_LIST_ROWS = 50;
 
 const withTimeout = async <T,>(promise: PromiseLike<T>, fallback: T): Promise<T> => {
   try {
@@ -109,7 +110,7 @@ export default async function handler(
           .is('user_id', null)
           .eq('owner_anon_id', anonId)
           .order('last_indexed_at', { ascending: false })
-          .limit(500),
+          .limit(MAX_INDEX_LIST_ROWS),
         { data: null, error: { message: 'Normalized guest query timed out' } } as any
       );
 
@@ -141,7 +142,7 @@ export default async function handler(
           .is('user_id', null)
           .eq('owner_anon_id', anonId)
           .order('uploaded_at', { ascending: false })
-          .limit(500);
+          .limit(MAX_INDEX_LIST_ROWS);
         let { data: guestIndices, error: guestErr }: { data: any[] | null; error: any } = await guestQuery;
         if (guestErr && /(file_size|frame_count)/i.test(guestErr.message || '')) {
           const fallbackGuest = await svc
@@ -150,7 +151,7 @@ export default async function handler(
             .is('user_id', null)
             .eq('owner_anon_id', anonId)
             .order('uploaded_at', { ascending: false })
-            .limit(500);
+            .limit(MAX_INDEX_LIST_ROWS);
           guestIndices = fallbackGuest.data;
           guestErr = fallbackGuest.error;
         }
@@ -245,7 +246,7 @@ export default async function handler(
           .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
           .eq('user_id', user.id)
           .order('last_indexed_at', { ascending: false })
-          .limit(500),
+          .limit(MAX_INDEX_LIST_ROWS),
         { data: [], error: { message: 'Fast normalized index query timed out' } } as any
       );
 
@@ -270,7 +271,7 @@ export default async function handler(
           .select('id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size, frame_count')
           .eq('user_id', user.id)
           .order('uploaded_at', { ascending: false })
-          .limit(500),
+          .limit(MAX_INDEX_LIST_ROWS),
         { data: [], error: { message: 'Fast legacy index query timed out' } } as any
       );
 
@@ -314,7 +315,7 @@ export default async function handler(
         .select('id, user_id, project_id, figma_file_key, file_name, last_indexed_at, total_frames, cover_image_url')
         .eq('user_id', user.id)
         .order('last_indexed_at', { ascending: false })
-        .limit(500),
+        .limit(MAX_INDEX_LIST_ROWS),
       { data: null, error: { message: 'Normalized user query timed out' } } as any
     );
 
@@ -355,7 +356,7 @@ export default async function handler(
           .select(selectWithMeta)
           .eq('user_id', user.id)
           .order('uploaded_at', { ascending: false })
-          .limit(500),
+          .limit(MAX_INDEX_LIST_ROWS),
         { data: null, error: { message: 'Legacy indices query timed out' } } as any
       );
       let indicesByUserId = legacyResult.data as any[] | null;
@@ -368,7 +369,7 @@ export default async function handler(
             .select(selectBasic)
             .eq('user_id', user.id)
             .order('uploaded_at', { ascending: false })
-            .limit(500),
+            .limit(MAX_INDEX_LIST_ROWS),
           { data: null, error: { message: 'Legacy fallback query timed out' } } as any
         );
         indicesByUserId = fallbackIndices.data;
