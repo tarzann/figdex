@@ -620,12 +620,31 @@ async function logIndexStage(step, meta) {
   }, meta || {}));
 }
 
+function buildIndexProgressStep(step, meta) {
+  var details = meta && typeof meta === 'object' ? meta : {};
+  var label = step || 'Updating index…';
+  var parts = [];
+  if (typeof details.pagesDone === 'number' && typeof details.pageCount === 'number' && details.pageCount > 0) {
+    parts.push(details.pagesDone + '/' + details.pageCount + ' pages');
+  }
+  if (typeof details.framesDone === 'number' && typeof details.totalFrames === 'number' && details.totalFrames > 0) {
+    parts.push(details.framesDone + '/' + details.totalFrames + ' frames');
+  }
+  if (!parts.length) return label;
+  return label + ' (' + parts.join(' • ') + ')';
+}
+
 async function postIndexProgress(step, meta) {
   var details = meta && typeof meta === 'object' ? meta : {};
   figma.ui.postMessage({
     type: 'upload-progress',
-    step: step || 'Updating index…',
+    step: buildIndexProgressStep(step, details),
     framesDone: typeof details.framesDone === 'number' ? details.framesDone : 0,
+    totalFrames: typeof details.totalFrames === 'number' ? details.totalFrames : null,
+    pagesDone: typeof details.pagesDone === 'number' ? details.pagesDone : null,
+    totalPages: typeof details.pageCount === 'number'
+      ? details.pageCount
+      : (typeof details.totalPages === 'number' ? details.totalPages : null),
   });
   await logIndexStage(step, details);
 }
@@ -1570,6 +1589,7 @@ figma.ui.onmessage = async (msg) => {
         selectedPagesCount: selectedIds.length,
         pageCount: selectedIds.length,
         framesDone: 0,
+        pagesDone: 0,
       });
       var dirtyPageIds = [];
       var dirtyPageNodesById = {};
@@ -1589,8 +1609,13 @@ figma.ui.onmessage = async (msg) => {
         if (di === 0 || (di + 1) % 4 === 0 || di === selectedIds.length - 1) {
           figma.ui.postMessage({
             type: 'upload-progress',
-            step: 'Scanning selected pages for changes... (' + (di + 1) + '/' + selectedIds.length + ')',
-            framesDone: 0
+            step: buildIndexProgressStep('Scanning selected pages for changes...', {
+              pagesDone: di + 1,
+              pageCount: selectedIds.length,
+            }),
+            framesDone: 0,
+            pagesDone: di + 1,
+            totalPages: selectedIds.length
           });
         }
       }
@@ -1600,6 +1625,7 @@ figma.ui.onmessage = async (msg) => {
           selectedPagesCount: selectedIds.length,
           pageCount: dirtyPageIds.length,
           framesDone: 0,
+          pagesDone: 0,
         }
       );
 
@@ -1632,6 +1658,8 @@ figma.ui.onmessage = async (msg) => {
           selectedPagesCount: selectedIds.length,
           pageCount: dirtyPageIds.length,
           framesDone: 0,
+          totalFrames: dirtyFrameCount,
+          pagesDone: 0,
         });
         var estimatedFrameCount = 0;
         for (var ei = 0; ei < dirtyPageIds.length; ei++) {
@@ -1676,6 +1704,8 @@ figma.ui.onmessage = async (msg) => {
           selectedPagesCount: selectedIds.length,
           pageCount: dirtyPageIds.length,
           framesDone: 0,
+          totalFrames: dirtyFrameCount,
+          pagesDone: 0,
         });
         var estimatedConnectedFrameCount = 0;
         for (var cei = 0; cei < dirtyPageIds.length; cei++) {
@@ -1718,6 +1748,8 @@ figma.ui.onmessage = async (msg) => {
         selectedPagesCount: selectedIds.length,
         pageCount: dirtyPageIds.length,
         framesDone: 0,
+        totalFrames: dirtyFrameCount,
+        pagesDone: 0,
       });
 
       // Same cover as plugin UI (only for first chunk). Fallback to first frame only if no explicit cover can be exported.
@@ -1766,6 +1798,8 @@ figma.ui.onmessage = async (msg) => {
               selectedPagesCount: selectedIds.length,
               pageCount: dirtyPageIds.length,
               framesDone: totalUploaded,
+              totalFrames: dirtyFrameCount,
+              pagesDone: batchCursor,
             });
             var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
             if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
@@ -1822,7 +1856,19 @@ figma.ui.onmessage = async (msg) => {
                   allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: entry.frameItem });
                 });
 
-              figma.ui.postMessage({ type: 'upload-progress', step: 'Exported ' + (totalUploaded + allPageFrames.length) + ' frame(s)...', framesDone: totalUploaded + allPageFrames.length });
+              figma.ui.postMessage({
+                type: 'upload-progress',
+                step: buildIndexProgressStep('Exporting current page...', {
+                  pagesDone: batchCursor,
+                  pageCount: pageBatches.length,
+                  framesDone: totalUploaded + allPageFrames.length,
+                  totalFrames: dirtyFrameCount,
+                }),
+                framesDone: totalUploaded + allPageFrames.length,
+                totalFrames: dirtyFrameCount,
+                pagesDone: batchCursor,
+                totalPages: pageBatches.length
+              });
               await new Promise(function (r) { setTimeout(r, 0); });
             }
           }
@@ -1915,8 +1961,19 @@ figma.ui.onmessage = async (msg) => {
           var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
           figma.ui.postMessage({
             type: 'upload-progress',
-            step: 'Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length + (totalChunks > 1 ? ' — part ' + (chunkIndex + 1) + '/' + totalChunks : ''),
-            framesDone: totalUploaded
+            step: buildIndexProgressStep(
+              'Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length + (totalChunks > 1 ? ' — part ' + (chunkIndex + 1) + '/' + totalChunks : ''),
+              {
+                pagesDone: batchCursor,
+                pageCount: pageBatches.length,
+                framesDone: totalUploaded,
+                totalFrames: dirtyFrameCount,
+              }
+            ),
+            framesDone: totalUploaded,
+            totalFrames: dirtyFrameCount,
+            pagesDone: batchCursor,
+            totalPages: pageBatches.length
           });
           await logIndexStage('Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length, {
             selectedPagesCount: selectedIds.length,
@@ -2007,6 +2064,7 @@ figma.ui.onmessage = async (msg) => {
                   pageCount: sessionPagesTotal,
                   framesDone: sessionFramesDone,
                   totalFrames: sessionFramesTotal,
+                  pagesDone: sessionPagesDone,
                 }
               );
             }
