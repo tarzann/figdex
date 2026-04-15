@@ -14,7 +14,12 @@ import {
 } from '../../lib/figma-api';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 import { logIndexActivity } from '../../lib/index-activity-log';
-import { createIndexSession } from '../../lib/index-session-store';
+import {
+  createIndexSession,
+  getIndexSessionAggregate,
+  setIndexSessionStatus,
+  updateIndexPageJob,
+} from '../../lib/index-session-store';
 
 // Increase body size limit
 export const config = {
@@ -830,6 +835,7 @@ export default async function handler(
       docId: docIdBody,
       coverImageDataUrl: coverImageDataUrlBody,
       syncId: syncIdBody,
+      sessionId: sessionIdBody,
       finalizePageIds: finalizePageIdsBody,
       chunkIndex: chunkIndexBody,
       totalChunks: totalChunksBody,
@@ -838,6 +844,7 @@ export default async function handler(
     } = req.body;
     activityFileKey = typeof fileKeyInput === 'string' ? fileKeyInput : activityFileKey;
     const syncId = typeof syncIdBody === 'string' ? syncIdBody.trim().slice(0, 120) : '';
+    const sessionIdFromBody = typeof sessionIdBody === 'string' ? sessionIdBody.trim() : '';
     const chunkIndex = typeof chunkIndexBody === 'number' ? chunkIndexBody : Number(chunkIndexBody || 0);
     const totalChunks = typeof totalChunksBody === 'number' ? totalChunksBody : Number(totalChunksBody || 1);
     const isChunkedUpload = Number.isFinite(totalChunks) && totalChunks > 1;
@@ -926,6 +933,7 @@ export default async function handler(
         let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
         if (Array.isArray(indexPayload) && !pagesArray.length) pagesArray = indexPayload;
         const framesInPayload = Array.isArray(pagesArray) ? pagesArray.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0) : 0;
+        let pluginSessionId = sessionIdFromBody || '';
 
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
@@ -1015,6 +1023,66 @@ export default async function handler(
             }
             if (!user.bypass_indexing_limits) {
               await incrementDailyIndexCount(supabaseAdmin, user.id);
+            }
+          }
+
+          if (!pluginSessionId && isFirstUploadChunk && isFirstPageBatch) {
+            try {
+              const selectedPageList = Array.isArray(selectedPages) && selectedPages.length > 0
+                ? selectedPages
+                : pagesArray.map((page: any) => ({
+                    id: page?.id || page?.pageId || null,
+                    name: page?.name || page?.pageName || 'Page',
+                  }));
+              const session = await createIndexSession(supabaseAdmin, {
+                userId: user.id,
+                fileKey: fileKeyTrim,
+                projectId: String(docId),
+                fileName,
+                source: 'plugin',
+                selectedPages: selectedPageList.map((page: any) => String(page?.name || '').trim()).filter(Boolean),
+                selectedPageIds: selectedPageList.map((page: any) => String(page?.id || '').trim()).filter(Boolean),
+                metadata: {
+                  requestId,
+                  mode: 'plugin-gallery-direct',
+                  syncId: syncId || null,
+                },
+                pageJobs: selectedPageList.map((page: any, index: number) => ({
+                  pageId: String(page?.id || `page-${index}`),
+                  pageName: String(page?.name || `Page ${index + 1}`),
+                  sortOrder: index,
+                  totalFrames: 0,
+                  chunkCount: 0,
+                })),
+              });
+              pluginSessionId = session?.id || '';
+            } catch (sessionCreateError: any) {
+              console.warn(`[${requestId}] ⚠️ Failed to create direct plugin session:`, sessionCreateError?.message || sessionCreateError);
+            }
+          }
+
+          if (pluginSessionId) {
+            try {
+              await setIndexSessionStatus(supabaseAdmin, pluginSessionId, user.id, 'processing');
+              for (const page of pagesArray) {
+                const pageId = typeof (page as any)?.id === 'string'
+                  ? (page as any).id
+                  : typeof (page as any)?.pageId === 'string'
+                    ? (page as any).pageId
+                    : null;
+                const pageName = normalizePageName((page as any)?.name || (page as any)?.pageName);
+                await updateIndexPageJob(supabaseAdmin, {
+                  sessionId: pluginSessionId,
+                  userId: user.id,
+                  pageId,
+                  pageName,
+                  status: 'uploading',
+                  totalFrames: Array.isArray((page as any)?.frames) ? (page as any).frames.length : 0,
+                  error: null,
+                });
+              }
+            } catch (sessionProcessingError: any) {
+              console.warn(`[${requestId}] ⚠️ Failed to update direct plugin session to processing:`, sessionProcessingError?.message || sessionProcessingError);
             }
           }
 
@@ -1122,7 +1190,65 @@ export default async function handler(
           } catch (normalizedError: any) {
             console.error(`[${requestId}] auth normalized sync error:`, normalizedError?.message || normalizedError);
           }
-          return res.status(200).json({ success: true, viewToken: null });
+          let sessionSummary: any = null;
+          if (pluginSessionId) {
+            try {
+              for (const page of pagesArray) {
+                const pageId = typeof (page as any)?.id === 'string'
+                  ? (page as any).id
+                  : typeof (page as any)?.pageId === 'string'
+                    ? (page as any).pageId
+                    : null;
+                const pageName = normalizePageName((page as any)?.name || (page as any)?.pageName);
+                const shouldFinalizePage = pageId ? finalizePageIds.includes(pageId) : true;
+                await updateIndexPageJob(supabaseAdmin, {
+                  sessionId: pluginSessionId,
+                  userId: user.id,
+                  pageId,
+                  pageName,
+                  status: shouldFinalizePage ? 'completed' : 'uploading',
+                  processedFrames: Array.isArray((page as any)?.frames) ? (page as any).frames.length : 0,
+                  totalFrames: Array.isArray((page as any)?.frames) ? (page as any).frames.length : 0,
+                  finishedAt: shouldFinalizePage ? new Date().toISOString() : null,
+                  error: null,
+                });
+              }
+              sessionSummary = await getIndexSessionAggregate(supabaseAdmin, pluginSessionId, user.id);
+              if (sessionSummary) {
+                await setIndexSessionStatus(
+                  supabaseAdmin,
+                  pluginSessionId,
+                  user.id,
+                  sessionSummary.status === 'completed' ? 'completed' : 'processing',
+                  {
+                    processedFrames: sessionSummary.processed_frames,
+                    totalFrames: sessionSummary.total_frames,
+                    completedPages: sessionSummary.completed_pages,
+                    failedPages: sessionSummary.failed_pages,
+                    cancelledPages: sessionSummary.cancelled_pages,
+                    currentPageJobId: null,
+                  }
+                );
+              }
+            } catch (sessionFinalizeError: any) {
+              console.warn(`[${requestId}] ⚠️ Failed to finalize direct plugin session page state:`, sessionFinalizeError?.message || sessionFinalizeError);
+            }
+          }
+          return res.status(200).json({
+            success: true,
+            viewToken: null,
+            sessionId: pluginSessionId || null,
+            sessionStatus: sessionSummary
+              ? {
+                  status: sessionSummary.status,
+                  totalPages: sessionSummary.total_pages,
+                  completedPages: sessionSummary.completed_pages,
+                  failedPages: sessionSummary.failed_pages,
+                  processedFrames: sessionSummary.processed_frames,
+                  totalFrames: sessionSummary.total_frames,
+                }
+              : null,
+          });
         }
       }
     }

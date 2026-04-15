@@ -504,6 +504,7 @@ let globalFileKey = '';
 let sessionFileKey = '';
 let globalFileKeySource = 'none';
 let activeIndexRunId = null;
+let activeIndexSessionId = null;
 let lastLoggedIndexStage = '';
 let pagesRefreshInFlight = false;
 let lastPagesRefreshHandledAt = 0;
@@ -627,6 +628,24 @@ async function postIndexProgress(step, meta) {
     framesDone: typeof details.framesDone === 'number' ? details.framesDone : 0,
   });
   await logIndexStage(step, details);
+}
+
+async function fetchIndexSessionStatus(sessionId, token) {
+  try {
+    if (!sessionId || !token) return null;
+    var res = await fetchWithTimeout('https://www.figdex.com/api/index-sessions/' + encodeURIComponent(sessionId), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      }
+    }, 10000);
+    if (!res || !res.ok) return null;
+    var data = await res.json();
+    return data && data.success && data.session ? data.session : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
@@ -1462,6 +1481,7 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'start-advanced') {
     try {
       activeIndexRunId = cryptoRandomString();
+      activeIndexSessionId = null;
       lastLoggedIndexStage = '';
       figma.notify('Preparing gallery...');
       var selectedIds = msg.selectedPages || [];
@@ -1879,6 +1899,7 @@ figma.ui.onmessage = async (msg) => {
             pageBatchIndex: batchCursor,
             pageBatchCount: pageBatches.length,
             selectedPages: chunkIndex === 0 ? selectedPages : undefined,
+            sessionId: activeIndexSessionId || undefined,
             source: 'figma-plugin',
             version: PLUGIN_VERSION,
             syncId: pluginRunSessionId,
@@ -1933,6 +1954,7 @@ figma.ui.onmessage = async (msg) => {
           try {
             var data = await res.json();
             if (data && data.viewToken) lastViewToken = data.viewToken;
+            if (data && data.sessionId && !activeIndexSessionId) activeIndexSessionId = data.sessionId;
           } catch (_) {}
           if (chunkIndex < totalChunks - 1) await sleep(250);
         }
@@ -1970,6 +1992,26 @@ figma.ui.onmessage = async (msg) => {
 
         completedPageIds = completedPageIds.concat(currentPageIds);
         completedFrameCount += allPageFrames.length;
+        if (!isGuestMode && token && activeIndexSessionId) {
+          try {
+            var sessionStatus = await fetchIndexSessionStatus(activeIndexSessionId, token);
+            if (sessionStatus) {
+              var sessionPagesDone = typeof sessionStatus.completed_pages === 'number' ? sessionStatus.completed_pages : completedPageIds.length;
+              var sessionPagesTotal = typeof sessionStatus.total_pages === 'number' ? sessionStatus.total_pages : pageBatches.length;
+              var sessionFramesDone = typeof sessionStatus.processed_frames === 'number' ? sessionStatus.processed_frames : completedFrameCount;
+              var sessionFramesTotal = typeof sessionStatus.total_frames === 'number' ? sessionStatus.total_frames : dirtyFrameCount;
+              await postIndexProgress(
+                'Completed ' + sessionPagesDone + '/' + sessionPagesTotal + ' pages',
+                {
+                  selectedPagesCount: selectedIds.length,
+                  pageCount: sessionPagesTotal,
+                  framesDone: sessionFramesDone,
+                  totalFrames: sessionFramesTotal,
+                }
+              );
+            }
+          } catch (_) {}
+        }
         try {
           figma.ui.postMessage({ type: 'pages-indexed', pageIds: currentPageIds });
         } catch (e) {}
@@ -2018,6 +2060,7 @@ figma.ui.onmessage = async (msg) => {
       figma.ui.postMessage({ type: 'error', message: e.message || 'Unknown error' });
     } finally {
       activeIndexRunId = null;
+      activeIndexSessionId = null;
       lastLoggedIndexStage = '';
     }
     return;
