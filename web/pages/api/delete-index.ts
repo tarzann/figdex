@@ -2,6 +2,13 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { logIndexActivity } from '../../lib/index-activity-log';
 
+function getLogicalFileId(projectId?: string | null, fileKey?: string | null): string {
+  const normalizedFileKey = typeof fileKey === 'string' ? fileKey.trim() : '';
+  const normalizedProjectId = typeof projectId === 'string' ? projectId.trim() : '';
+  const stableProjectId = normalizedProjectId && normalizedProjectId !== '0:0' ? normalizedProjectId : '';
+  return normalizedFileKey || stableProjectId || '';
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -55,51 +62,167 @@ export default async function handler(
       return res.status(401).json({ success: false, error: 'Invalid API key' });
     }
 
-    // Check if the index belongs to this user
-    const { data: indexFile, error: indexError } = await supabaseAdmin
+    // Try legacy row first
+    const { data: legacyIndexFile, error: legacyIndexError } = await supabaseAdmin
       .from('index_files')
-      .select('*')
+      .select('id, user_id, file_name, figma_file_key, project_id, frame_count')
       .eq('id', indexId)
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (indexError || !indexFile) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Index not found or you do not have permission to delete it' 
+    // Then try normalized row
+    const { data: normalizedIndexFile, error: normalizedIndexError } = await supabaseAdmin
+      .from('indexed_files')
+      .select('id, user_id, file_name, figma_file_key, project_id, total_frames')
+      .eq('id', indexId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const legacyIndex = legacyIndexFile || null;
+    const normalizedIndex = normalizedIndexFile || null;
+
+    if ((legacyIndexError && !legacyIndex) || (normalizedIndexError && !normalizedIndex)) {
+      console.warn('[delete-index] lookup warnings', {
+        legacy: legacyIndexError?.message || null,
+        normalized: normalizedIndexError?.message || null,
+        indexId,
+        userId: user.id,
       });
     }
 
-    // Delete the index
-    const { error: deleteError } = await supabaseAdmin
-      .from('index_files')
-      .delete()
-      .eq('id', indexId)
-      .eq('user_id', user.id);
-
-    if (deleteError) {
-      console.error('Error deleting index:', deleteError);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Failed to delete index',
-        details: deleteError.message 
+    if (!legacyIndex && !normalizedIndex) {
+      return res.status(404).json({
+        success: false,
+        error: 'Index not found or you do not have permission to delete it'
       });
+    }
+
+    const referenceIndex = normalizedIndex || legacyIndex;
+    const logicalFileId = getLogicalFileId(referenceIndex?.project_id, referenceIndex?.figma_file_key);
+    const figmaFileKey = referenceIndex?.figma_file_key || null;
+    const projectId = referenceIndex?.project_id || null;
+    const deletedIds = new Set<string>();
+
+    if (logicalFileId) {
+      let legacyDeleteQuery = supabaseAdmin
+        .from('index_files')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (figmaFileKey) {
+        legacyDeleteQuery = legacyDeleteQuery.eq('figma_file_key', figmaFileKey);
+      } else if (projectId) {
+        legacyDeleteQuery = legacyDeleteQuery.eq('project_id', projectId);
+      }
+
+      const { data: deletedLegacyRows, error: deleteLegacyError } = await legacyDeleteQuery.select('id');
+      if (deleteLegacyError) {
+        console.error('Error deleting legacy index rows:', deleteLegacyError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to delete legacy index rows',
+          details: deleteLegacyError.message
+        });
+      }
+      (deletedLegacyRows || []).forEach((row: any) => {
+        if (row?.id) deletedIds.add(String(row.id));
+      });
+
+      let normalizedDeleteQuery = supabaseAdmin
+        .from('indexed_files')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (figmaFileKey) {
+        normalizedDeleteQuery = normalizedDeleteQuery.eq('figma_file_key', figmaFileKey);
+      } else if (projectId) {
+        normalizedDeleteQuery = normalizedDeleteQuery.eq('project_id', projectId);
+      }
+
+      const { data: deletedNormalizedRows, error: deleteNormalizedError } = await normalizedDeleteQuery.select('id');
+      if (deleteNormalizedError) {
+        console.error('Error deleting normalized index rows:', deleteNormalizedError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to delete normalized index rows',
+          details: deleteNormalizedError.message
+        });
+      }
+      (deletedNormalizedRows || []).forEach((row: any) => {
+        if (row?.id) deletedIds.add(String(row.id));
+      });
+
+      let jobsDeleteQuery = supabaseAdmin
+        .from('index_jobs')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (figmaFileKey) {
+        jobsDeleteQuery = jobsDeleteQuery.eq('file_key', figmaFileKey);
+      } else if (projectId) {
+        jobsDeleteQuery = jobsDeleteQuery.eq('project_id', projectId);
+      }
+
+      const { error: deleteJobsError } = await jobsDeleteQuery;
+      if (deleteJobsError) {
+        console.warn('Warning deleting related index jobs:', deleteJobsError.message);
+      }
+    } else {
+      if (legacyIndex?.id) {
+        const { error: deleteLegacyError } = await supabaseAdmin
+          .from('index_files')
+          .delete()
+          .eq('id', legacyIndex.id)
+          .eq('user_id', user.id);
+        if (deleteLegacyError) {
+          console.error('Error deleting legacy index:', deleteLegacyError);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to delete legacy index',
+            details: deleteLegacyError.message
+          });
+        }
+        deletedIds.add(String(legacyIndex.id));
+      }
+
+      if (normalizedIndex?.id) {
+        const { error: deleteNormalizedError } = await supabaseAdmin
+          .from('indexed_files')
+          .delete()
+          .eq('id', normalizedIndex.id)
+          .eq('user_id', user.id);
+        if (deleteNormalizedError) {
+          console.error('Error deleting normalized index:', deleteNormalizedError);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to delete normalized index',
+            details: deleteNormalizedError.message
+          });
+        }
+        deletedIds.add(String(normalizedIndex.id));
+      }
     }
 
     await logIndexActivity(supabaseAdmin, {
-      requestId: `delete_index_${indexFile.id}`,
+      requestId: `delete_index_${indexId}`,
       source: 'system',
       eventType: 'index_deleted',
       status: 'completed',
       userId: user.id,
       userEmail: user.email || null,
-      fileKey: indexFile.figma_file_key || null,
-      fileName: indexFile.file_name || null,
-      logicalFileId: indexFile.project_id || indexFile.figma_file_key || null,
-      frameCount: typeof indexFile.frame_count === 'number' ? indexFile.frame_count : null,
+      fileKey: figmaFileKey,
+      fileName: referenceIndex?.file_name || null,
+      logicalFileId: logicalFileId || null,
+      frameCount:
+        typeof legacyIndex?.frame_count === 'number'
+          ? legacyIndex.frame_count
+          : typeof normalizedIndex?.total_frames === 'number'
+            ? normalizedIndex.total_frames
+            : null,
       message: 'Index deleted by user',
       metadata: {
-        deletedIndexId: indexFile.id,
+        deletedIndexId: indexId,
+        deletedIds: Array.from(deletedIds),
       },
     });
 
@@ -107,8 +230,8 @@ export default async function handler(
       success: true,
       message: 'Index deleted successfully',
       deletedIndex: {
-        id: indexFile.id,
-        file_name: indexFile.file_name
+        id: indexId,
+        file_name: referenceIndex?.file_name || null
       }
     });
 
@@ -120,4 +243,3 @@ export default async function handler(
     });
   }
 }
-
