@@ -9,6 +9,26 @@ function getLogicalFileId(projectId?: string | null, fileKey?: string | null): s
   return normalizedFileKey || stableProjectId || '';
 }
 
+function getChunkGroup(projectId?: string | null, fileName?: string | null) {
+  const normalizedProjectId = typeof projectId === 'string' ? projectId.trim() : '';
+  const normalizedFileName = typeof fileName === 'string' ? fileName.trim() : '';
+  const baseProjectId = normalizedProjectId.replace(/-chunk\d+$/i, '');
+  const fileMatch = normalizedFileName.match(/^(.*)\s+\(Part\s+\d+\/\d+\)$/i);
+  const baseFileName = fileMatch ? fileMatch[1].trim() : normalizedFileName;
+  const isChunk = Boolean(
+    normalizedProjectId &&
+    baseProjectId &&
+    baseProjectId !== normalizedProjectId &&
+    /-chunk\d+$/i.test(normalizedProjectId)
+  ) || Boolean(fileMatch);
+
+  return {
+    isChunk,
+    baseProjectId: baseProjectId || normalizedProjectId,
+    baseFileName,
+  };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -101,6 +121,7 @@ export default async function handler(
     const logicalFileId = getLogicalFileId(referenceIndex?.project_id, referenceIndex?.figma_file_key);
     const figmaFileKey = referenceIndex?.figma_file_key || null;
     const projectId = referenceIndex?.project_id || null;
+    const chunkGroup = getChunkGroup(projectId, referenceIndex?.file_name || null);
     const deletedIds = new Set<string>();
 
     if (logicalFileId) {
@@ -109,7 +130,9 @@ export default async function handler(
         .delete()
         .eq('user_id', user.id);
 
-      if (figmaFileKey) {
+      if (chunkGroup.isChunk && chunkGroup.baseProjectId) {
+        legacyDeleteQuery = legacyDeleteQuery.ilike('project_id', `${chunkGroup.baseProjectId}-chunk%`);
+      } else if (figmaFileKey) {
         legacyDeleteQuery = legacyDeleteQuery.eq('figma_file_key', figmaFileKey);
       } else if (projectId) {
         legacyDeleteQuery = legacyDeleteQuery.eq('project_id', projectId);
@@ -133,7 +156,9 @@ export default async function handler(
         .delete()
         .eq('user_id', user.id);
 
-      if (figmaFileKey) {
+      if (chunkGroup.isChunk && chunkGroup.baseProjectId) {
+        normalizedDeleteQuery = normalizedDeleteQuery.ilike('project_id', `${chunkGroup.baseProjectId}-chunk%`);
+      } else if (figmaFileKey) {
         normalizedDeleteQuery = normalizedDeleteQuery.eq('figma_file_key', figmaFileKey);
       } else if (projectId) {
         normalizedDeleteQuery = normalizedDeleteQuery.eq('project_id', projectId);
@@ -157,7 +182,9 @@ export default async function handler(
         .delete()
         .eq('user_id', user.id);
 
-      if (figmaFileKey) {
+      if (chunkGroup.isChunk && chunkGroup.baseProjectId) {
+        jobsDeleteQuery = jobsDeleteQuery.ilike('project_id', `${chunkGroup.baseProjectId}-chunk%`);
+      } else if (figmaFileKey) {
         jobsDeleteQuery = jobsDeleteQuery.eq('file_key', figmaFileKey);
       } else if (projectId) {
         jobsDeleteQuery = jobsDeleteQuery.eq('project_id', projectId);
