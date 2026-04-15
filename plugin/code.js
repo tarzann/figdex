@@ -461,13 +461,16 @@ function normalizeChunkSpecsForRequestSize(chunkSpecs, options) {
   return normalized;
 }
 
-function getAdaptiveExportScales(width, height) {
+function getAdaptiveExportScales(width, height, options) {
   var w = Math.max(1, Number(width) || 1);
   var h = Math.max(1, Number(height) || 1);
   var longestSide = Math.max(w, h);
-  var targetLongestSides = [2000, 1600, 1200, 900, 700, 500];
+  var targetLongestSides = Array.isArray(options && options.targetLongestSides) && options.targetLongestSides.length > 0
+    ? options.targetLongestSides
+    : [2000, 1600, 1200, 900, 700, 500];
   var scales = [];
-  if (longestSide <= 2000) {
+  var maxOriginalLongestSide = Math.max(1, Number(options && options.maxOriginalLongestSide) || 2000);
+  if (longestSide <= maxOriginalLongestSide) {
     scales.push(1);
   }
   for (var i = 0; i < targetLongestSides.length; i++) {
@@ -478,10 +481,40 @@ function getAdaptiveExportScales(width, height) {
   return scales;
 }
 
-async function exportFrameImageData(frame, width, height) {
-  var attempts = getAdaptiveExportScales(width, height).concat([0.4, 0.25, 0.18, 0.12, 0.08]);
+function getPageExportProfile(frameCount) {
+  var count = Math.max(1, Number(frameCount) || 1);
+  if (count >= 120) {
+    return {
+      maxBytes: 260 * 1024,
+      maxOriginalLongestSide: 1000,
+      targetLongestSides: [1000, 800, 640, 480, 360, 280, 220]
+    };
+  }
+  if (count >= 80) {
+    return {
+      maxBytes: 340 * 1024,
+      maxOriginalLongestSide: 1200,
+      targetLongestSides: [1200, 1000, 800, 640, 480, 360, 280]
+    };
+  }
+  if (count >= 50) {
+    return {
+      maxBytes: 460 * 1024,
+      maxOriginalLongestSide: 1400,
+      targetLongestSides: [1400, 1200, 900, 700, 500, 360, 280]
+    };
+  }
+  return {
+    maxBytes: 900 * 1024,
+    maxOriginalLongestSide: 2000,
+    targetLongestSides: [2000, 1600, 1200, 900, 700, 500]
+  };
+}
+
+async function exportFrameImageData(frame, width, height, options) {
+  var attempts = getAdaptiveExportScales(width, height, options).concat([0.4, 0.25, 0.18, 0.12, 0.08]);
   var tried = {};
-  var maxBytes = 900 * 1024;
+  var maxBytes = Math.max(160 * 1024, Number(options && options.maxBytes) || 900 * 1024);
   for (var i = 0; i < attempts.length; i++) {
     var scale = Math.max(0.08, Math.min(1, attempts[i]));
     var key = scale.toFixed(3);
@@ -1808,6 +1841,8 @@ figma.ui.onmessage = async (msg) => {
             var currentPageId = currentPageIds[pi];
             var page = dirtyPageNodesById[currentPageId] || await figma.getNodeByIdAsync(currentPageId);
             if (!page || page.type !== 'PAGE') continue;
+            var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
+            var pageExportProfile = getPageExportProfile(frameIds.length);
             await postIndexProgress('Exporting page ' + (batchCursor + 1) + '/' + pageBatches.length + ': ' + (page.name || 'Untitled'), {
               selectedPagesCount: selectedIds.length,
               pageCount: dirtyPageIds.length,
@@ -1815,7 +1850,6 @@ figma.ui.onmessage = async (msg) => {
               totalFrames: dirtyFrameCount,
               pagesDone: batchCursor,
             });
-            var frameIds = frameIdsByPageId[page.id] || getTopLevelFrameIds(page);
             if (!newSignaturesByPage[page.id]) newSignaturesByPage[page.id] = [];
             for (var fi = 0; fi < frameIds.length; fi += FRAME_EXPORT_CONCURRENCY) {
               var frameBatch = frameIds.slice(fi, fi + FRAME_EXPORT_CONCURRENCY);
@@ -1834,7 +1868,7 @@ figma.ui.onmessage = async (msg) => {
                   var searchTokens = buildSearchTokens(allTexts);
                   var sectionName = getSectionNameForFrame(frame);
                   var displayName = sectionName ? sectionName + ' / ' + (frame.name || 'Frame') : (frame.name || 'Frame');
-                  var exportResult = await exportFrameImageData(frame, w, h);
+                  var exportResult = await exportFrameImageData(frame, w, h, pageExportProfile);
                   var bytes = exportResult.bytes;
                   var b64 = figma.base64Encode(bytes);
                   var frameUrl = fileKey ? 'https://www.figma.com/file/' + fileKey + '?node-id=' + frame.id.replace(/:/g, '%3A') : '';
