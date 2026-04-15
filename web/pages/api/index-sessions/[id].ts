@@ -18,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!sessionId) {
     return res.status(400).json({ success: false, error: 'Session id is required' });
   }
+  const requestStartedAt = Date.now();
 
   try {
     const { supabaseAdmin, user } = await getUserFromApiKeyOrThrow(req.headers.authorization);
@@ -27,6 +28,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!session) {
         return res.status(404).json({ success: false, error: 'Session not found' });
       }
+      const durationMs = Date.now() - requestStartedAt;
+      console.log('[index-session-status]', {
+        sessionId,
+        userId: user.id,
+        status: session.status,
+        totalPages: session.total_pages,
+        completedPages: session.completed_pages,
+        failedPages: session.failed_pages,
+        processedFrames: session.processed_frames,
+        totalFrames: session.total_frames,
+        durationMs,
+      });
+      res.setHeader('X-FigDex-Session-Id', sessionId);
+      res.setHeader('X-FigDex-Session-Status', session.status);
+      res.setHeader('X-FigDex-Session-Completed-Pages', String(session.completed_pages || 0));
+      res.setHeader('X-FigDex-Session-Total-Pages', String(session.total_pages || 0));
+      res.setHeader('X-FigDex-Session-Duration-Ms', String(durationMs));
       return res.status(200).json({ success: true, session });
     }
 

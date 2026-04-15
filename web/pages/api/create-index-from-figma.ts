@@ -366,6 +366,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  res.setHeader('X-FigDex-Request-Id', requestId);
   const requestStartedAt = Date.now();
   console.log(`\n🚀 [${requestId}] ===== create-index-from-figma START =====`);
   console.log(`[${requestId}] Method: ${req.method}`);
@@ -933,7 +934,21 @@ export default async function handler(
         let pagesArray = hasValidPayload && (indexPayload as { pages?: unknown[] }).pages ? (indexPayload as { pages: any[] }).pages : [];
         if (Array.isArray(indexPayload) && !pagesArray.length) pagesArray = indexPayload;
         const framesInPayload = Array.isArray(pagesArray) ? pagesArray.reduce((s: number, p: any) => s + (Array.isArray(p?.frames) ? p.frames.length : 0), 0) : 0;
+        const requestedReplacePageIds = Array.isArray(req.body?.replacePageIds) ? req.body.replacePageIds : [];
         let pluginSessionId = sessionIdFromBody || '';
+        console.log(`[${requestId}] plugin direct upload request`, {
+          sessionIdFromBody: sessionIdFromBody || null,
+          syncId: syncId || null,
+          chunkIndex,
+          totalChunks,
+          pageBatchIndex,
+          pageBatchCount,
+          pageCount: Array.isArray(pagesArray) ? pagesArray.length : 0,
+          framesInPayload,
+          finalizePageIds: finalizePageIds.length,
+          replacePageIds: requestedReplacePageIds.length,
+          authMode: user.is_anonymous ? 'guest' : 'authenticated',
+        });
 
         if (pagesArray.length > 0 || framesInPayload > 0) {
           const limits = await getUserEffectiveLimits(supabaseAdmin, user.id, user.plan, user.is_admin);
@@ -1056,6 +1071,10 @@ export default async function handler(
                 })),
               });
               pluginSessionId = session?.id || '';
+              console.log(`[${requestId}] plugin direct upload session created`, {
+                sessionId: pluginSessionId || null,
+                pageJobs: selectedPageList.length,
+              });
             } catch (sessionCreateError: any) {
               console.warn(`[${requestId}] ⚠️ Failed to create direct plugin session:`, sessionCreateError?.message || sessionCreateError);
             }
@@ -1234,10 +1253,24 @@ export default async function handler(
               console.warn(`[${requestId}] ⚠️ Failed to finalize direct plugin session page state:`, sessionFinalizeError?.message || sessionFinalizeError);
             }
           }
+          res.setHeader('X-FigDex-Session-Id', pluginSessionId || '');
+          res.setHeader('X-FigDex-Chunk-Index', String(chunkIndex));
+          res.setHeader('X-FigDex-Total-Chunks', String(totalChunks));
+          res.setHeader('X-FigDex-Page-Batch-Index', String(pageBatchIndex));
+          res.setHeader('X-FigDex-Page-Batch-Count', String(pageBatchCount));
           return res.status(200).json({
             success: true,
             viewToken: null,
             sessionId: pluginSessionId || null,
+            debug: {
+              requestId,
+              chunkIndex,
+              totalChunks,
+              pageBatchIndex,
+              pageBatchCount,
+              pageCount: Array.isArray(pagesArray) ? pagesArray.length : 0,
+              framesInPayload,
+            },
             sessionStatus: sessionSummary
               ? {
                   status: sessionSummary.status,

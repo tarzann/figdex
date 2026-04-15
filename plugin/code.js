@@ -652,6 +652,7 @@ async function postIndexProgress(step, meta) {
 async function fetchIndexSessionStatus(sessionId, token) {
   try {
     if (!sessionId || !token) return null;
+    var startedAt = Date.now();
     var res = await fetchWithTimeout('https://www.figdex.com/api/index-sessions/' + encodeURIComponent(sessionId), {
       method: 'GET',
       headers: {
@@ -661,7 +662,20 @@ async function fetchIndexSessionStatus(sessionId, token) {
     }, 10000);
     if (!res || !res.ok) return null;
     var data = await res.json();
-    return data && data.success && data.session ? data.session : null;
+    var session = data && data.success && data.session ? data.session : null;
+    if (session) {
+      pluginTrace('Session status fetched', {
+        sessionId: sessionId,
+        status: session.status,
+        totalPages: session.total_pages,
+        completedPages: session.completed_pages,
+        failedPages: session.failed_pages,
+        processedFrames: session.processed_frames,
+        totalFrames: session.total_frames,
+        durationMs: Date.now() - startedAt
+      });
+    }
+    return session;
   } catch (e) {
     return null;
   }
@@ -1959,6 +1973,17 @@ figma.ui.onmessage = async (msg) => {
           };
           if (isGuestMode && guestAnonId) body.anonId = guestAnonId;
           var chunkFrameCount = chunkPages.reduce(function (s, p) { return s + (p.frames ? p.frames.length : 0); }, 0);
+          pluginTrace('Chunk upload dispatch', {
+            runId: activeIndexRunId,
+            sessionId: activeIndexSessionId || null,
+            pageBatchIndex: batchCursor + 1,
+            pageBatchCount: pageBatches.length,
+            chunkNumber: chunkIndex + 1,
+            totalChunks: totalChunks,
+            chunkFrameCount: chunkFrameCount,
+            replacePageCount: replacePageIds.length,
+            finalizePageCount: finalizePageIds.length
+          });
           figma.ui.postMessage({
             type: 'upload-progress',
             step: buildIndexProgressStep(
@@ -2007,6 +2032,16 @@ figma.ui.onmessage = async (msg) => {
           if (!chunkAttempt.ok || !res || !res.ok) {
             break;
           }
+          pluginTrace('Chunk upload succeeded', {
+            runId: activeIndexRunId,
+            sessionId: activeIndexSessionId || null,
+            pageBatchIndex: batchCursor + 1,
+            pageBatchCount: pageBatches.length,
+            chunkNumber: chunkIndex + 1,
+            totalChunks: totalChunks,
+            chunkFrameCount: chunkFrameCount,
+            totalUploadedAfterChunk: totalUploaded + chunkFrameCount
+          });
           totalUploaded += chunkFrameCount;
           try {
             var data = await res.json();
