@@ -14,6 +14,7 @@ import {
 } from '../../lib/figma-api';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 import { logIndexActivity } from '../../lib/index-activity-log';
+import { createIndexSession } from '../../lib/index-session-store';
 
 // Increase body size limit
 export const config = {
@@ -1468,6 +1469,52 @@ export default async function handler(
     }
     activityFrameCount = totalFramesCount;
 
+    let indexSessionId: string | null = null;
+    try {
+      const pageFrameCounts = new Map<string, number>();
+      for (const ref of frameNodeRefsForJob) {
+        const pageId = typeof ref?.pageId === 'string' ? ref.pageId.trim() : '';
+        const pageName = typeof ref?.pageName === 'string' ? ref.pageName.trim() : '';
+        const key = pageId || pageName;
+        if (!key) continue;
+        pageFrameCounts.set(key, (pageFrameCounts.get(key) || 0) + 1);
+      }
+
+      const session = await createIndexSession(supabaseAdmin, {
+        userId: user.id,
+        fileKey,
+        projectId: figmaFile.document.id || '0:0',
+        fileName,
+        source: 'plugin',
+        selectedPages: Array.from(includedPages),
+        selectedPageIds: includedPageIds ? Array.from(includedPageIds) : [],
+        metadata: {
+          requestId,
+          figmaVersion: figmaFile.version || null,
+          figmaLastModified: figmaFile.lastModified || null,
+          mode: 'create-index-from-figma',
+        },
+        pageJobs: pageNodes.map((page, index) => {
+          const normalizedName = getPageDisplayName(page);
+          const lookupKey = page.id || normalizedName;
+          return {
+            pageId: page.id || `page-${index}`,
+            pageName: normalizedName,
+            sortOrder: index,
+            totalFrames: pageFrameCounts.get(lookupKey) || 0,
+            chunkCount: 0,
+            metadata: {
+              sourcePageId: page.id || null,
+            },
+          };
+        }),
+      });
+      indexSessionId = session?.id || null;
+      console.log(`[${requestId}] ✅ Index session created: ${indexSessionId}`);
+    } catch (sessionError: any) {
+      console.warn(`[${requestId}] ⚠️ Failed to create index session sidecar:`, sessionError?.message || sessionError);
+    }
+
     // Check monthly frames limit (estimate based on totalFramesCount)
     if (!user?.bypass_indexing_limits && !monthlyFramesError && planLimits.maxFramesPerMonth !== null) {
       const framesThisMonthAfter = framesThisMonth + totalFramesCount;
@@ -1513,6 +1560,7 @@ export default async function handler(
         id: figmaFile.document.id,
         name: figmaFile.document.name,
         type: figmaFile.document.type,
+        index_session_id: indexSessionId,
       }, // Store basic document info (full structure will be fetched if needed)
       page_meta: pageMeta,
       selected_pages: Array.from(includedPages),
@@ -1727,6 +1775,7 @@ export default async function handler(
       message: 'Background indexing job scheduled',
       metadata: {
         jobId: jobRow?.id || null,
+        sessionId: indexSessionId,
       },
     });
 
@@ -1734,6 +1783,7 @@ export default async function handler(
       success: true,
       message: 'Job scheduled',
       jobId: jobRow?.id,
+      sessionId: indexSessionId,
       stats: {
         totalFrames: totalFramesCount,
         totalPages: pageMeta.length,

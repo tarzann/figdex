@@ -267,6 +267,155 @@ export async function requestIndexSessionCancel(
   return session;
 }
 
+export async function setIndexSessionStatus(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  sessionId: string,
+  userId: string,
+  status: IndexSessionStatus,
+  extra: Partial<{
+    currentPageJobId: string | null;
+    processedFrames: number;
+    totalFrames: number;
+    completedPages: number;
+    failedPages: number;
+    cancelledPages: number;
+  }> = {}
+) {
+  const payload: Record<string, any> = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+
+  if ('currentPageJobId' in extra) payload.current_page_job_id = extra.currentPageJobId ?? null;
+  if (typeof extra.processedFrames === 'number') payload.processed_frames = extra.processedFrames;
+  if (typeof extra.totalFrames === 'number') payload.total_frames = extra.totalFrames;
+  if (typeof extra.completedPages === 'number') payload.completed_pages = extra.completedPages;
+  if (typeof extra.failedPages === 'number') payload.failed_pages = extra.failedPages;
+  if (typeof extra.cancelledPages === 'number') payload.cancelled_pages = extra.cancelledPages;
+
+  const { error } = await supabaseAdmin
+    .from('index_sessions')
+    .update(payload)
+    .eq('id', sessionId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to update index session');
+  }
+}
+
+export async function updateIndexPageJob(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  params: {
+    sessionId: string;
+    userId: string;
+    pageId?: string | null;
+    pageName?: string | null;
+    status?: IndexPageJobStatus;
+    processedFrames?: number;
+    totalFrames?: number;
+    uploadedChunkCount?: number;
+    chunkCount?: number;
+    attemptCount?: number;
+    error?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  }
+) {
+  const {
+    sessionId,
+    userId,
+    pageId,
+    pageName,
+    status,
+    processedFrames,
+    totalFrames,
+    uploadedChunkCount,
+    chunkCount,
+    attemptCount,
+    error,
+    startedAt,
+    finishedAt,
+  } = params;
+
+  if (!pageId && !pageName) return null;
+
+  let lookup = supabaseAdmin
+    .from('index_page_jobs')
+    .select('id')
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+    .limit(1);
+
+  if (pageId) {
+    lookup = lookup.eq('page_id', pageId);
+  } else if (pageName) {
+    lookup = lookup.eq('page_name', pageName);
+  }
+
+  const { data: job, error: jobLookupError } = await lookup.maybeSingle();
+  if (jobLookupError || !job?.id) {
+    return null;
+  }
+
+  const payload: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (status) payload.status = status;
+  if (typeof processedFrames === 'number') payload.processed_frames = processedFrames;
+  if (typeof totalFrames === 'number') payload.total_frames = totalFrames;
+  if (typeof uploadedChunkCount === 'number') payload.uploaded_chunk_count = uploadedChunkCount;
+  if (typeof chunkCount === 'number') payload.chunk_count = chunkCount;
+  if (typeof attemptCount === 'number') payload.attempt_count = attemptCount;
+  if (typeof error === 'string' || error === null) payload.error = error;
+  if (typeof startedAt === 'string' || startedAt === null) payload.started_at = startedAt;
+  if (typeof finishedAt === 'string' || finishedAt === null) payload.finished_at = finishedAt;
+
+  const { error: updateError } = await supabaseAdmin
+    .from('index_page_jobs')
+    .update(payload)
+    .eq('id', job.id)
+    .eq('session_id', sessionId)
+    .eq('user_id', userId);
+
+  if (updateError) {
+    throw new Error(updateError.message || 'Failed to update index page job');
+  }
+
+  return { id: job.id };
+}
+
+export async function markIndexSessionPagesFromManifest(
+  supabaseAdmin: SupabaseClient<any, any, any, any, any>,
+  params: {
+    sessionId: string;
+    userId: string;
+    manifest: any[];
+    status?: IndexPageJobStatus;
+  }
+) {
+  const { sessionId, userId, manifest, status = 'completed' } = params;
+  const pages = Array.isArray(manifest) ? manifest : [];
+  const now = new Date().toISOString();
+
+  for (const page of pages) {
+    const processedFrames = Array.isArray(page?.frames) ? page.frames.length : 0;
+    await updateIndexPageJob(supabaseAdmin, {
+      sessionId,
+      userId,
+      pageId: typeof page?.id === 'string' ? page.id : null,
+      pageName: typeof page?.name === 'string' ? page.name : null,
+      status,
+      processedFrames,
+      totalFrames: processedFrames,
+      finishedAt: status === 'completed' ? now : null,
+      error: null,
+    });
+  }
+
+  return getIndexSessionAggregate(supabaseAdmin, sessionId, userId);
+}
+
 export async function getUserFromApiKeyOrThrow(authorizationHeader?: string) {
   const supabaseAdmin = getServiceSupabase();
   const authHeader = typeof authorizationHeader === 'string' ? authorizationHeader : '';

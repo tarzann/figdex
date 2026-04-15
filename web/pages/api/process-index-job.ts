@@ -6,6 +6,11 @@ import { archiveExistingIndex, type ArchiveableIndexRow } from '../../lib/index-
 import { sendJobNotificationEmail, sendJobNotificationToAdmin } from '../../lib/email';
 import { syncNormalizedIndexChunk } from '../../lib/normalized-index-store';
 import { logIndexActivity } from '../../lib/index-activity-log';
+import {
+  markIndexSessionPagesFromManifest,
+  setIndexSessionStatus,
+  updateIndexPageJob,
+} from '../../lib/index-session-store';
 
 const buildLightweightLegacyIndexData = () => ({ pages: [] as any[] });
 
@@ -631,6 +636,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let activityFileName: string | null = null;
   let activityLogicalFileId: string | null = null;
   let activityFrameCount: number | null = null;
+  let indexSessionId: string | null = null;
   
   console.log(`\n🚀 [${requestId}] ===== process-index-job START =====`);
   console.log(`[${requestId}] Timestamp: ${new Date().toISOString()}`);
@@ -720,6 +726,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     activityFileName = job.file_name || null;
     activityLogicalFileId = job.project_id || job.file_key || null;
     activityFrameCount = typeof job.total_frames === 'number' ? job.total_frames : null;
+    indexSessionId = typeof (job as any)?.document_data?.index_session_id === 'string'
+      ? (job as any).document_data.index_session_id
+      : null;
 
     const { data: jobUser } = activityUserId
       ? await supabaseAdmin
@@ -746,6 +755,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         jobId,
       },
     });
+
+    if (indexSessionId && activityUserId) {
+      try {
+        await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'processing');
+      } catch (sessionStatusError) {
+        console.warn(`[${requestId}] ⚠️ Failed to mark session as processing:`, sessionStatusError);
+      }
+    }
     
     // Get figmaToken from body (required - column doesn't exist in index_jobs table)
     const figmaToken = bodyFigmaToken;
@@ -1064,6 +1081,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           console.log(`[${requestId}] ⚠️ Page ref not found at index ${pageIndex}`);
           return res.status(200).json({ success: true, status: 'completed', indexId: job.index_file_id });
         }
+
+        if (indexSessionId && activityUserId) {
+          try {
+            const startedAt = new Date().toISOString();
+            const pageJob = await updateIndexPageJob(supabaseAdmin, {
+              sessionId: indexSessionId,
+              userId: activityUserId,
+              pageId: typeof pageRef?.id === 'string' ? pageRef.id : null,
+              pageName: typeof pageRef?.pageName === 'string' ? pageRef.pageName : typeof pageRef?.name === 'string' ? pageRef.name : null,
+              status: 'processing',
+              startedAt,
+              error: null,
+            });
+            await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'processing', {
+              currentPageJobId: pageJob?.id || null,
+            });
+          } catch (pageJobError) {
+            console.warn(`[${requestId}] ⚠️ Failed to update session page job state:`, pageJobError);
+          }
+        }
         
         console.log(`[${requestId}] 📄 Processing page ${pageIndex + 1}/${frameNodeRefs.length}: ${pageRef.name || pageRef.id}`);
         console.log(`[${requestId}] ⏱️ Time budget at start: ${hasTimeBudget() ? 'OK' : 'LOW'} (${remainingBudgetMs()}ms remaining)`);
@@ -1228,6 +1265,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           
           if (frameNodes.length === 0) {
             console.warn(`[${requestId}] ⚠️ No frames found in page "${pageName}", skipping...`);
+            if (indexSessionId && activityUserId) {
+              try {
+                await updateIndexPageJob(supabaseAdmin, {
+                  sessionId: indexSessionId,
+                  userId: activityUserId,
+                  pageId: pageRef.id || null,
+                  pageName,
+                  status: 'completed',
+                  processedFrames: 0,
+                  totalFrames: 0,
+                  finishedAt: new Date().toISOString(),
+                  error: null,
+                });
+              } catch (pageJobError) {
+                console.warn(`[${requestId}] ⚠️ Failed to mark empty page job as completed:`, pageJobError);
+              }
+            }
             // Update job to move to next page
             const updatedNext = pageIndex + 1;
             const newStatus = updatedNext >= frameNodeRefs.length ? 'completed' : 'processing';
@@ -2115,6 +2169,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updatePayload.status = 'failed';
         updatePayload.error = insertion.error.message;
         await supabaseAdmin.from('index_jobs').update(updatePayload).eq('id', jobId);
+        if (indexSessionId && activityUserId) {
+          try {
+            await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'failed', {
+              currentPageJobId: null,
+            });
+          } catch (sessionFailError) {
+            console.warn(`[${requestId}] ⚠️ Failed to mark session as failed after save error:`, sessionFailError);
+          }
+        }
         return res.status(500).json({ success: false, error: 'Failed to save index', details: insertion.error.message });
       }
 
@@ -2154,11 +2217,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updatePayload.status = 'failed';
         updatePayload.error = normalizedSyncError?.message || 'Failed to sync normalized process-index-job state';
         await supabaseAdmin.from('index_jobs').update(updatePayload).eq('id', jobId);
+        if (indexSessionId && activityUserId) {
+          try {
+            await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'failed', {
+              currentPageJobId: null,
+            });
+          } catch (sessionFailError) {
+            console.warn(`[${requestId}] ⚠️ Failed to mark session as failed after normalized sync error:`, sessionFailError);
+          }
+        }
         return res.status(500).json({
           success: false,
           error: 'Failed to sync normalized index state',
           details: normalizedSyncError?.message || 'Unknown normalized sync error'
         });
+      }
+
+      if (indexSessionId && activityUserId) {
+        try {
+          const aggregate = await markIndexSessionPagesFromManifest(supabaseAdmin, {
+            sessionId: indexSessionId,
+            userId: activityUserId,
+            manifest,
+            status: 'completed',
+          });
+          await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'completed', {
+            currentPageJobId: null,
+            processedFrames: aggregate?.processed_frames ?? frameIds.length,
+            totalFrames: aggregate?.total_frames ?? frameIds.length,
+            completedPages: aggregate?.completed_pages ?? manifest.length,
+            failedPages: aggregate?.failed_pages ?? 0,
+            cancelledPages: aggregate?.cancelled_pages ?? 0,
+          });
+        } catch (sessionCompleteError) {
+          console.warn(`[${requestId}] ⚠️ Failed to finalize index session state:`, sessionCompleteError);
+        }
       }
 
       updatePayload.index_file_id = insertion.data?.id || null;
@@ -2428,6 +2521,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     } catch (updateError) {
       console.error(`[${requestId}] ❌ Failed to update job status to failed:`, updateError);
+    }
+
+    if (indexSessionId && activityUserId) {
+      try {
+        await setIndexSessionStatus(supabaseAdmin, indexSessionId, activityUserId, 'failed', {
+          currentPageJobId: null,
+        });
+      } catch (sessionFailError) {
+        console.warn(`[${requestId}] ⚠️ Failed to mark session as failed in outer catch:`, sessionFailError);
+      }
     }
     
     console.log(`[${requestId}] ===== process-index-job END (ERROR) =====\n`);
