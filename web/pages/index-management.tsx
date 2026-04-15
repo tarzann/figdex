@@ -65,6 +65,8 @@ export default function IndexManagement() {
   const [figmaTokenInput, setFigmaTokenInput] = useState('');
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDeleteIndexId, setPendingDeleteIndexId] = useState<string | null>(null);
 
   useEffect(() => {
     loadIndexFiles();
@@ -300,13 +302,20 @@ export default function IndexManagement() {
 
   // handleShareIndex removed - sharing is now at gallery level (all indices or search results)
 
+  const openDeleteDialog = (indexId: string) => {
+    setPendingDeleteIndexId(indexId);
+    setDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deletingIndex) return;
+    setDeleteDialogOpen(false);
+    setPendingDeleteIndexId(null);
+  };
+
   const handleDeleteIndex = async (indexId: string, retryAfterRefresh = false) => {
     const fileToDelete = indexFiles.find(f => f.id === indexId);
     const isChunked = fileToDelete?._isChunked;
-    
-    if (!retryAfterRefresh && !confirm('Are you sure you want to delete this index? This action cannot be undone.')) {
-      return;
-    }
 
     setDeletingIndex(indexId);
     try {
@@ -369,6 +378,8 @@ export default function IndexManagement() {
         alert(`Failed to delete some indices: ${failed.map((f: any) => f.error).join(', ')}\n\nIf the API key is invalid, please log out and log in again.`);
       } else {
         await loadIndexFiles();
+        setDeleteDialogOpen(false);
+        setPendingDeleteIndexId(null);
       }
     } catch (err: any) {
       console.error('Error deleting index:', err);
@@ -632,7 +643,7 @@ export default function IndexManagement() {
                           variant="text"
                           size="small"
                           startIcon={deletingIndex === file.id ? <CircularProgress size={14} /> : <DeleteIcon fontSize="small" />}
-                          onClick={() => handleDeleteIndex(file.id)}
+                          onClick={() => openDeleteDialog(file.id)}
                           disabled={deletingIndex === file.id}
                           sx={{
                             textTransform: 'none',
@@ -856,15 +867,37 @@ export default function IndexManagement() {
               />
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setTokenDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="contained" color="primary" onClick={handleTokenDialogSubmit}>
-              Continue
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <DialogActions>
+          <Button onClick={() => setTokenDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="contained" color="primary" onClick={handleTokenDialogSubmit}>
+            Continue
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onClose={closeDeleteDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete Index</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mt: 1 }}>
+            Are you sure you want to delete this index? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDeleteDialog} disabled={!!deletingIndex}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => pendingDeleteIndexId && handleDeleteIndex(pendingDeleteIndexId)}
+            disabled={!pendingDeleteIndexId || !!deletingIndex}
+          >
+            {deletingIndex ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
         {/* Share functionality removed - sharing is now at gallery level */}
     </UserAppLayout>
