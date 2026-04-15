@@ -44,6 +44,9 @@ interface IndexFile {
   _isChunked?: boolean;
   _chunks?: any[];
   figma_file_key?: string;
+  project_id?: string | null;
+  legacy_index_id?: string | null;
+  normalized_index_id?: string | null;
   file_thumbnail_url?: string | null;
 }
 
@@ -336,7 +339,14 @@ export default function IndexManagement() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${user.api_key}`
           },
-          body: JSON.stringify({ indexId: id })
+          body: JSON.stringify({
+            indexId: id,
+            fileName: fileToDelete?.file_name || null,
+            figmaFileKey: fileToDelete?.figma_file_key || null,
+            projectId: fileToDelete?.project_id || null,
+            legacyIndexId: fileToDelete?.legacy_index_id || null,
+            normalizedIndexId: fileToDelete?.normalized_index_id || null,
+          })
         }).then(r => r.json())
       );
       

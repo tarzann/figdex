@@ -50,7 +50,14 @@ export default async function handler(
   }
 
   try {
-    const { indexId } = req.body;
+    const {
+      indexId,
+      figmaFileKey: providedFileKey,
+      projectId: providedProjectId,
+      fileName: providedFileName,
+      legacyIndexId: providedLegacyIndexId,
+      normalizedIndexId: providedNormalizedIndexId,
+    } = req.body || {};
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -86,7 +93,7 @@ export default async function handler(
     const { data: legacyIndexFile, error: legacyIndexError } = await supabaseAdmin
       .from('index_files')
       .select('id, user_id, file_name, figma_file_key, project_id, frame_count')
-      .eq('id', indexId)
+      .in('id', [indexId, providedLegacyIndexId].filter(Boolean))
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -94,7 +101,7 @@ export default async function handler(
     const { data: normalizedIndexFile, error: normalizedIndexError } = await supabaseAdmin
       .from('indexed_files')
       .select('id, user_id, file_name, figma_file_key, project_id, total_frames')
-      .eq('id', indexId)
+      .in('id', [indexId, providedNormalizedIndexId].filter(Boolean))
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -118,10 +125,11 @@ export default async function handler(
     }
 
     const referenceIndex = normalizedIndex || legacyIndex;
-    const logicalFileId = getLogicalFileId(referenceIndex?.project_id, referenceIndex?.figma_file_key);
-    const figmaFileKey = referenceIndex?.figma_file_key || null;
-    const projectId = referenceIndex?.project_id || null;
-    const chunkGroup = getChunkGroup(projectId, referenceIndex?.file_name || null);
+    const figmaFileKey = referenceIndex?.figma_file_key || providedFileKey || null;
+    const projectId = referenceIndex?.project_id || providedProjectId || null;
+    const fileName = referenceIndex?.file_name || providedFileName || null;
+    const logicalFileId = getLogicalFileId(projectId, figmaFileKey);
+    const chunkGroup = getChunkGroup(projectId, fileName);
     const deletedIds = new Set<string>();
 
     if (logicalFileId) {
