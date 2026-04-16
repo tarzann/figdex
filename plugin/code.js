@@ -209,6 +209,7 @@ async function deleteCurrentDocumentLegacyState() {
 const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for large uploads
 const CHUNK_RETRYABLE_STATUSES = { 429: true, 502: true, 503: true, 504: true };
 const MAX_CHUNK_UPLOAD_ATTEMPTS = 4;
+const STORAGE_FIRST_TRIGGER_FRAMES = 120;
 const LARGE_FILE_TRIGGER_PAGES = 6;
 const LARGE_FILE_TRIGGER_FRAMES = 120;
 const LARGE_FILE_BATCH_MAX_PAGES = 3;
@@ -365,6 +366,53 @@ async function postChunkWithRetry(url, requestOptions, meta) {
     }
   }
   return { ok: false, response: lastResponse, error: lastError, attempts: MAX_CHUNK_UPLOAD_ATTEMPTS };
+}
+
+async function createStorageFirstUploadSession(token, fileKey, fileName, documentId) {
+  if (!token) throw new Error('Missing account token');
+  var res = await fetchWithTimeout('https://www.figdex.com/api/uploads', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({
+      fileKey: fileKey,
+      fileName: fileName,
+      documentId: documentId
+    })
+  });
+  if (!res.ok) {
+    var errText = '';
+    try { errText = await res.text(); } catch (_) {}
+    var errJson = null;
+    try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+    throw new Error(normalizeExternalErrorMessage(res.status, errJson, errText, 'Failed to create upload session'));
+  }
+  return await res.json();
+}
+
+async function commitStorageFirstUploadSession(uploadSession, token) {
+  if (!uploadSession || !uploadSession.commitUrl) throw new Error('Missing upload session commit URL');
+  var res = await fetchWithTimeout('https://www.figdex.com' + uploadSession.commitUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    }
+  });
+  if (!res.ok) {
+    var errText = '';
+    try { errText = await res.text(); } catch (_) {}
+    var errJson = null;
+    try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+    throw new Error(normalizeExternalErrorMessage(res.status, errJson, errText, 'Failed to finalize upload session'));
+  }
+  try {
+    return await res.json();
+  } catch (_) {
+    return { success: true };
+  }
 }
 
 function estimateJsonBytes(value) {
@@ -1813,6 +1861,8 @@ figma.ui.onmessage = async (msg) => {
       const FRAMES_PER_CHUNK = 6;
       const FRAME_EXPORT_CONCURRENCY = 2;
       var baseFileName = (fileName || '').trim() || 'Untitled';
+      var useStorageFirstUpload = !isGuestMode && !!token && dirtyFrameCount >= STORAGE_FIRST_TRIGGER_FRAMES;
+      var storageFirstUploadSession = null;
       var totalUploaded = 0;
       var completedPageIds = [];
       var completedFrameCount = 0;
@@ -1832,6 +1882,25 @@ figma.ui.onmessage = async (msg) => {
       }
 
       var pluginRunSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      if (useStorageFirstUpload) {
+        try {
+          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId);
+          pluginTrace('Storage-first upload session created', {
+            runId: activeIndexRunId,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            selectedPagesCount: selectedIds.length,
+            pageCount: dirtyPageIds.length,
+            frameCount: dirtyFrameCount
+          });
+        } catch (storageSessionErr) {
+          pluginWarn('Storage-first session init failed, falling back to direct upload', {
+            runId: activeIndexRunId,
+            message: storageSessionErr && storageSessionErr.message ? String(storageSessionErr.message) : 'Unknown error'
+          });
+          useStorageFirstUpload = false;
+          storageFirstUploadSession = null;
+        }
+      }
       for (var batchCursor = 0; batchCursor < pageBatches.length; batchCursor++) {
         var currentPageIds = pageBatches[batchCursor];
         var allPageFrames = [];
@@ -2010,6 +2079,8 @@ figma.ui.onmessage = async (msg) => {
           pluginTrace('Chunk upload dispatch', {
             runId: activeIndexRunId,
             sessionId: activeIndexSessionId || null,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            storageFirst: useStorageFirstUpload,
             pageBatchIndex: batchCursor + 1,
             pageBatchCount: pageBatches.length,
             chunkNumber: chunkIndex + 1,
@@ -2043,18 +2114,37 @@ figma.ui.onmessage = async (msg) => {
           });
           var headers = { 'Content-Type': 'application/json' };
           if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
-          var chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(body)
-          }, {
-            chunkNumber: chunkIndex + 1,
-            totalChunks: totalChunks,
-            framesDone: totalUploaded
-          });
+          var chunkAttempt = null;
+          if (useStorageFirstUpload && storageFirstUploadSession && storageFirstUploadSession.appendUrl) {
+            chunkAttempt = await postChunkWithRetry('https://www.figdex.com' + storageFirstUploadSession.appendUrl, {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify({
+                pages: chunkPages,
+                fileKey: fileKey,
+                fileName: baseFileName,
+                uploadedAt: new Date().toISOString(),
+                file_size: estimateJsonBytes(chunkPayload)
+              })
+            }, {
+              chunkNumber: chunkIndex + 1,
+              totalChunks: totalChunks,
+              framesDone: totalUploaded
+            });
+          } else {
+            chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(body)
+            }, {
+              chunkNumber: chunkIndex + 1,
+              totalChunks: totalChunks,
+              framesDone: totalUploaded
+            });
+          }
           res = chunkAttempt.response || null;
           finalChunkError = chunkAttempt.error || null;
-          if ((!chunkAttempt.ok || !res || !res.ok) && res && res.status === 413) {
+          if ((!chunkAttempt.ok || !res || !res.ok) && !useStorageFirstUpload && res && res.status === 413) {
             var splitChunkSpecs = splitChunkPagesInHalf(chunkPages);
             if (splitChunkSpecs && splitChunkSpecs.length === 2) {
               chunkSpecs.splice(chunkIndex, 1, splitChunkSpecs[0], splitChunkSpecs[1]);
@@ -2069,6 +2159,8 @@ figma.ui.onmessage = async (msg) => {
           pluginTrace('Chunk upload succeeded', {
             runId: activeIndexRunId,
             sessionId: activeIndexSessionId || null,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            storageFirst: useStorageFirstUpload,
             pageBatchIndex: batchCursor + 1,
             pageBatchCount: pageBatches.length,
             chunkNumber: chunkIndex + 1,
@@ -2079,8 +2171,10 @@ figma.ui.onmessage = async (msg) => {
           totalUploaded += chunkFrameCount;
           try {
             var data = await res.json();
-            if (data && data.viewToken) lastViewToken = data.viewToken;
-            if (data && data.sessionId && !activeIndexSessionId) activeIndexSessionId = data.sessionId;
+            if (!useStorageFirstUpload) {
+              if (data && data.viewToken) lastViewToken = data.viewToken;
+              if (data && data.sessionId && !activeIndexSessionId) activeIndexSessionId = data.sessionId;
+            }
           } catch (_) {}
           if (chunkIndex < totalChunks - 1) await sleep(250);
         }
@@ -2142,6 +2236,31 @@ figma.ui.onmessage = async (msg) => {
         try {
           figma.ui.postMessage({ type: 'pages-indexed', pageIds: currentPageIds });
         } catch (e) {}
+      }
+
+      if (useStorageFirstUpload && storageFirstUploadSession) {
+        try {
+          await postIndexProgress('Finalizing uploaded pages…', {
+            selectedPagesCount: selectedIds.length,
+            pageCount: pageBatches.length,
+            framesDone: completedFrameCount,
+            totalFrames: dirtyFrameCount,
+            pagesDone: completedPageIds.length,
+          });
+          var commitData = await commitStorageFirstUploadSession(storageFirstUploadSession, token);
+          pluginTrace('Storage-first upload committed', {
+            runId: activeIndexRunId,
+            uploadId: storageFirstUploadSession.uploadId || null,
+            indexId: commitData && commitData.indexId ? commitData.indexId : null,
+            frameCount: completedFrameCount,
+            pageCount: completedPageIds.length
+          });
+        } catch (commitErr) {
+          var commitMessage = commitErr && commitErr.message ? String(commitErr.message) : 'Failed to finalize uploaded pages';
+          figma.notify('Stopped after upload. ' + commitMessage, { error: true });
+          figma.ui.postMessage({ type: 'error', message: commitMessage });
+          return;
+        }
       }
 
       var resultUrl = 'https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(fileKey) + '&_t=' + Date.now();
