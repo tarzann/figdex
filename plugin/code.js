@@ -218,6 +218,52 @@ const DIRECT_UPLOAD_MAX_CHUNK_BYTES = Math.floor(1.5 * 1024 * 1024);
 const STORAGE_FIRST_MAX_CHUNK_BYTES = Math.floor(2.2 * 1024 * 1024);
 const LARGE_FILE_TRIGGER_PAGES = 6;
 const LARGE_FILE_TRIGGER_FRAMES = 120;
+const INDEX_WARN_LOAD_SCORE = 75;
+const INDEX_BLOCK_LOAD_SCORE = 180;
+const INDEX_WARN_PAGE_COUNT = 8;
+const INDEX_BLOCK_PAGE_COUNT = 16;
+const INDEX_WARN_MAX_PAGE_FRAMES = 72;
+const INDEX_BLOCK_MAX_PAGE_FRAMES = 120;
+
+function estimateIndexLoad(pageFrameCounts) {
+  var counts = Array.isArray(pageFrameCounts) ? pageFrameCounts.slice() : [];
+  var totalFrames = counts.reduce(function (sum, count) { return sum + (typeof count === 'number' ? count : 0); }, 0);
+  var pageCount = counts.length;
+  var maxPageFrames = counts.length ? Math.max.apply(Math, counts) : 0;
+  var score = totalFrames;
+  if (pageCount > 6) score += (pageCount - 6) * 4;
+  for (var i = 0; i < counts.length; i++) {
+    var count = counts[i];
+    if (count > 24) score += 8;
+    if (count > 48) score += 16;
+    if (count > 80) score += 24;
+  }
+  return {
+    score: score,
+    totalFrames: totalFrames,
+    pageCount: pageCount,
+    maxPageFrames: maxPageFrames
+  };
+}
+
+function evaluateIndexAdmission(pageFrameCounts) {
+  var load = estimateIndexLoad(pageFrameCounts);
+  var shouldBlock = load.score >= INDEX_BLOCK_LOAD_SCORE || load.pageCount >= INDEX_BLOCK_PAGE_COUNT || load.maxPageFrames >= INDEX_BLOCK_MAX_PAGE_FRAMES;
+  var shouldWarn = !shouldBlock && (load.score >= INDEX_WARN_LOAD_SCORE || load.pageCount >= INDEX_WARN_PAGE_COUNT || load.maxPageFrames >= INDEX_WARN_MAX_PAGE_FRAMES);
+  var reasons = [];
+  if (load.pageCount >= INDEX_WARN_PAGE_COUNT) reasons.push(load.pageCount + ' pages');
+  if (load.totalFrames >= INDEX_WARN_LOAD_SCORE) reasons.push(load.totalFrames + ' frames');
+  if (load.maxPageFrames >= INDEX_WARN_MAX_PAGE_FRAMES) reasons.push('one page with ' + load.maxPageFrames + ' frames');
+  return {
+    score: load.score,
+    totalFrames: load.totalFrames,
+    pageCount: load.pageCount,
+    maxPageFrames: load.maxPageFrames,
+    shouldWarn: shouldWarn,
+    shouldBlock: shouldBlock,
+    reasonText: reasons.join(', ')
+  };
+}
 const LARGE_FILE_BATCH_MAX_PAGES = 3;
 const LARGE_FILE_BATCH_MAX_FRAMES = 60;
 
@@ -1999,9 +2045,39 @@ figma.ui.onmessage = async (msg) => {
       );
 
       var dirtyFrameCount = 0;
+      var dirtyPageFrameCounts = [];
       for (var dfi = 0; dfi < dirtyPageIds.length; dfi++) {
         var dirtyFrameIds = frameIdsByPageId[dirtyPageIds[dfi]];
-        if (Array.isArray(dirtyFrameIds)) dirtyFrameCount += dirtyFrameIds.length;
+        if (Array.isArray(dirtyFrameIds)) {
+          dirtyFrameCount += dirtyFrameIds.length;
+          dirtyPageFrameCounts.push(dirtyFrameIds.length);
+        }
+      }
+      if (dirtyPageIds.length > 0) {
+        var indexAdmission = evaluateIndexAdmission(dirtyPageFrameCounts);
+        pluginTrace('Index admission evaluated', {
+          runId: activeIndexRunId,
+          selectedPagesCount: selectedIds.length,
+          effectivePageCount: indexAdmission.pageCount,
+          totalFrames: indexAdmission.totalFrames,
+          maxPageFrames: indexAdmission.maxPageFrames,
+          score: indexAdmission.score,
+          shouldWarn: indexAdmission.shouldWarn,
+          shouldBlock: indexAdmission.shouldBlock
+        });
+        if (indexAdmission.shouldBlock) {
+          var admissionBlockMessage = 'This run is too large to index safely right now. Try indexing fewer pages at a time.';
+          var admissionBlockDetail = indexAdmission.reasonText ? ' Current selection: ' + indexAdmission.reasonText + '.' : '';
+          figma.notify(admissionBlockMessage, { error: true, timeout: 5000 });
+          figma.ui.postMessage({
+            type: 'error',
+            message: admissionBlockMessage + admissionBlockDetail + ' Recommended: split this into smaller batches.'
+          });
+          return;
+        }
+        if (indexAdmission.shouldWarn) {
+          figma.notify('Large indexing run detected — continuing, but smaller batches will be more stable.', { timeout: 4000 });
+        }
       }
       var pageBatches = dirtyPageIds.map(function (pageId) { return [pageId]; });
       if (pageBatches.length > 1) {
