@@ -2001,7 +2001,6 @@ figma.ui.onmessage = async (msg) => {
         console.warn('[code.js] cover image too large, omitting cover upload for this run');
         coverImageDataUrl = null;
       }
-      const FRAMES_PER_CHUNK = 6;
       const FRAME_EXPORT_CONCURRENCY = 2;
       var baseFileName = (fileName || '').trim() || 'Untitled';
       var useStorageFirstUpload = !isGuestMode && !!token && (FORCE_STORAGE_FIRST_UPLOADS || dirtyFrameCount >= STORAGE_FIRST_TRIGGER_FRAMES);
@@ -2144,7 +2143,7 @@ figma.ui.onmessage = async (msg) => {
         var chunkSpecs = [];
         var start = 0;
         while (start < allPageFrames.length) {
-          var end = Math.min(start + FRAMES_PER_CHUNK, allPageFrames.length);
+          var end = Math.min(start + framesPerChunk, allPageFrames.length);
           var slice = allPageFrames.slice(start, end);
           var pageMap = {};
           for (var si = 0; si < slice.length; si++) {
@@ -2170,7 +2169,7 @@ figma.ui.onmessage = async (msg) => {
           mergePages: true,
           replacePageIds: currentPageIds,
           anonId: isGuestMode && guestAnonId ? guestAnonId : null,
-          maxBytes: Math.floor(1.5 * 1024 * 1024)
+          maxBytes: chunkMaxBytes
         });
 
         var totalChunks = chunkSpecs.length;
