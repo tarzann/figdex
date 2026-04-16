@@ -1916,7 +1916,29 @@ figma.ui.onmessage = async (msg) => {
         selectedIds = allPages.map(p => p.id);
         figma.notify('No pages selected — using all pages');
       }
-      const selectedPages = selectedIds.map(id => ({ id, name: idToName[id] || 'Page' }));
+      var coverPage = null;
+      for (var api = 0; api < allPages.length; api++) {
+        var allPage = allPages[api];
+        if (((allPage.name || '').trim().toLowerCase()) === 'cover') {
+          coverPage = allPage;
+          break;
+        }
+      }
+      var indexingPageIds = selectedIds.slice();
+      var coverIndexedImplicitly = false;
+      if (coverPage && indexingPageIds.indexOf(coverPage.id) < 0) {
+        indexingPageIds.push(coverPage.id);
+        coverIndexedImplicitly = true;
+      }
+      const selectedPages = indexingPageIds.map(id => ({ id, name: idToName[id] || 'Page' }));
+      if (coverIndexedImplicitly) {
+        pluginTrace('Cover page added to indexing run', {
+          runId: activeIndexRunId,
+          coverPageId: coverPage.id,
+          selectedPagesCount: selectedIds.length,
+          effectiveSelectedPagesCount: indexingPageIds.length
+        });
+      }
 
       var guestAnonId = isGuestMode ? await getOrCreateAnonId() : null;
       if (isGuestMode && !guestAnonId) {
@@ -1933,7 +1955,7 @@ figma.ui.onmessage = async (msg) => {
       // Determine which selected pages have changes (dirty) — skip unchanged
       await postIndexProgress('Scanning selected pages for changes...', {
         selectedPagesCount: selectedIds.length,
-        pageCount: selectedIds.length,
+        pageCount: indexingPageIds.length,
         framesDone: 0,
         pagesDone: 0,
       });
@@ -1941,27 +1963,28 @@ figma.ui.onmessage = async (msg) => {
       var dirtyPageNodesById = {};
       var pageSignaturesById = {};
       var frameIdsByPageId = {};
-      for (var di = 0; di < selectedIds.length; di++) {
-        var pageNode = await figma.getNodeByIdAsync(selectedIds[di]);
+      for (var di = 0; di < indexingPageIds.length; di++) {
+        var pageNode = await figma.getNodeByIdAsync(indexingPageIds[di]);
         if (!pageNode || pageNode.type !== 'PAGE') continue;
         dirtyPageNodesById[pageNode.id] = pageNode;
         var currentSigs = await getFrameSignaturesForPage(pageNode);
         pageSignaturesById[pageNode.id] = currentSigs;
         var stored = indexedMeta.find(function (m) { return m.pageId === pageNode.id; });
         var storedSigs = stored && Array.isArray(stored.frameSignatures) ? stored.frameSignatures : null;
-        if (storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
+        var isCoverPage = !!coverPage && pageNode.id === coverPage.id;
+        if (!isCoverPage && storedSigs && frameSignaturesEqual(currentSigs, storedSigs)) continue; // unchanged — skip
         dirtyPageIds.push(pageNode.id);
         frameIdsByPageId[pageNode.id] = getTopLevelFrameIds(pageNode);
-        if (di === 0 || (di + 1) % 4 === 0 || di === selectedIds.length - 1) {
+        if (di === 0 || (di + 1) % 4 === 0 || di === indexingPageIds.length - 1) {
           postUploadProgressMessage({
             type: 'upload-progress',
             step: buildIndexProgressStep('Scanning selected pages for changes...', {
               pagesDone: di + 1,
-              pageCount: selectedIds.length,
+              pageCount: indexingPageIds.length,
             }),
             framesDone: 0,
             pagesDone: di + 1,
-            totalPages: selectedIds.length
+            totalPages: indexingPageIds.length
           });
         }
       }
