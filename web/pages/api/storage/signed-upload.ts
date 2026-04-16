@@ -76,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const { filename, contentType, projectId } = req.body || {};
+    const { filename, contentType, projectId, storagePath } = req.body || {};
     if (!filename || typeof filename !== 'string') {
       return res.status(400).json({
         success: false,
@@ -94,7 +94,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? projectId.replace(/[^a-zA-Z0-9-_]/g, '_')
       : 'unknown';
     const safeFilename = filename.replace(/[^a-zA-Z0-9-_.]/g, '_');
-    const objectPath = `${user.id}/${safeProject}/${yyyy}/${mm}/${dd}/${safeFilename}`;
+    const requestedStoragePath = typeof storagePath === 'string' ? storagePath.trim() : '';
+    const objectPath = requestedStoragePath || `${user.id}/${safeProject}/${yyyy}/${mm}/${dd}/${safeFilename}`;
 
     // Helper to create a signed upload URL for a given path
     const createSignedForPath = async (path: string) => {
@@ -125,13 +126,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       signedErr = error;
     }
 
-    // If it still fails, fall back to unique path (append timestamp before extension)
+    // If it still fails, fall back to a unique path while keeping the same logical prefix.
     if (signedErr || !signedData) {
-      const dotIdx = safeFilename.lastIndexOf('.');
-      const base = dotIdx >= 0 ? safeFilename.slice(0, dotIdx) : safeFilename;
-      const ext = dotIdx >= 0 ? safeFilename.slice(dotIdx) : '';
-      const uniqueName = `${base}__${Date.now()}${ext}`;
-      finalObjectPath = `${user.id}/${safeProject}/${yyyy}/${mm}/${dd}/${uniqueName}`;
+      if (requestedStoragePath) {
+        const slashIdx = requestedStoragePath.lastIndexOf('/');
+        const requestedDir = slashIdx >= 0 ? requestedStoragePath.slice(0, slashIdx) : '';
+        const requestedName = slashIdx >= 0 ? requestedStoragePath.slice(slashIdx + 1) : requestedStoragePath;
+        const dotIdx = requestedName.lastIndexOf('.');
+        const base = dotIdx >= 0 ? requestedName.slice(0, dotIdx) : requestedName;
+        const ext = dotIdx >= 0 ? requestedName.slice(dotIdx) : '';
+        const uniqueName = `${base}__${Date.now()}${ext}`;
+        finalObjectPath = requestedDir ? `${requestedDir}/${uniqueName}` : uniqueName;
+      } else {
+        const dotIdx = safeFilename.lastIndexOf('.');
+        const base = dotIdx >= 0 ? safeFilename.slice(0, dotIdx) : safeFilename;
+        const ext = dotIdx >= 0 ? safeFilename.slice(dotIdx) : '';
+        const uniqueName = `${base}__${Date.now()}${ext}`;
+        finalObjectPath = `${user.id}/${safeProject}/${yyyy}/${mm}/${dd}/${uniqueName}`;
+      }
       const { data, error } = await createSignedForPath(finalObjectPath);
       signedData = data;
       signedErr = error;
@@ -205,6 +217,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-
-
 

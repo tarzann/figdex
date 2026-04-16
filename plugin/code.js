@@ -396,6 +396,57 @@ async function createStorageFirstUploadSession(token, fileKey, fileName, documen
   return await res.json();
 }
 
+function sanitizeStoragePathSegment(value, fallbackValue) {
+  var normalized = String(value || '').trim().replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-');
+  if (!normalized) return fallbackValue || 'chunk';
+  return normalized;
+}
+
+function buildStorageFirstChunkPath(uploadId, pageBatchIndex, pageBatchCount, chunkNumber, totalChunks) {
+  var uploadSegment = sanitizeStoragePathSegment(uploadId, 'upload');
+  var pageLabel = String(pageBatchIndex + 1).padStart(3, '0') + '-of-' + String(pageBatchCount).padStart(3, '0');
+  var chunkLabel = String(chunkNumber).padStart(3, '0') + '-of-' + String(totalChunks).padStart(3, '0');
+  return 'sessions/' + uploadSegment + '/chunks/page-' + pageLabel + '__chunk-' + chunkLabel + '.json';
+}
+
+async function createStorageFirstSignedChunkUpload(token, uploadSession, options) {
+  if (!token) throw new Error('Missing account token');
+  if (!uploadSession || !uploadSession.uploadId) throw new Error('Missing upload session ID');
+  var storagePath = buildStorageFirstChunkPath(
+    uploadSession.uploadId,
+    options.pageBatchIndex,
+    options.pageBatchCount,
+    options.chunkNumber,
+    options.totalChunks
+  );
+  var fileName = 'page-' + String(options.pageBatchIndex + 1) + '-chunk-' + String(options.chunkNumber) + '.json';
+  var res = await fetchWithTimeout('https://www.figdex.com/api/storage/signed-upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({
+      filename: fileName,
+      contentType: 'application/json',
+      projectId: uploadSession.uploadId,
+      storagePath: storagePath
+    })
+  });
+  if (!res.ok) {
+    var errText = '';
+    try { errText = await res.text(); } catch (_) {}
+    var errJson = null;
+    try { errJson = errText ? JSON.parse(errText) : null; } catch (_) {}
+    throw new Error(normalizeExternalErrorMessage(res.status, errJson, errText, 'Failed to create signed upload URL'));
+  }
+  var data = await res.json();
+  if (!data || !data.signedUrl || !data.path) {
+    throw new Error('Signed upload URL response is missing required fields');
+  }
+  return data;
+}
+
 async function commitStorageFirstUploadSession(uploadSession, token) {
   if (!uploadSession || !uploadSession.commitUrl) throw new Error('Missing upload session commit URL');
   var res = await fetchWithTimeout('https://www.figdex.com' + uploadSession.commitUrl, {
@@ -2122,22 +2173,65 @@ figma.ui.onmessage = async (msg) => {
           var headers = { 'Content-Type': 'application/json' };
           if (!isGuestMode && token) headers['Authorization'] = 'Bearer ' + token;
           var chunkAttempt = null;
+          var storageChunkPayload = {
+            pages: chunkPages,
+            fileKey: fileKey,
+            fileName: baseFileName,
+            uploadedAt: new Date().toISOString(),
+            file_size: estimateJsonBytes(chunkPayload)
+          };
           if (useStorageFirstUpload && storageFirstUploadSession && storageFirstUploadSession.appendUrl) {
-            chunkAttempt = await postChunkWithRetry('https://www.figdex.com' + storageFirstUploadSession.appendUrl, {
-              method: 'POST',
-              headers: headers,
-              body: JSON.stringify({
-                pages: chunkPages,
-                fileKey: fileKey,
-                fileName: baseFileName,
-                uploadedAt: new Date().toISOString(),
-                file_size: estimateJsonBytes(chunkPayload)
-              })
-            }, {
-              chunkNumber: chunkIndex + 1,
-              totalChunks: totalChunks,
-              framesDone: totalUploaded
-            });
+            try {
+              var signedChunkUpload = await createStorageFirstSignedChunkUpload(token, storageFirstUploadSession, {
+                pageBatchIndex: batchCursor,
+                pageBatchCount: pageBatches.length,
+                chunkNumber: chunkIndex + 1,
+                totalChunks: totalChunks
+              });
+              chunkAttempt = await postChunkWithRetry(signedChunkUpload.signedUrl, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'cache-control': 'max-age=3600'
+                },
+                body: JSON.stringify(storageChunkPayload)
+              }, {
+                chunkNumber: chunkIndex + 1,
+                totalChunks: totalChunks,
+                framesDone: totalUploaded
+              });
+            } catch (signedUploadError) {
+              pluginWarn('Storage-first signed upload setup failed, falling back to append', {
+                runId: activeIndexRunId,
+                uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+                pageBatchIndex: batchCursor + 1,
+                chunkNumber: chunkIndex + 1,
+                totalChunks: totalChunks,
+                message: signedUploadError && signedUploadError.message ? String(signedUploadError.message) : 'Unknown error'
+              });
+              chunkAttempt = null;
+            }
+            if (!chunkAttempt || !chunkAttempt.ok || !chunkAttempt.response || !chunkAttempt.response.ok) {
+              if (chunkAttempt && chunkAttempt.response && !chunkAttempt.response.ok) {
+                pluginWarn('Storage-first direct upload failed, retrying via append fallback', {
+                  runId: activeIndexRunId,
+                  uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+                  pageBatchIndex: batchCursor + 1,
+                  chunkNumber: chunkIndex + 1,
+                  totalChunks: totalChunks,
+                  status: chunkAttempt.response.status
+                });
+              }
+              chunkAttempt = await postChunkWithRetry('https://www.figdex.com' + storageFirstUploadSession.appendUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(storageChunkPayload)
+              }, {
+                chunkNumber: chunkIndex + 1,
+                totalChunks: totalChunks,
+                framesDone: totalUploaded
+              });
+            }
           } else {
             chunkAttempt = await postChunkWithRetry('https://www.figdex.com/api/create-index-from-figma', {
               method: 'POST',
