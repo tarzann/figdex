@@ -356,7 +356,7 @@ async function postChunkWithRetry(url, requestOptions, meta) {
         if (response.status === 504) activeIndexRunMetrics.status504Count += 1;
       }
       figma.notify(retryStep, { timeout: 1500 });
-      figma.ui.postMessage({ type: 'upload-progress', step: retryStep, framesDone: meta.framesDone });
+      postUploadProgressMessage({ type: 'upload-progress', step: retryStep, framesDone: meta.framesDone });
       await logIndexStage(retryStep, {
         chunkNumber: meta.chunkNumber,
         totalChunks: meta.totalChunks,
@@ -378,7 +378,7 @@ async function postChunkWithRetry(url, requestOptions, meta) {
       });
       if (activeIndexRunMetrics) activeIndexRunMetrics.networkRetryCount += 1;
       figma.notify(networkRetryStep, { timeout: 1500 });
-      figma.ui.postMessage({ type: 'upload-progress', step: networkRetryStep, framesDone: meta.framesDone });
+      postUploadProgressMessage({ type: 'upload-progress', step: networkRetryStep, framesDone: meta.framesDone });
       await logIndexStage(networkRetryStep, {
         chunkNumber: meta.chunkNumber,
         totalChunks: meta.totalChunks,
@@ -681,6 +681,7 @@ let activeIndexRunId = null;
 let activeIndexSessionId = null;
 let lastLoggedIndexStage = '';
 let activeIndexRunMetrics = null;
+let activeIndexRunStartedAt = 0;
 let pagesRefreshInFlight = false;
 let lastPagesRefreshHandledAt = 0;
 let lastPagesPayloadSignature = '';
@@ -866,9 +867,41 @@ function buildIndexProgressStep(step, meta) {
   return label + ' (' + parts.join(' • ') + ')';
 }
 
+function buildIndexProgressTiming(meta) {
+  var details = meta && typeof meta === 'object' ? meta : {};
+  var startedAt = activeIndexRunStartedAt || 0;
+  if (!startedAt) return { elapsedMs: null, etaMs: null, progressRatio: null };
+  var elapsedMs = Math.max(0, Date.now() - startedAt);
+  var progressRatio = null;
+  if (typeof details.framesDone === 'number' && typeof details.totalFrames === 'number' && details.totalFrames > 0) {
+    progressRatio = Math.max(0, Math.min(1, details.framesDone / details.totalFrames));
+  } else if (typeof details.pagesDone === 'number' && typeof details.pageCount === 'number' && details.pageCount > 0) {
+    progressRatio = Math.max(0, Math.min(1, details.pagesDone / details.pageCount));
+  }
+  var etaMs = null;
+  if (progressRatio !== null && progressRatio > 0 && progressRatio < 1 && elapsedMs >= 1000) {
+    etaMs = Math.round(elapsedMs * ((1 - progressRatio) / progressRatio));
+  }
+  return {
+    elapsedMs: elapsedMs,
+    etaMs: etaMs,
+    progressRatio: progressRatio
+  };
+}
+
+function postUploadProgressMessage(payload) {
+  var nextPayload = payload && typeof payload === 'object' ? Object.assign({}, payload) : { type: 'upload-progress' };
+  var timing = buildIndexProgressTiming(nextPayload);
+  nextPayload.type = 'upload-progress';
+  nextPayload.elapsedMs = timing.elapsedMs;
+  nextPayload.etaMs = timing.etaMs;
+  nextPayload.progressRatio = timing.progressRatio;
+  figma.ui.postMessage(nextPayload);
+}
+
 async function postIndexProgress(step, meta) {
   var details = meta && typeof meta === 'object' ? meta : {};
-  figma.ui.postMessage({
+  postUploadProgressMessage({
     type: 'upload-progress',
     step: buildIndexProgressStep(step, details),
     framesDone: typeof details.framesDone === 'number' ? details.framesDone : 0,
@@ -879,6 +912,50 @@ async function postIndexProgress(step, meta) {
       : (typeof details.totalPages === 'number' ? details.totalPages : null),
   });
   await logIndexStage(step, details);
+}
+
+async function refreshPagesToUI() {
+  var resolvedRefreshFileKey = await resolveCurrentFileKey();
+  var refreshFileKey = resolvedRefreshFileKey.fileKey || '';
+  globalFileKey = refreshFileKey || globalFileKey || '';
+  if (resolvedRefreshFileKey.source) globalFileKeySource = resolvedRefreshFileKey.source;
+  if (!globalFileKey && sessionFileKey) globalFileKey = sessionFileKey;
+  postFileKeyToUI(globalFileKey || '', globalFileKeySource || 'none');
+
+  var allPages = figma.root.children || [];
+  var indexedMeta = await getStored(STORAGE_KEYS.INDEXED_PAGES, []);
+  if (!Array.isArray(indexedMeta)) indexedMeta = [];
+  var pages = [];
+  for (var i = 0; i < allPages.length; i++) {
+    var p = allPages[i];
+    var frameIds = getTopLevelFrameIds(p);
+    var hasFrames = frameIds.length > 0;
+    var meta = indexedMeta.find(function (entry) { return entry && entry.pageId === p.id; }) || null;
+    var status = hasFrames ? (meta ? 'indexed' : 'ready') : 'empty';
+    var icon = hasFrames ? (meta ? 'indexed' : 'ready') : 'empty';
+    pages.push({
+      id: p.id,
+      name: p.name,
+      hasFrames: hasFrames,
+      displayName: p.name,
+      isFolder: !hasFrames,
+      isIndexPage: p.isIndexPage,
+      isCoverPage: p.isCoverPage,
+      status: status,
+      icon: icon
+    });
+  }
+  var savedSelectedIds = null;
+  try { savedSelectedIds = await getStored(STORAGE_KEYS.SELECTED_PAGES, null); } catch (e) { savedSelectedIds = null; }
+  var hasSavedSelectedIds = Array.isArray(savedSelectedIds);
+  if (!hasSavedSelectedIds) savedSelectedIds = [];
+  var pageMessage = { type: 'pages', pages: pages };
+  if (hasSavedSelectedIds) pageMessage.selectedPageIds = savedSelectedIds;
+  var nextPayloadSignature = createPagesPayloadSignature(pageMessage);
+  if (!nextPayloadSignature || nextPayloadSignature !== lastPagesPayloadSignature) {
+    postToUI(pageMessage);
+    lastPagesPayloadSignature = nextPayloadSignature;
+  }
 }
 
 async function fetchIndexSessionStatus(sessionId, token) {
@@ -1618,7 +1695,8 @@ figma.ui.onmessage = async (msg) => {
           ? 'Removed from FigDex' + (pageNameToRemove ? ' — ' + pageNameToRemove : '')
           : 'Nothing to remove for this page'
       );
-      figma.ui.postMessage({ type: 'refresh-pages' });
+      lastPagesRefreshHandledAt = 0;
+      await figma.ui.onmessage({ type: 'refresh-pages' });
       figma.ui.postMessage({ type: 'pages-index-removed', pageIds: [pageIdToRemove] });
     } catch (error) {
       pluginError('Failed to remove indexed page', {
@@ -1745,6 +1823,7 @@ figma.ui.onmessage = async (msg) => {
       activeIndexSessionId = null;
       lastLoggedIndexStage = '';
       activeIndexRunMetrics = createIndexRunMetrics();
+      activeIndexRunStartedAt = Date.now();
       figma.notify('Preparing gallery...');
       var selectedIds = msg.selectedPages || [];
       pluginTrace('Index run started', {
@@ -1845,7 +1924,7 @@ figma.ui.onmessage = async (msg) => {
         dirtyPageIds.push(pageNode.id);
         frameIdsByPageId[pageNode.id] = getTopLevelFrameIds(pageNode);
         if (di === 0 || (di + 1) % 4 === 0 || di === selectedIds.length - 1) {
-          figma.ui.postMessage({
+          postUploadProgressMessage({
             type: 'upload-progress',
             step: buildIndexProgressStep('Scanning selected pages for changes...', {
               pagesDone: di + 1,
@@ -2018,6 +2097,7 @@ figma.ui.onmessage = async (msg) => {
       var completedPageIds = [];
       var completedFrameCount = 0;
       var lastViewToken = null;
+      var totalUploadedChunks = 0;
 
       function buildLastChunkIndexByPageId(specs) {
         var indexByPageId = {};
@@ -2033,6 +2113,32 @@ figma.ui.onmessage = async (msg) => {
       }
 
       var pluginRunSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      if (useStorageFirstUpload) {
+        try {
+          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId);
+          pluginTrace('Storage-first upload session created', {
+            runId: activeIndexRunId,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            selectedPagesCount: selectedIds.length,
+            pageCount: pageBatches.length,
+            frameCount: dirtyFrameCount,
+            framesPerChunk: framesPerChunk,
+            maxChunkBytes: chunkMaxBytes
+          });
+        } catch (storageSessionError) {
+          var storageSessionMessage = storageSessionError && storageSessionError.message ? String(storageSessionError.message) : 'Failed to create upload session';
+          if (activeIndexRunMetrics) activeIndexRunMetrics.failed = true;
+          logIndexRunSummary({
+            result: 'failed',
+            completedPages: 0,
+            completedFrames: 0,
+            errorMessage: storageSessionMessage
+          });
+          figma.notify(storageSessionMessage, { error: true });
+          figma.ui.postMessage({ type: 'error', message: storageSessionMessage });
+          return;
+        }
+      }
       for (var batchCursor = 0; batchCursor < pageBatches.length; batchCursor++) {
         var currentPageIds = pageBatches[batchCursor];
         var allPageFrames = [];
@@ -2105,7 +2211,7 @@ figma.ui.onmessage = async (msg) => {
                   allPageFrames.push({ pageId: page.id, pageName: page.name || 'Page', frameItem: entry.frameItem });
                 });
 
-              figma.ui.postMessage({
+              postUploadProgressMessage({
                 type: 'upload-progress',
                 step: buildIndexProgressStep('Exporting current page...', {
                   pagesDone: batchCursor,
@@ -2211,6 +2317,8 @@ figma.ui.onmessage = async (msg) => {
           pluginTrace('Chunk upload dispatch', {
             runId: activeIndexRunId,
             sessionId: activeIndexSessionId || null,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            storageFirst: useStorageFirstUpload,
             pageBatchIndex: batchCursor + 1,
             pageBatchCount: pageBatches.length,
             chunkNumber: chunkIndex + 1,
@@ -2224,7 +2332,7 @@ figma.ui.onmessage = async (msg) => {
             if (useStorageFirstUpload) activeIndexRunMetrics.appendRequests += 1;
             else activeIndexRunMetrics.legacyRequests += 1;
           }
-          figma.ui.postMessage({
+          postUploadProgressMessage({
             type: 'upload-progress',
             step: buildIndexProgressStep(
               'Uploading page ' + (batchCursor + 1) + '/' + pageBatches.length + (totalChunks > 1 ? ' — part ' + (chunkIndex + 1) + '/' + totalChunks : ''),
@@ -2328,7 +2436,7 @@ figma.ui.onmessage = async (msg) => {
           }
           res = chunkAttempt.response || null;
           finalChunkError = chunkAttempt.error || null;
-          if ((!chunkAttempt.ok || !res || !res.ok) && res && res.status === 413) {
+          if ((!chunkAttempt.ok || !res || !res.ok) && !useStorageFirstUpload && res && res.status === 413) {
             var splitChunkSpecs = splitChunkPagesInHalf(chunkPages);
             if (splitChunkSpecs && splitChunkSpecs.length === 2) {
               chunkSpecs.splice(chunkIndex, 1, splitChunkSpecs[0], splitChunkSpecs[1]);
@@ -2343,6 +2451,8 @@ figma.ui.onmessage = async (msg) => {
           pluginTrace('Chunk upload succeeded', {
             runId: activeIndexRunId,
             sessionId: activeIndexSessionId || null,
+            uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
+            storageFirst: useStorageFirstUpload,
             pageBatchIndex: batchCursor + 1,
             pageBatchCount: pageBatches.length,
             chunkNumber: chunkIndex + 1,
@@ -2351,6 +2461,7 @@ figma.ui.onmessage = async (msg) => {
             totalUploadedAfterChunk: totalUploaded + chunkFrameCount
           });
           if (activeIndexRunMetrics) activeIndexRunMetrics.chunkSuccesses += 1;
+          totalUploadedChunks += 1;
           totalUploaded += chunkFrameCount;
           try {
             var data = await res.json();
@@ -2431,6 +2542,41 @@ figma.ui.onmessage = async (msg) => {
         } catch (e) {}
       }
 
+      if (useStorageFirstUpload && storageFirstUploadSession) {
+        try {
+          await postIndexProgress('Finalizing uploaded pages…', {
+            selectedPagesCount: selectedIds.length,
+            pageCount: pageBatches.length,
+            framesDone: completedFrameCount,
+            totalFrames: dirtyFrameCount,
+            pagesDone: completedPageIds.length,
+          });
+          var commitData = await commitStorageFirstUploadSession(storageFirstUploadSession, token, {
+            chunkPaths: storageFirstUploadedChunkPaths
+          });
+          if (commitData && commitData.viewToken) lastViewToken = commitData.viewToken;
+          pluginTrace('Storage-first upload committed', {
+            runId: activeIndexRunId,
+            uploadId: storageFirstUploadSession.uploadId || null,
+            indexId: commitData && commitData.indexId ? commitData.indexId : null,
+            frameCount: completedFrameCount,
+            pageCount: completedPageIds.length
+          });
+        } catch (commitErr) {
+          var commitMessage = commitErr && commitErr.message ? String(commitErr.message) : 'Failed to finalize uploaded pages';
+          if (activeIndexRunMetrics) activeIndexRunMetrics.failed = true;
+          logIndexRunSummary({
+            result: 'failed',
+            completedPages: completedPageIds.length,
+            completedFrames: completedFrameCount,
+            errorMessage: commitMessage
+          });
+          figma.notify('Stopped after upload. ' + commitMessage, { error: true });
+          figma.ui.postMessage({ type: 'error', message: commitMessage });
+          return;
+        }
+      }
+
       var resultUrl = 'https://www.figdex.com/gallery?fileKey=' + encodeURIComponent(fileKey) + '&_t=' + Date.now();
       if (lastViewToken) resultUrl += '&viewToken=' + encodeURIComponent(lastViewToken);
       if (isGuestMode && guestAnonId) resultUrl += '&anonId=' + encodeURIComponent(guestAnonId);
@@ -2440,7 +2586,7 @@ figma.ui.onmessage = async (msg) => {
         runId: activeIndexRunId,
         pageCount: completedPageIds.length,
         frameCount: completedFrameCount,
-        totalChunks: completedPageIds.length,
+        totalChunks: totalUploadedChunks,
         resultUrl: resultUrl
       });
       logIndexRunSummary({
@@ -2454,7 +2600,7 @@ figma.ui.onmessage = async (msg) => {
         selectedPagesCount: selectedIds.length,
         pageCount: completedPageIds.length,
         frameCount: completedFrameCount,
-        totalChunks: completedPageIds.length,
+        totalChunks: totalUploadedChunks,
       });
       await setStored(STORAGE_KEYS.HAS_EVER_INDEXED, true);
       if (!isGuestMode && token) {
@@ -2482,6 +2628,7 @@ figma.ui.onmessage = async (msg) => {
       figma.notify('Error: ' + (e.message || 'Unknown error'), { error: true });
       figma.ui.postMessage({ type: 'error', message: e.message || 'Unknown error' });
     } finally {
+      activeIndexRunStartedAt = 0;
       activeIndexRunId = null;
       activeIndexSessionId = null;
       lastLoggedIndexStage = '';
