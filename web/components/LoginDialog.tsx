@@ -20,6 +20,17 @@ import { getOAuthRedirectUrl } from '../lib/env';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const REQUEST_TIMEOUT_MS = 7000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface LoginDialogProps {
   open: boolean;
@@ -106,13 +117,14 @@ export default function LoginDialog({ open, onClose, onSwitchToRegister, onLogin
 
       const normalizedEmail = (authData.user.email || '').trim().toLowerCase();
 
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetchWithTimeout('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'login', 
           email: normalizedEmail, 
-          password: password 
+          password: password,
+          userId: authData.user.id,
         })
       });
 
@@ -129,6 +141,7 @@ export default function LoginDialog({ open, onClose, onSwitchToRegister, onLogin
       }
 
       const userData = {
+        id: ensured.id || authData.user.id,
         email: normalizedEmail,
         api_key: apiKey,
         full_name: ensured.name || authData.user.user_metadata?.full_name || null,
@@ -448,4 +461,3 @@ export default function LoginDialog({ open, onClose, onSwitchToRegister, onLogin
     </>
   );
 }
-
