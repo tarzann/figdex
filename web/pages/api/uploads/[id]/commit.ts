@@ -9,6 +9,18 @@ export const config = {
   }
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function listSessionChunkFiles(storage: any, bucket: string, uploadId: string) {
+  const list = await storage.from(bucket).list(`sessions/${uploadId}/chunks`, { limit: 1000 });
+  return {
+    error: list?.error || null,
+    files: (list?.data || []).filter((f: any) => f.name.endsWith('.json'))
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -59,11 +71,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const manifestText = await manResp.data.text();
   const manifest = JSON.parse(manifestText || '{}');
 
-  // List chunks
-  const list = await (supabaseAdmin as any).storage.from(bucket).list(`sessions/${uploadId}/chunks`, { limit: 1000 });
-  const files = (list?.data || []).filter((f: any) => f.name.endsWith('.json'));
+  // List chunks. Direct-to-storage uploads can take a brief moment before they
+  // become visible to list/download operations, so retry a few times first.
+  let files: any[] = [];
+  let listError: any = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const listed = await listSessionChunkFiles((supabaseAdmin as any).storage, bucket, uploadId);
+    files = listed.files;
+    listError = listed.error;
+    if (files.length > 0) break;
+    if (attempt < 5) {
+      await sleep(attempt * 700);
+    }
+  }
   if (!files.length) {
-    return res.status(400).json({ success: false, error: 'No chunks uploaded' });
+    return res.status(400).json({
+      success: false,
+      error: 'No chunks uploaded',
+      details: listError?.message || null,
+      uploadId,
+      checkedPrefix: `sessions/${uploadId}/chunks`
+    });
   }
 
   // Merge pages from chunks
@@ -181,4 +209,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     size: +(fileSizeBytes / 1024 / 1024).toFixed(2)
   });
 }
-
