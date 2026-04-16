@@ -210,6 +210,10 @@ const FETCH_TIMEOUT_MS = 90000; // 90s — server allows 60s, extra buffer for l
 const CHUNK_RETRYABLE_STATUSES = { 429: true, 502: true, 503: true, 504: true };
 const MAX_CHUNK_UPLOAD_ATTEMPTS = 4;
 const STORAGE_FIRST_TRIGGER_FRAMES = 120;
+const DIRECT_UPLOAD_FRAMES_PER_CHUNK = 6;
+const STORAGE_FIRST_FRAMES_PER_CHUNK = 14;
+const DIRECT_UPLOAD_MAX_CHUNK_BYTES = Math.floor(1.5 * 1024 * 1024);
+const STORAGE_FIRST_MAX_CHUNK_BYTES = Math.floor(2.2 * 1024 * 1024);
 const LARGE_FILE_TRIGGER_PAGES = 6;
 const LARGE_FILE_TRIGGER_FRAMES = 120;
 const LARGE_FILE_BATCH_MAX_PAGES = 3;
@@ -1858,11 +1862,12 @@ figma.ui.onmessage = async (msg) => {
         console.warn('[code.js] cover image too large, omitting cover upload for this run');
         coverImageDataUrl = null;
       }
-      const FRAMES_PER_CHUNK = 6;
       const FRAME_EXPORT_CONCURRENCY = 2;
       var baseFileName = (fileName || '').trim() || 'Untitled';
       var useStorageFirstUpload = !isGuestMode && !!token && dirtyFrameCount >= STORAGE_FIRST_TRIGGER_FRAMES;
       var storageFirstUploadSession = null;
+      var framesPerChunk = useStorageFirstUpload ? STORAGE_FIRST_FRAMES_PER_CHUNK : DIRECT_UPLOAD_FRAMES_PER_CHUNK;
+      var chunkMaxBytes = useStorageFirstUpload ? STORAGE_FIRST_MAX_CHUNK_BYTES : DIRECT_UPLOAD_MAX_CHUNK_BYTES;
       var totalUploaded = 0;
       var completedPageIds = [];
       var completedFrameCount = 0;
@@ -1890,7 +1895,9 @@ figma.ui.onmessage = async (msg) => {
             uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
             selectedPagesCount: selectedIds.length,
             pageCount: dirtyPageIds.length,
-            frameCount: dirtyFrameCount
+            frameCount: dirtyFrameCount,
+            framesPerChunk: framesPerChunk,
+            maxChunkBytes: chunkMaxBytes
           });
         } catch (storageSessionErr) {
           pluginWarn('Storage-first session init failed, falling back to direct upload', {
@@ -2011,7 +2018,7 @@ figma.ui.onmessage = async (msg) => {
         var chunkSpecs = [];
         var start = 0;
         while (start < allPageFrames.length) {
-          var end = Math.min(start + FRAMES_PER_CHUNK, allPageFrames.length);
+          var end = Math.min(start + framesPerChunk, allPageFrames.length);
           var slice = allPageFrames.slice(start, end);
           var pageMap = {};
           for (var si = 0; si < slice.length; si++) {
@@ -2037,7 +2044,7 @@ figma.ui.onmessage = async (msg) => {
           mergePages: true,
           replacePageIds: currentPageIds,
           anonId: isGuestMode && guestAnonId ? guestAnonId : null,
-          maxBytes: Math.floor(1.5 * 1024 * 1024)
+          maxBytes: chunkMaxBytes
         });
 
         var totalChunks = chunkSpecs.length;
