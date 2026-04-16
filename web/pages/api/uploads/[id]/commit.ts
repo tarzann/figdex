@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { syncNormalizedIndexChunk } from '../../../../lib/normalized-index-store';
 
 export const config = {
   api: {
@@ -8,6 +9,62 @@ export const config = {
     }
   }
 };
+
+type CommitBody = {
+  chunkPaths?: string[];
+};
+
+function getChunkPageId(page: any, pageIndex: number): string {
+  const rawId = typeof page?.pageId === 'string'
+    ? page.pageId
+    : typeof page?.id === 'string'
+      ? page.id
+      : '';
+  return rawId.trim() || `page-${pageIndex}`;
+}
+
+function mergeChunkPages(pages: any[]): any[] {
+  const merged = new Map<string, any>();
+
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+    const page = pages[pageIndex];
+    const pageId = getChunkPageId(page, pageIndex);
+    const existing = merged.get(pageId);
+    const nextFrames = Array.isArray(page?.frames) ? page.frames : [];
+
+    if (!existing) {
+      merged.set(pageId, {
+        ...page,
+        id: pageId,
+        pageId,
+        name: page?.name || page?.pageName || 'Page',
+        pageName: page?.pageName || page?.name || 'Page',
+        frames: nextFrames.slice(),
+      });
+      continue;
+    }
+
+    existing.frames = existing.frames.concat(nextFrames);
+    if (!existing.name && page?.name) existing.name = page.name;
+    if (!existing.pageName && (page?.pageName || page?.name)) {
+      existing.pageName = page.pageName || page.name;
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function listSessionChunkFiles(storage: any, bucket: string, uploadId: string) {
+  const list = await storage.from(bucket).list(`sessions/${uploadId}/chunks`, { limit: 1000 });
+  return {
+    error: list?.error || null,
+    files: (list?.data || []).filter((f: any) => f.name.endsWith('.json'))
+  };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -49,6 +106,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!uploadId) {
     return res.status(400).json({ success: false, error: 'uploadId is required' });
   }
+  const body = (req.body || {}) as CommitBody;
+  const directChunkPaths = Array.isArray(body.chunkPaths)
+    ? body.chunkPaths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
 
   // Load manifest
   const manifestPath = `sessions/${uploadId}/session.json`;
@@ -59,27 +120,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const manifestText = await manResp.data.text();
   const manifest = JSON.parse(manifestText || '{}');
 
-  // List chunks
-  const list = await (supabaseAdmin as any).storage.from(bucket).list(`sessions/${uploadId}/chunks`, { limit: 1000 });
-  const files = (list?.data || []).filter((f: any) => f.name.endsWith('.json'));
-  if (!files.length) {
-    return res.status(400).json({ success: false, error: 'No chunks uploaded' });
+  // List chunks. Direct-to-storage uploads can take a brief moment before they
+  // become visible to list/download operations, so retry a few times first.
+  let files: any[] = [];
+  let listError: any = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const listed = await listSessionChunkFiles((supabaseAdmin as any).storage, bucket, uploadId);
+    files = listed.files;
+    listError = listed.error;
+    if (files.length > 0 || directChunkPaths.length > 0) break;
+    if (attempt < 5) {
+      await sleep(attempt * 700);
+    }
+  }
+  const listedChunkPaths = files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`);
+  const chunkPaths = Array.from(new Set([...directChunkPaths, ...listedChunkPaths]));
+  if (!chunkPaths.length) {
+    return res.status(400).json({
+      success: false,
+      error: 'No chunks uploaded',
+      details: listError?.message || null,
+      uploadId,
+      checkedPrefix: `sessions/${uploadId}/chunks`,
+      providedChunkPaths: directChunkPaths.length
+    });
   }
 
   // Merge pages from chunks
-  const allPages: any[] = [];
-  for (const f of files) {
-    const p = await (supabaseAdmin as any).storage.from(bucket).download(`sessions/${uploadId}/chunks/${f.name}`);
-    if (p?.error) continue;
+  const collectedPages: any[] = [];
+  const failedChunkDownloads: Array<{ path: string; error: string }> = [];
+  for (const chunkPath of chunkPaths) {
+    const p = await (supabaseAdmin as any).storage.from(bucket).download(chunkPath);
+    if (p?.error) {
+      failedChunkDownloads.push({ path: chunkPath, error: String(p.error.message || 'Download failed') });
+      continue;
+    }
     const txt = await p.data.text();
     const json = JSON.parse(txt || '{}');
     if (Array.isArray(json?.pages)) {
-      allPages.push(...json.pages);
+      collectedPages.push(...json.pages);
     }
   }
 
+  const allPages = mergeChunkPages(collectedPages);
+
   if (!allPages.length) {
-    return res.status(400).json({ success: false, error: 'Merged pages are empty' });
+    return res.status(400).json({
+      success: false,
+      error: 'Merged pages are empty',
+      uploadId,
+      chunkPathsCount: chunkPaths.length,
+      failedChunkDownloads: failedChunkDownloads.slice(0, 10)
+    });
   }
 
   // Prepare index_files insert (reuse current table)
@@ -87,6 +179,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const finalFileKey = manifest.fileKey || 'unknown';
   const documentId = manifest.documentId || finalFileKey;
   const framesCount = allPages.reduce((sum, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
+  const finalizePageIds = allPages
+    .map((page: any, pageIndex: number) => getChunkPageId(page, pageIndex))
+    .filter(Boolean);
+
+  await syncNormalizedIndexChunk({
+    supabaseAdmin,
+    owner: { type: 'user', userId: user.id },
+    fileKey: finalFileKey,
+    projectId: documentId,
+    fileName: finalFileName,
+    pages: allPages,
+    syncId: uploadId,
+    finalizePageIds,
+  });
 
   // Do NOT process images here (to keep commit fast). We'll post-process asynchronously.
   const jsonBytes = Buffer.byteLength(JSON.stringify(allPages), 'utf8');
@@ -169,7 +275,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const delChunks = await (supabaseAdmin as any).storage.from(bucket).remove([
       `sessions/${uploadId}/session.json`,
-      ...files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`)
+      ...chunkPaths
     ]);
   } catch {}
 
@@ -181,4 +287,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     size: +(fileSizeBytes / 1024 / 1024).toFixed(2)
   });
 }
-

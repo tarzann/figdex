@@ -70,7 +70,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Return simple stats
   const frames = pages.reduce((sum: number, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
   const bytes = JSON.stringify(pages).length;
-  return res.status(200).json({ success: true, stored: true, frames, size: +(bytes / 1024 / 1024).toFixed(2) });
+  return res.status(200).json({
+    success: true,
+    stored: true,
+    frames,
+    size: +(bytes / 1024 / 1024).toFixed(2),
+    chunkPath: chunkName
+  });
 }
-
 

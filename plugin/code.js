@@ -2091,8 +2091,13 @@ figma.ui.onmessage = async (msg) => {
           totalUploaded += chunkFrameCount;
           try {
             var data = await res.json();
-            if (data && data.viewToken) lastViewToken = data.viewToken;
-            if (data && data.sessionId && !activeIndexSessionId) activeIndexSessionId = data.sessionId;
+            if (useStorageFirstUpload && data && data.chunkPath && storageFirstUploadedChunkPaths.indexOf(data.chunkPath) < 0) {
+              storageFirstUploadedChunkPaths.push(data.chunkPath);
+            }
+            if (!useStorageFirstUpload) {
+              if (data && data.viewToken) lastViewToken = data.viewToken;
+              if (data && data.sessionId && !activeIndexSessionId) activeIndexSessionId = data.sessionId;
+            }
           } catch (_) {}
           if (chunkIndex < totalChunks - 1) await sleep(250);
         }
