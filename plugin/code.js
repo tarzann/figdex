@@ -999,12 +999,14 @@ function getTopLevelFrameIds(page) {
     var node = children[i];
     if (node.type === 'FRAME') {
       if ((node.name || '').indexOf('[NO_INDEX]') >= 0) continue;
+      if (!isNodeVisible(node)) continue;
       ids.push(node.id);
     }
     if (node.type === 'SECTION' && node.children) {
+      if (!isNodeVisible(node)) continue;
       for (var j = 0; j < node.children.length; j++) {
         var child = node.children[j];
-        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0) ids.push(child.id);
+        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0 && isNodeVisible(child)) ids.push(child.id);
       }
     }
   }
@@ -1018,12 +1020,14 @@ function getTopLevelFrameNodes(page) {
     var node = children[i];
     if (node.type === 'FRAME') {
       if ((node.name || '').indexOf('[NO_INDEX]') >= 0) continue;
+      if (!isNodeVisible(node)) continue;
       nodes.push(node);
     }
     if (node.type === 'SECTION' && node.children) {
+      if (!isNodeVisible(node)) continue;
       for (var j = 0; j < node.children.length; j++) {
         var child = node.children[j];
-        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0) nodes.push(child);
+        if (child.type === 'FRAME' && (child.name || '').indexOf('[NO_INDEX]') < 0 && isNodeVisible(child)) nodes.push(child);
       }
     }
   }
