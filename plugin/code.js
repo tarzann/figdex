@@ -447,14 +447,19 @@ async function createStorageFirstSignedChunkUpload(token, uploadSession, options
   return data;
 }
 
-async function commitStorageFirstUploadSession(uploadSession, token) {
+async function commitStorageFirstUploadSession(uploadSession, token, options) {
   if (!uploadSession || !uploadSession.commitUrl) throw new Error('Missing upload session commit URL');
+  var commitBody = {};
+  if (options && Array.isArray(options.chunkPaths) && options.chunkPaths.length) {
+    commitBody.chunkPaths = options.chunkPaths.slice(0, 500);
+  }
   var res = await fetchWithTimeout('https://www.figdex.com' + uploadSession.commitUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + token
-    }
+    },
+    body: JSON.stringify(commitBody)
   });
   if (!res.ok) {
     var errText = '';
@@ -1917,6 +1922,7 @@ figma.ui.onmessage = async (msg) => {
       var baseFileName = (fileName || '').trim() || 'Untitled';
       var useStorageFirstUpload = !isGuestMode && !!token && dirtyFrameCount >= STORAGE_FIRST_TRIGGER_FRAMES;
       var storageFirstUploadSession = null;
+      var storageFirstUploadedChunkPaths = [];
       var framesPerChunk = useStorageFirstUpload ? STORAGE_FIRST_FRAMES_PER_CHUNK : DIRECT_UPLOAD_FRAMES_PER_CHUNK;
       var chunkMaxBytes = useStorageFirstUpload ? STORAGE_FIRST_MAX_CHUNK_BYTES : DIRECT_UPLOAD_MAX_CHUNK_BYTES;
       var totalUploaded = 0;
@@ -2200,6 +2206,9 @@ figma.ui.onmessage = async (msg) => {
                 totalChunks: totalChunks,
                 framesDone: totalUploaded
               });
+              if (chunkAttempt && chunkAttempt.ok && chunkAttempt.response && chunkAttempt.response.ok) {
+                storageFirstUploadedChunkPaths.push(signedChunkUpload.path);
+              }
             } catch (signedUploadError) {
               pluginWarn('Storage-first signed upload setup failed, falling back to append', {
                 runId: activeIndexRunId,
@@ -2348,7 +2357,9 @@ figma.ui.onmessage = async (msg) => {
             totalFrames: dirtyFrameCount,
             pagesDone: completedPageIds.length,
           });
-          var commitData = await commitStorageFirstUploadSession(storageFirstUploadSession, token);
+          var commitData = await commitStorageFirstUploadSession(storageFirstUploadSession, token, {
+            chunkPaths: storageFirstUploadedChunkPaths
+          });
           pluginTrace('Storage-first upload committed', {
             runId: activeIndexRunId,
             uploadId: storageFirstUploadSession.uploadId || null,

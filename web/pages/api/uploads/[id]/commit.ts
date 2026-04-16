@@ -9,6 +9,10 @@ export const config = {
   }
 };
 
+type CommitBody = {
+  chunkPaths?: string[];
+};
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -61,6 +65,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!uploadId) {
     return res.status(400).json({ success: false, error: 'uploadId is required' });
   }
+  const body = (req.body || {}) as CommitBody;
+  const directChunkPaths = Array.isArray(body.chunkPaths)
+    ? body.chunkPaths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
 
   // Load manifest
   const manifestPath = `sessions/${uploadId}/session.json`;
@@ -79,25 +87,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const listed = await listSessionChunkFiles((supabaseAdmin as any).storage, bucket, uploadId);
     files = listed.files;
     listError = listed.error;
-    if (files.length > 0) break;
+    if (files.length > 0 || directChunkPaths.length > 0) break;
     if (attempt < 5) {
       await sleep(attempt * 700);
     }
   }
-  if (!files.length) {
+  const listedChunkPaths = files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`);
+  const chunkPaths = Array.from(new Set([...directChunkPaths, ...listedChunkPaths]));
+  if (!chunkPaths.length) {
     return res.status(400).json({
       success: false,
       error: 'No chunks uploaded',
       details: listError?.message || null,
       uploadId,
-      checkedPrefix: `sessions/${uploadId}/chunks`
+      checkedPrefix: `sessions/${uploadId}/chunks`,
+      providedChunkPaths: directChunkPaths.length
     });
   }
 
   // Merge pages from chunks
   const allPages: any[] = [];
-  for (const f of files) {
-    const p = await (supabaseAdmin as any).storage.from(bucket).download(`sessions/${uploadId}/chunks/${f.name}`);
+  for (const chunkPath of chunkPaths) {
+    const p = await (supabaseAdmin as any).storage.from(bucket).download(chunkPath);
     if (p?.error) continue;
     const txt = await p.data.text();
     const json = JSON.parse(txt || '{}');
@@ -197,7 +208,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const delChunks = await (supabaseAdmin as any).storage.from(bucket).remove([
       `sessions/${uploadId}/session.json`,
-      ...files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`)
+      ...chunkPaths
     ]);
   } catch {}
 
