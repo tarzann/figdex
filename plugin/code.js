@@ -889,10 +889,35 @@ function buildIndexProgressTiming(meta) {
   };
 }
 
+function formatProgressDuration(ms) {
+  if (typeof ms !== 'number' || !isFinite(ms) || ms <= 0) return '';
+  var totalSeconds = Math.max(1, Math.round(ms / 1000));
+  var hours = Math.floor(totalSeconds / 3600);
+  var minutes = Math.floor((totalSeconds % 3600) / 60);
+  var seconds = totalSeconds % 60;
+  if (hours > 0) return hours + 'h ' + minutes + 'm';
+  if (minutes > 0) return minutes + 'm ' + seconds + 's';
+  return seconds + 's';
+}
+
+function appendTimingToProgressStep(step, timing) {
+  var label = typeof step === 'string' ? step : '';
+  if (!label) return label;
+  if (!timing || typeof timing !== 'object') return label;
+  var timingParts = [];
+  if (typeof timing.etaMs === 'number' && timing.etaMs > 0) {
+    var etaLabel = formatProgressDuration(timing.etaMs);
+    if (etaLabel) timingParts.push('~' + etaLabel + ' left');
+  }
+  if (!timingParts.length) return label;
+  return label + ' • ' + timingParts.join(' • ');
+}
+
 function postUploadProgressMessage(payload) {
   var nextPayload = payload && typeof payload === 'object' ? Object.assign({}, payload) : { type: 'upload-progress' };
   var timing = buildIndexProgressTiming(nextPayload);
   nextPayload.type = 'upload-progress';
+  nextPayload.step = appendTimingToProgressStep(nextPayload.step, timing);
   nextPayload.elapsedMs = timing.elapsedMs;
   nextPayload.etaMs = timing.etaMs;
   nextPayload.progressRatio = timing.progressRatio;
