@@ -77,12 +77,6 @@ export default async function handler(
       return res.status(401).json({ error: 'Account is deactivated' });
     }
 
-    // Update last login (update updated_at field)
-    await supabase
-      .from('users')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', user.id);
-
     // Return user info (without sensitive data)
     res.status(200).json({
       message: 'API key validated successfully',
