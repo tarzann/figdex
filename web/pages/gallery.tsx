@@ -362,7 +362,9 @@ function groupLogicalFiles(files: any[]): any[] {
   return mergedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
 }
 
-const FOLDER_PAGE_ICON_PATTERN = /^[\s]*([📁🗂️🗂📂])\s*/u;
+const FOLDER_PAGE_ICON_PATTERN = /^[\s]*([📁📂🗂️🗂🗃️🗃])\s*/u;
+const CHILD_PAGE_PREFIX_PATTERN = /^[\s]*([↪→➜➝└├]+)\s*/u;
+const PAGE_ICON_PATTERN = /^[\s]*([📄📃])\s*/u;
 
 function isFolderLikePageName(name: string): boolean {
   return FOLDER_PAGE_ICON_PATTERN.test(String(name || ''));
@@ -370,6 +372,18 @@ function isFolderLikePageName(name: string): boolean {
 
 function stripFolderPrefix(name: string): string {
   return String(name || '').replace(FOLDER_PAGE_ICON_PATTERN, '').trim() || String(name || '');
+}
+
+function isChildLikePageName(name: string): boolean {
+  return CHILD_PAGE_PREFIX_PATTERN.test(String(name || ''));
+}
+
+function stripChildPagePrefix(name: string): string {
+  const stripped = String(name || '')
+    .replace(CHILD_PAGE_PREFIX_PATTERN, '')
+    .replace(PAGE_ICON_PATTERN, '')
+    .trim();
+  return stripped || String(name || '');
 }
 
 function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
@@ -399,15 +413,24 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
       return;
     }
 
-    if (activeFolder) {
+    const isChildPage = isChildLikePageName(page.name);
+    const normalizedPage: DisplayFilePage = {
+      ...page,
+      name: isChildPage ? stripChildPagePrefix(page.name) : page.name,
+      displayFrameCount: typeof page.frameCount === 'number' ? page.frameCount : 0,
+    };
+
+    if (activeFolder && isChildPage) {
       activeFolder.childPageIds = [...(activeFolder.childPageIds || []), page.id];
-      activeFolder.childPages = [...(activeFolder.childPages || []), page];
+      activeFolder.childPages = [...(activeFolder.childPages || []), normalizedPage];
       activeFolder.displayFrameCount = (activeFolder.displayFrameCount || 0) + (typeof page.frameCount === 'number' ? page.frameCount : 0);
+    } else {
+      activeFolder = null;
     }
 
     displayPages.push({
-      ...page,
-      displayFrameCount: typeof page.frameCount === 'number' ? page.frameCount : 0,
+      ...normalizedPage,
+      isFolder: false,
     });
   });
 
@@ -2581,7 +2604,8 @@ export default function Home() {
                         {displayFilePages.map((pageInfo) => {
                           const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
                           const isFolderPage = !!pageInfo.isFolder;
-                          const isIndexedPage = isFolderPage ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false;
+                          const folderChildCount = (pageInfo.childPageIds || []).length;
+                          const isIndexedPage = isFolderPage ? folderChildCount > 0 : pageInfo.isIndexed !== false;
                           return (
                             <ListItemButton
                               key={pageInfo.id}
@@ -2615,7 +2639,9 @@ export default function Home() {
                                 primary={pageInfo.name}
                                 secondary={
                                   isFolderPage
-                                    ? `${(pageInfo.displayFrameCount || 0).toLocaleString()} frames across ${(pageInfo.childPageIds || []).length} pages`
+                                    ? folderChildCount > 0
+                                      ? `${(pageInfo.displayFrameCount || 0).toLocaleString()} frames across ${folderChildCount} pages`
+                                      : 'Folder'
                                     : isIndexedPage
                                       ? `${(pageInfo.displayFrameCount || pageInfo.frameCount || 0).toLocaleString()} frames`
                                       : 'Not indexed'
