@@ -13,7 +13,37 @@ type CreateSessionBody = {
   fileKey: string;
   fileName?: string;
   documentId?: string;
+  pageMeta?: Array<{
+    id?: string;
+    pageId?: string;
+    name?: string;
+    pageName?: string;
+    sortOrder?: number;
+    frameCount?: number;
+    hasFrames?: boolean;
+  }>;
 };
+
+function normalizePageMeta(raw: CreateSessionBody['pageMeta']) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((page, index) => {
+      const pageId = String(page?.pageId || page?.id || '').trim();
+      if (!pageId) return null;
+      const pageName = String(page?.pageName || page?.name || `Page ${index + 1}`).trim() || `Page ${index + 1}`;
+      return {
+        id: pageId,
+        pageId,
+        name: pageName,
+        pageName,
+        sortOrder: typeof page?.sortOrder === 'number' && Number.isFinite(page.sortOrder) ? page.sortOrder : index,
+        frameCount: typeof page?.frameCount === 'number' && Number.isFinite(page.frameCount) ? page.frameCount : 0,
+        hasFrames: page?.hasFrames !== false,
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -54,6 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!body || !body.fileKey || typeof body.fileKey !== 'string') {
     return res.status(400).json({ success: false, error: 'fileKey is required' });
   }
+  const pageMeta = normalizePageMeta(body.pageMeta);
 
   const uploadId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
   const bucket = 'figdex-uploads';
@@ -72,6 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fileKey: body.fileKey,
     fileName: body.fileName || 'Figma Index',
     documentId: body.documentId || null,
+    pageMeta,
     createdAt: new Date().toISOString(),
     status: 'created'
   };
@@ -95,5 +127,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     limits: { maxChunkMB: 2 }
   });
 }
-
 

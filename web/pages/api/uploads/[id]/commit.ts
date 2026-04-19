@@ -14,6 +14,16 @@ type CommitBody = {
   chunkPaths?: string[];
 };
 
+type SavedPageMeta = {
+  id: string;
+  pageId: string;
+  name: string;
+  pageName: string;
+  sortOrder: number;
+  frameCount: number;
+  hasFrames: boolean;
+};
+
 function getChunkPageId(page: any, pageIndex: number): string {
   const rawId = typeof page?.pageId === 'string'
     ? page.pageId
@@ -58,6 +68,124 @@ function mergeChunkPages(pages: any[]): any[] {
   }
 
   return Array.from(merged.values());
+}
+
+function normalizeSavedPageMeta(raw: unknown): SavedPageMeta[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      const page = entry && typeof entry === 'object' ? (entry as Record<string, any>) : null;
+      const pageId = String(page?.pageId || page?.id || '').trim();
+      if (!pageId) return null;
+      const pageName = String(page?.pageName || page?.name || `Page ${index + 1}`).trim() || `Page ${index + 1}`;
+      return {
+        id: pageId,
+        pageId,
+        name: pageName,
+        pageName,
+        sortOrder: typeof page?.sortOrder === 'number' && Number.isFinite(page.sortOrder) ? page.sortOrder : index,
+        frameCount: typeof page?.frameCount === 'number' && Number.isFinite(page.frameCount) ? page.frameCount : 0,
+        hasFrames: page?.hasFrames !== false,
+      };
+    })
+    .filter((page): page is SavedPageMeta => !!page)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function buildIndexedPageMeta(pages: any[]): SavedPageMeta[] {
+  return pages.map((page: any, pageIndex: number) => {
+    const pageId = getChunkPageId(page, pageIndex);
+    const pageName = String(page?.pageName || page?.name || `Page ${pageIndex + 1}`).trim() || `Page ${pageIndex + 1}`;
+    const frameCount = Array.isArray(page?.frames) ? page.frames.length : 0;
+    return {
+      id: pageId,
+      pageId,
+      name: pageName,
+      pageName,
+      sortOrder: typeof page?.sortOrder === 'number' && Number.isFinite(page.sortOrder) ? page.sortOrder : pageIndex,
+      frameCount,
+      hasFrames: frameCount > 0,
+    };
+  });
+}
+
+function mergeSavedPageMeta(existingPages: SavedPageMeta[], nextPages: SavedPageMeta[]): SavedPageMeta[] {
+  const merged = new Map<string, SavedPageMeta>();
+  for (const page of existingPages) {
+    merged.set(page.pageId, { ...page });
+  }
+  for (const page of nextPages) {
+    const existing = merged.get(page.pageId);
+    if (!existing) {
+      merged.set(page.pageId, { ...page });
+      continue;
+    }
+    merged.set(page.pageId, {
+      ...existing,
+      ...page,
+      sortOrder: typeof page.sortOrder === 'number' ? page.sortOrder : existing.sortOrder,
+      frameCount: typeof page.frameCount === 'number' ? page.frameCount : existing.frameCount,
+      hasFrames: page.hasFrames !== false,
+    });
+  }
+  return Array.from(merged.values()).sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.pageName.localeCompare(b.pageName);
+  });
+}
+
+async function persistSavedConnectionPageMeta(params: {
+  supabaseAdmin: any;
+  userId: string;
+  fileKey: string;
+  fileName: string;
+  pageMeta: SavedPageMeta[];
+}) {
+  const { supabaseAdmin, userId, fileKey, fileName, pageMeta } = params;
+  if (!fileKey || !pageMeta.length) return;
+
+  const { data: existingConnection, error: existingConnectionError } = await supabaseAdmin
+    .from('saved_connections')
+    .select('id, page_meta, figma_token')
+    .eq('user_id', userId)
+    .eq('file_key', fileKey)
+    .maybeSingle();
+  if (existingConnectionError) throw existingConnectionError;
+
+  const mergedPageMeta = mergeSavedPageMeta(
+    normalizeSavedPageMeta(existingConnection?.page_meta),
+    pageMeta
+  );
+
+  if (existingConnection?.id) {
+    const updatePayload: Record<string, any> = {
+      file_name: fileName,
+      page_meta: mergedPageMeta,
+    };
+    if (!existingConnection.figma_token) {
+      updatePayload.figma_token = '__storage_first_placeholder__';
+    }
+    const { error: updateError } = await supabaseAdmin
+      .from('saved_connections')
+      .update(updatePayload)
+      .eq('id', existingConnection.id)
+      .eq('user_id', userId);
+    if (updateError) throw updateError;
+    return;
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from('saved_connections')
+    .insert({
+      user_id: userId,
+      file_key: fileKey,
+      file_name: fileName,
+      figma_token: '__storage_first_placeholder__',
+      pages: [],
+      image_quality: 'med',
+      page_meta: mergedPageMeta,
+    });
+  if (insertError) throw insertError;
 }
 
 function sleep(ms: number) {
@@ -184,6 +312,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const finalFileName = manifest.fileName || 'Figma Index';
   const finalFileKey = manifest.fileKey || 'unknown';
   const documentId = manifest.documentId || finalFileKey;
+  const manifestPageMeta = normalizeSavedPageMeta(manifest?.pageMeta);
+  const indexedPageMeta = buildIndexedPageMeta(allPages);
   const framesCount = allPages.reduce((sum, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
   const finalizePageIds = allPages
     .map((page: any, pageIndex: number) => getChunkPageId(page, pageIndex))
@@ -198,6 +328,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     pages: allPages,
     syncId: uploadId,
     finalizePageIds,
+  });
+
+  await persistSavedConnectionPageMeta({
+    supabaseAdmin,
+    userId: user.id,
+    fileKey: finalFileKey,
+    fileName: finalFileName,
+    pageMeta: mergeSavedPageMeta(manifestPageMeta, indexedPageMeta),
   });
 
   // Do NOT process images here (to keep commit fast). We'll post-process asynchronously.

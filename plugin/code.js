@@ -592,7 +592,7 @@ async function postChunkWithRetry(url, requestOptions, meta) {
   return { ok: false, response: lastResponse, error: lastError, attempts: MAX_CHUNK_UPLOAD_ATTEMPTS };
 }
 
-async function createStorageFirstUploadSession(token, fileKey, fileName, documentId) {
+async function createStorageFirstUploadSession(token, fileKey, fileName, documentId, pageMeta) {
   if (!token) throw new Error('Missing account token');
   if (activeIndexRunMetrics) activeIndexRunMetrics.sessionCreateCount += 1;
   var res = await fetchWithTimeout('https://www.figdex.com/api/uploads', {
@@ -604,7 +604,8 @@ async function createStorageFirstUploadSession(token, fileKey, fileName, documen
     body: JSON.stringify({
       fileKey: fileKey,
       fileName: fileName,
-      documentId: documentId
+      documentId: documentId,
+      pageMeta: Array.isArray(pageMeta) ? pageMeta : []
     })
   });
   if (!res.ok) {
@@ -2158,9 +2159,25 @@ figma.ui.onmessage = async (msg) => {
         framesDone: 0,
       });
       await figma.loadAllPagesAsync();
-      const allPages = figma.root.children
-        .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
-        .map((p, index) => ({ id: p.id, name: p.name || 'Untitled', sortOrder: index }));
+      const filePageMeta = figma.root.children
+        .filter(function (pageNode) {
+          return pageNode && pageNode.type === 'PAGE' && pageNode.name !== 'FigDex' && pageNode.name !== 'Frame-Index';
+        })
+        .map(function (pageNode, pageIndex) {
+          var pageName = String(pageNode.name || ('Page ' + (pageIndex + 1))).trim() || ('Page ' + (pageIndex + 1));
+          return {
+            id: pageNode.id,
+            pageId: pageNode.id,
+            name: pageName,
+            pageName: pageName,
+            sortOrder: pageIndex,
+            frameCount: getTopLevelFrameIds(pageNode).length,
+            hasFrames: pageHasIndexableFrames(pageNode)
+          };
+        });
+      const allPages = filePageMeta.map(function (page) {
+        return { id: page.id, name: page.name || 'Untitled', sortOrder: page.sortOrder };
+      });
       const idToName = Object.fromEntries(allPages.map(p => [p.id, p.name]));
       const pageSortOrderById = Object.fromEntries(allPages.map(p => [p.id, p.sortOrder]));
       if (selectedIds.length === 0) {
@@ -2445,7 +2462,7 @@ figma.ui.onmessage = async (msg) => {
       var pluginRunSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       if (useStorageFirstUpload) {
         try {
-          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId);
+          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId, filePageMeta);
           pluginTrace('Storage-first upload session created', {
             runId: activeIndexRunId,
             uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,
