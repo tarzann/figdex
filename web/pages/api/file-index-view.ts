@@ -189,7 +189,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (mode === 'summary') {
-      const pagesMap = new Map<string, { id: string; name: string; frameCount: number }>();
+      const pagesMap = new Map<string, { id: string; name: string; frameCount: number; sortOrder: number }>();
 
       for (const file of normalizedFiles) {
         const { data: pages } = await svc
@@ -200,14 +200,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         (pages || []).forEach((page: any) => {
           const key = String(page.figma_page_id || page.page_name || '');
           if (!key) return;
+          const pageSortOrder = typeof page.sort_order === 'number' ? page.sort_order : Number.MAX_SAFE_INTEGER;
           const existing = pagesMap.get(key);
           if (existing) {
             existing.frameCount += typeof page.frame_count === 'number' ? page.frame_count : 0;
+            existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
           } else {
             pagesMap.set(key, {
               id: String(page.figma_page_id),
               name: page.page_name || 'Untitled Page',
               frameCount: typeof page.frame_count === 'number' ? page.frame_count : 0,
+              sortOrder: pageSortOrder,
             });
           }
         });
@@ -218,18 +221,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pages.forEach((page: any, pageIndex: number) => {
           const key = String(page?.pageId || page?.id || page?.name || `page-${pageIndex}`);
           const frameCount = Array.isArray(page?.frames) ? page.frames.length : 0;
+          const pageSortOrder = pageIndex;
           const existing = pagesMap.get(key);
           if (existing) {
             existing.frameCount += frameCount;
+            existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
           } else {
             pagesMap.set(key, {
               id: key,
               name: page?.pageName || page?.name || `Page ${pageIndex + 1}`,
               frameCount,
+              sortOrder: pageSortOrder,
             });
           }
         });
       }
+
+      const sortedPages = Array.from(pagesMap.values()).sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      });
 
       await logIndexActivity(svc, {
         requestId: `file_summary_${indexIds.join(',')}_${Date.now()}`,
@@ -248,7 +259,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         success: true,
         data: {
-          pages: Array.from(pagesMap.values()),
+          pages: sortedPages,
         },
       });
     }

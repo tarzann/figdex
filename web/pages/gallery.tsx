@@ -592,7 +592,7 @@ export default function Home() {
   // Gallery Lobby state
   const [viewMode, setViewMode] = useState<'lobby' | 'allFrames' | 'file'>('lobby'); // 'lobby' = show file thumbnails, 'allFrames' = show all frames, 'file' = show frames of selected file
   const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string } | null>(null);
-  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number }>>([]);
+  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number; sortOrder?: number }>>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
   const [filePageLoading, setFilePageLoading] = useState(false);
@@ -2433,35 +2433,98 @@ export default function Home() {
                 <ListItemText primary="All Frames" primaryTypographyProps={{ variant: 'body2' }} />
               </ListItemButton>
               
-              {/* Files - Hierarchical under Lobby */}
-              {indexFiles.map((file) => (
-                <ListItemButton
-                  key={file.id}
-                  selected={selectedIndex === file.id || (selectedFile?.id === file.id && viewMode === 'file')}
-                  onClick={() => {
-                    setSelectedIndex(file.id);
-                    loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}`, _chunks: file._chunks });
-                  }}
-                  sx={{
-                    borderRadius: 1,
-                    mb: 0.5,
-                    pl: 4,
-                    '&.Mui-selected': {
-                      bgcolor: '#111827',
-                      color: 'white',
-                      '&:hover': {
-                        bgcolor: '#1f2937',
-                      }
-                    }
-                  }}
-                >
-                  <FolderOpenIcon sx={{ mr: 1, fontSize: 18 }} />
-                  <ListItemText 
-                    primary={file.file_name || `Index ${file.id}`} 
-                    primaryTypographyProps={{ variant: 'body2' }}
-                  />
-                </ListItemButton>
-              ))}
+              {/* Files with page tree for the selected file */}
+              {indexFiles.map((file) => {
+                const isSelectedFile = selectedIndex === file.id || (selectedFile?.id === file.id && viewMode === 'file');
+                return (
+                  <Box key={file.id}>
+                    <ListItemButton
+                      selected={isSelectedFile}
+                      onClick={() => {
+                        setSelectedIndex(file.id);
+                        loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}`, _chunks: file._chunks });
+                      }}
+                      sx={{
+                        borderRadius: 1,
+                        mb: 0.5,
+                        pl: 4,
+                        '&.Mui-selected': {
+                          bgcolor: '#111827',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#1f2937',
+                          }
+                        }
+                      }}
+                    >
+                      <FolderOpenIcon sx={{ mr: 1, fontSize: 18 }} />
+                      <ListItemText
+                        primary={file.file_name || `Index ${file.id}`}
+                        primaryTypographyProps={{ variant: 'body2', fontWeight: isSelectedFile ? 700 : 500 }}
+                      />
+                      {isSelectedFile && filePages.length > 0 && <ExpandMoreIcon sx={{ fontSize: 18 }} />}
+                    </ListItemButton>
+
+                    {isSelectedFile && filePages.length > 0 && (
+                      <List
+                        dense
+                        disablePadding
+                        sx={{
+                          mt: 0.25,
+                          mb: 0.75,
+                          ml: 3.5,
+                          pl: 1.5,
+                          borderLeft: '1px solid #e5e7eb',
+                        }}
+                      >
+                        {filePages.map((pageInfo) => {
+                          const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+                          return (
+                            <ListItemButton
+                              key={pageInfo.id}
+                              selected={isSelectedPage}
+                              onClick={() => {
+                                setSearch('');
+                                setPage(1);
+                                setFileModeSearchActive(false);
+                                setSelectedFilePageId(pageInfo.id);
+                                setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
+                              }}
+                              sx={{
+                                borderRadius: 1,
+                                py: 0.5,
+                                px: 1,
+                                mb: 0.25,
+                                '&.Mui-selected': {
+                                  bgcolor: '#eef4ff',
+                                  color: '#3538cd',
+                                  '&:hover': {
+                                    bgcolor: '#e0ecff',
+                                  }
+                                }
+                              }}
+                            >
+                              <ListItemText
+                                primary={pageInfo.name}
+                                secondary={`${pageInfo.frameCount.toLocaleString()} frames`}
+                                primaryTypographyProps={{
+                                  variant: 'body2',
+                                  fontWeight: isSelectedPage ? 700 : 500,
+                                  sx: { lineHeight: 1.2 }
+                                }}
+                                secondaryTypographyProps={{
+                                  variant: 'caption',
+                                  sx: { lineHeight: 1.2 }
+                                }}
+                              />
+                            </ListItemButton>
+                          );
+                        })}
+                      </List>
+                    )}
+                  </Box>
+                );
+              })}
             </List>
           </Box>
 
