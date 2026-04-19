@@ -1092,6 +1092,46 @@ export default function Home() {
     }
   }, [loading]);
 
+  const resolveCanonicalFileInfo = (fileInfo: { id: string; fileName?: string; file_name?: string; _chunks?: any[]; fileKey?: string | null; figma_file_key?: string | null }) => {
+    const candidateFileKey =
+      typeof fileInfo?.fileKey === 'string' && fileInfo.fileKey.trim()
+        ? fileInfo.fileKey.trim()
+        : typeof fileInfo?.figma_file_key === 'string' && fileInfo.figma_file_key.trim()
+          ? fileInfo.figma_file_key.trim()
+          : '';
+
+    const candidateId = String(fileInfo?.id || '').trim();
+
+    const canonical = indexFiles.find((file: any) => {
+      const fileId = String(file?.id || '').trim();
+      const fileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+      if (candidateFileKey && (fileKey === candidateFileKey || getStableLogicalFileId(file) === candidateFileKey)) {
+        return true;
+      }
+      if (candidateId && fileId === candidateId) {
+        return true;
+      }
+      const chunks = Array.isArray(file?._chunks) ? file._chunks : [];
+      return candidateId
+        ? chunks.some((chunk: any) => String(chunk?.id || '').trim() === candidateId)
+        : false;
+    }) || null;
+
+    if (!canonical) {
+      return {
+        ...fileInfo,
+        fileName: fileInfo.fileName || fileInfo.file_name || `Index ${fileInfo.id}`,
+        fileKey: candidateFileKey || null,
+      };
+    }
+
+    return {
+      ...canonical,
+      fileName: canonical.file_name || canonical.fileName || `Index ${canonical.id}`,
+      fileKey: canonical.figma_file_key || candidateFileKey || null,
+    };
+  };
+
   const getFileIndexIds = (fileInfo: { id: string; _chunks?: any[] }) =>
     fileInfo._chunks?.length ? fileInfo._chunks.map((chunk: any) => chunk.id) : [fileInfo.id];
 
@@ -1103,6 +1143,7 @@ export default function Home() {
     pageIds?: string[]
   ) => {
     try {
+      const canonicalFileInfo = resolveCanonicalFileInfo(fileInfo as any);
       setFilePageLoading(true);
       setFrames([]);
       setFileModeSearchActive(false);
@@ -1112,7 +1153,7 @@ export default function Home() {
         ? `pageIds=${encodeURIComponent(requestedPageIds.join(','))}`
         : `pageId=${encodeURIComponent(pageId)}`;
       const response = await fetch(
-        `/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&${pageQuery}&offset=${offset}&limit=${pageSizeValue}`
+        `/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(canonicalFileInfo).join(','))}&${pageQuery}&offset=${offset}&limit=${pageSizeValue}`
       );
       const data = await parseJsonResponse(response, 'Failed to load page frames');
       if (!data?.success) {
@@ -1122,8 +1163,8 @@ export default function Home() {
       }
       const pageFrames = Array.isArray(data?.data?.frames) ? data.data.frames.map((frame: any) => ({
         ...frame,
-        _fileId: fileInfo.id,
-        _fileName: fileInfo.fileName,
+        _fileId: canonicalFileInfo.id,
+        _fileName: canonicalFileInfo.fileName,
       })) : [];
       setSelectedFilePageId(pageId);
       setSelectedFilePageFrameCount(
@@ -1143,9 +1184,10 @@ export default function Home() {
 
   const searchSelectedFile = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }, query: string) => {
     try {
+      const canonicalFileInfo = resolveCanonicalFileInfo(fileInfo as any);
       setError('');
       setFileSearchLoading(true);
-      const response = await fetch(`/api/file-index-view?mode=search&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&q=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/file-index-view?mode=search&indexIds=${encodeURIComponent(getFileIndexIds(canonicalFileInfo).join(','))}&q=${encodeURIComponent(query)}`);
       const data = await parseJsonResponse(response, 'Failed to search file');
       if (!data?.success) {
         setError(data?.error || 'Failed to search file');
@@ -1153,8 +1195,8 @@ export default function Home() {
       }
       const searchFrames = Array.isArray(data?.data?.frames) ? data.data.frames.map((frame: any) => ({
         ...frame,
-        _fileId: fileInfo.id,
-        _fileName: fileInfo.fileName,
+        _fileId: canonicalFileInfo.id,
+        _fileName: canonicalFileInfo.fileName,
       })) : [];
       setFileModeSearchActive(true);
       setFrames(searchFrames);
@@ -1169,11 +1211,12 @@ export default function Home() {
   // Load frames for specific file using lightweight page summary first
   const loadFileFrames = async (fileInfo: { id: string; fileName: string; _chunks?: any[]; fileKey?: string | null }) => {
     try {
+      const canonicalFileInfo = resolveCanonicalFileInfo(fileInfo as any);
       setLoading(true);
       setError('');
       setViewMode('file');
-      setSelectedFile(fileInfo);
-      setSelectedIndex(fileInfo.id);
+      setSelectedFile(canonicalFileInfo);
+      setSelectedIndex(canonicalFileInfo.id);
       setFrames([]);
       setFilePages([]);
       setSelectedFilePageId(null);
@@ -1182,7 +1225,7 @@ export default function Home() {
       setFileModeSearchActive(false);
 
       const user = getCurrentUser();
-      const summaryUrl = `/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}${fileInfo.fileKey ? `&fileKey=${encodeURIComponent(fileInfo.fileKey)}` : ''}`;
+      const summaryUrl = `/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(canonicalFileInfo).join(','))}${canonicalFileInfo.fileKey ? `&fileKey=${encodeURIComponent(canonicalFileInfo.fileKey)}` : ''}`;
       const response = await fetch(summaryUrl, {
         headers: user?.api_key ? { Authorization: `Bearer ${user.api_key}` } : undefined,
       });
