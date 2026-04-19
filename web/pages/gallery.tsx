@@ -2613,8 +2613,8 @@ export default function Home() {
                         sx={{
                           mt: 0.35,
                           mb: 0.75,
-                          ml: 3.5,
-                          pl: 1.25,
+                          ml: 2.4,
+                          pl: 0.75,
                           pr: 0.25,
                           borderLeft: '1px solid #e5e7eb',
                         }}
@@ -2624,20 +2624,30 @@ export default function Home() {
                           const isFolderPage = !!pageInfo.isFolder;
                           const folderChildCount = (pageInfo.childPageIds || []).length;
                           const isIndexedPage = isFolderPage ? folderChildCount > 0 : pageInfo.isIndexed !== false;
+                          const isDisabledPage = !isFolderPage && !isIndexedPage;
+                          const pageFrameCount = Number(pageInfo.displayFrameCount || pageInfo.frameCount || 0);
+                          const inlineLabel = isFolderPage
+                            ? folderChildCount > 0
+                              ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
+                              : pageInfo.name
+                            : isIndexedPage
+                              ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
+                              : pageInfo.name;
                           return (
                             <ListItemButton
                               key={pageInfo.id}
                               selected={isSelectedPage}
+                              disabled={isDisabledPage}
                               onClick={() => {
                                 activateFilePage(pageInfo);
                               }}
                               sx={{
                                 borderRadius: 1,
-                                py: 0.22,
-                                px: 0.8,
-                                minHeight: 30,
-                                mb: 0.05,
-                                ml: isFolderPage ? 0 : 0.8,
+                                py: 0.32,
+                                px: 0.7,
+                                minHeight: 28,
+                                mb: 0.02,
+                                ml: 0,
                                 alignItems: 'center',
                                 '&.Mui-selected': {
                                   bgcolor: '#eef4ff',
@@ -2649,40 +2659,24 @@ export default function Home() {
                                 '&:hover': {
                                   bgcolor: '#f8fafc',
                                 },
+                                '&.Mui-disabled': {
+                                  opacity: 0.58,
+                                  color: '#98a2b3',
+                                }
                               }}
                             >
-                              <Box sx={{ width: 16, minWidth: 16, mr: 0.75, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Box sx={{ width: 16, minWidth: 16, mr: 0.55, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {isFolderPage ? <FolderOpenIcon sx={{ fontSize: 15 }} /> : null}
                               </Box>
                               <ListItemText
-                                primary={pageInfo.name}
-                                secondary={
-                                  isFolderPage
-                                    ? folderChildCount > 0
-                                      ? `${(pageInfo.displayFrameCount || 0).toLocaleString()} frames across ${folderChildCount} pages`
-                                      : 'Folder'
-                                    : isIndexedPage
-                                      ? `${(pageInfo.displayFrameCount || pageInfo.frameCount || 0).toLocaleString()} frames`
-                                      : 'Not indexed'
-                                }
+                                primary={inlineLabel}
                                 sx={{ minWidth: 0, my: 0 }}
                                 primaryTypographyProps={{
                                   variant: 'body2',
                                   fontWeight: isSelectedPage ? 700 : 500,
                                   sx: {
                                     lineHeight: 1.15,
-                                    fontSize: '0.74rem',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                  }
-                                }}
-                                secondaryTypographyProps={{
-                                  variant: 'caption',
-                                  sx: {
-                                    lineHeight: 1.05,
-                                    color: isFolderPage ? '#175cd3' : (isIndexedPage ? 'inherit' : '#98a2b3'),
-                                    fontSize: '0.63rem',
+                                    fontSize: '0.79rem',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis'
