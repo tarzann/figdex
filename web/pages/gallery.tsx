@@ -386,6 +386,20 @@ function stripChildPagePrefix(name: string): string {
   return stripped || String(name || '');
 }
 
+function shouldHidePageFromTree(name: string): boolean {
+  const normalized = String(name || '').trim();
+  if (!normalized) return true;
+  if (/^[-_\s]{3,}$/.test(normalized)) return true;
+  if (/^cover$/i.test(normalized)) return true;
+
+  const withoutFolder = stripFolderPrefix(normalized);
+  const withoutChild = stripChildPagePrefix(withoutFolder);
+  if (/^[-_\s]{3,}$/.test(withoutChild)) return true;
+  if (/^cover$/i.test(withoutChild)) return true;
+
+  return false;
+}
+
 function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
   const sortedPages = [...pages].sort((a, b) => {
     const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER;
@@ -398,6 +412,10 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
   let activeFolder: DisplayFilePage | null = null;
 
   sortedPages.forEach((page) => {
+    if (shouldHidePageFromTree(page.name)) {
+      return;
+    }
+
     if (isFolderLikePageName(page.name)) {
       const folderPage: DisplayFilePage = {
         ...page,
@@ -2615,10 +2633,10 @@ export default function Home() {
                               }}
                               sx={{
                                 borderRadius: 1,
-                                py: 0.35,
-                                px: 0.9,
-                                minHeight: 34,
-                                mb: 0.1,
+                                py: 0.22,
+                                px: 0.8,
+                                minHeight: 30,
+                                mb: 0.05,
                                 ml: isFolderPage ? 0 : 0.8,
                                 alignItems: 'center',
                                 '&.Mui-selected': {
@@ -2653,7 +2671,7 @@ export default function Home() {
                                   fontWeight: isSelectedPage ? 700 : 500,
                                   sx: {
                                     lineHeight: 1.15,
-                                    fontSize: '0.76rem',
+                                    fontSize: '0.74rem',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis'
@@ -2664,7 +2682,7 @@ export default function Home() {
                                   sx: {
                                     lineHeight: 1.05,
                                     color: isFolderPage ? '#175cd3' : (isIndexedPage ? 'inherit' : '#98a2b3'),
-                                    fontSize: '0.66rem',
+                                    fontSize: '0.63rem',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis'
