@@ -13,6 +13,7 @@ type CreateSessionBody = {
   fileKey: string;
   fileName?: string;
   documentId?: string;
+  coverImageDataUrl?: string | null;
   pageMeta?: Array<{
     id?: string;
     pageId?: string;
@@ -103,6 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fileKey: body.fileKey,
     fileName: body.fileName || 'Figma Index',
     documentId: body.documentId || null,
+    coverImageDataUrl: typeof body.coverImageDataUrl === 'string' ? body.coverImageDataUrl : null,
     pageMeta,
     createdAt: new Date().toISOString(),
     status: 'created'
@@ -127,4 +129,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     limits: { maxChunkMB: 2 }
   });
 }
-

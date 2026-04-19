@@ -15,6 +15,14 @@ type RepairPageMeta = {
   hasFrames: boolean;
 };
 
+function sanitizeStorageSegment(value: string, fallback: string) {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-');
+  return normalized || fallback;
+}
+
 function normalizePageMeta(raw: unknown): RepairPageMeta[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -35,6 +43,31 @@ function normalizePageMeta(raw: unknown): RepairPageMeta[] {
     })
     .filter((page): page is RepairPageMeta => !!page)
     .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+async function uploadCoverFromDataUrl(params: {
+  svc: any;
+  userId: string;
+  fileKey: string;
+  coverImageDataUrl?: string | null;
+}) {
+  const { svc, userId, fileKey, coverImageDataUrl } = params;
+  if (!coverImageDataUrl || !coverImageDataUrl.startsWith('data:image/')) return null;
+  const base64Match = coverImageDataUrl.match(/^data:image\/[^;]+;base64,(.+)$/);
+  const base64 = base64Match ? base64Match[1] : null;
+  if (!base64) return null;
+
+  const buffer = Buffer.from(base64, 'base64');
+  const objectPath = `user/${sanitizeStorageSegment(userId, 'user')}/covers/${sanitizeStorageSegment(fileKey, 'file')}_cover.png`;
+  const bucket = 'figdex-uploads';
+  const upload = await svc.storage.from(bucket).upload(objectPath, buffer, {
+    contentType: 'image/png',
+    upsert: true,
+  });
+  if (upload?.error) {
+    throw new Error(upload.error.message || 'Failed to upload cover image');
+  }
+  return `${bucket}:${objectPath}`;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -62,6 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const fileKey = typeof req.body?.fileKey === 'string' ? req.body.fileKey.trim() : '';
   const pageMeta = normalizePageMeta(req.body?.pageMeta);
+  const coverImageDataUrl = typeof req.body?.coverImageDataUrl === 'string' ? req.body.coverImageDataUrl : null;
 
   if (!fileKey) {
     return res.status(400).json({ success: false, error: 'fileKey is required' });
@@ -73,6 +107,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const svc = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    const uploadedCoverImageUrl = await uploadCoverFromDataUrl({
+      svc,
+      userId,
+      fileKey,
+      coverImageDataUrl,
+    });
+
     const { data: indexedFiles, error: indexedFilesError } = await svc
       .from('indexed_files')
       .select('id, file_name')
@@ -127,7 +168,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { error: updateConnectionError } = await svc
       .from('saved_connections')
-      .update({ page_meta: pageMeta })
+      .update({
+        page_meta: pageMeta,
+        ...(uploadedCoverImageUrl ? { file_thumbnail_url: uploadedCoverImageUrl } : {})
+      })
       .eq('id', savedConnectionId)
       .eq('user_id', userId);
 
@@ -143,7 +187,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     let updatedPagesCount = 0;
+    let updatedFilesCount = 0;
     for (const file of indexedFiles || []) {
+      if (uploadedCoverImageUrl) {
+        const { error: updateIndexedFileError } = await svc
+          .from('indexed_files')
+          .update({ cover_image_url: uploadedCoverImageUrl })
+          .eq('id', file.id);
+        if (updateIndexedFileError) {
+          return res.status(500).json({ success: false, error: 'Failed to repair indexed file cover' });
+        }
+        updatedFilesCount += 1;
+      }
+
       const { data: indexedPages, error: indexedPagesError } = await svc
         .from('indexed_pages')
         .select('id, figma_page_id, page_name, sort_order')
@@ -184,7 +240,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fileKey,
       pageMetaCount: pageMeta.length,
       updatedPagesCount,
+      updatedFilesCount,
       indexedFileCount: (indexedFiles || []).length,
+      updatedCover: !!uploadedCoverImageUrl,
     });
   } catch (error: any) {
     return res.status(500).json({

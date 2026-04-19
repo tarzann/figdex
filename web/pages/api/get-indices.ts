@@ -436,11 +436,12 @@ export default async function handler(
           const connectionsError = connectionsResult.error;
           
           if (!connectionsError && Array.isArray(connections)) {
-            connections.forEach((conn: any) => {
+            for (const conn of connections) {
               if (conn.file_key && conn.file_thumbnail_url) {
-                fileKeyToThumbnail.set(conn.file_key, conn.file_thumbnail_url);
+                const resolvedThumbnail = await signStorageLikeUrl(svc, conn.file_thumbnail_url) || conn.file_thumbnail_url;
+                fileKeyToThumbnail.set(conn.file_key, resolvedThumbnail);
               }
-            });
+            }
             console.log(`📸 Found ${fileKeyToThumbnail.size} file thumbnails from saved_connections`);
           }
         }

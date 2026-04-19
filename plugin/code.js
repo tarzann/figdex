@@ -466,6 +466,12 @@ async function repairGalleryPagesOnServer(fileKey, token) {
   if (!token) throw new Error('Connect your FigDex account before running repair.');
   var pageMeta = await buildCurrentFilePageMeta();
   if (!pageMeta.length) throw new Error('No Figma pages found to repair.');
+  var coverImageDataUrl = null;
+  try {
+    coverImageDataUrl = await getCoverImageDataUrl();
+  } catch (_) {
+    coverImageDataUrl = null;
+  }
   var res = await fetchWithTimeout('https://www.figdex.com/api/repair-file-pages', {
     method: 'POST',
     headers: {
@@ -474,7 +480,8 @@ async function repairGalleryPagesOnServer(fileKey, token) {
     },
     body: JSON.stringify({
       fileKey: fileKey,
-      pageMeta: pageMeta
+      pageMeta: pageMeta,
+      coverImageDataUrl: coverImageDataUrl
     })
   });
   if (!res.ok) {
@@ -592,7 +599,7 @@ async function postChunkWithRetry(url, requestOptions, meta) {
   return { ok: false, response: lastResponse, error: lastError, attempts: MAX_CHUNK_UPLOAD_ATTEMPTS };
 }
 
-async function createStorageFirstUploadSession(token, fileKey, fileName, documentId, pageMeta) {
+async function createStorageFirstUploadSession(token, fileKey, fileName, documentId, pageMeta, coverImageDataUrl) {
   if (!token) throw new Error('Missing account token');
   if (activeIndexRunMetrics) activeIndexRunMetrics.sessionCreateCount += 1;
   var res = await fetchWithTimeout('https://www.figdex.com/api/uploads', {
@@ -605,7 +612,8 @@ async function createStorageFirstUploadSession(token, fileKey, fileName, documen
       fileKey: fileKey,
       fileName: fileName,
       documentId: documentId,
-      pageMeta: Array.isArray(pageMeta) ? pageMeta : []
+      pageMeta: Array.isArray(pageMeta) ? pageMeta : [],
+      coverImageDataUrl: typeof coverImageDataUrl === 'string' ? coverImageDataUrl : null
     })
   });
   if (!res.ok) {
@@ -2462,7 +2470,7 @@ figma.ui.onmessage = async (msg) => {
       var pluginRunSessionId = 'sync_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       if (useStorageFirstUpload) {
         try {
-          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId, filePageMeta);
+          storageFirstUploadSession = await createStorageFirstUploadSession(token, fileKey, baseFileName, docId, filePageMeta, coverImageDataUrl);
           pluginTrace('Storage-first upload session created', {
             runId: activeIndexRunId,
             uploadId: storageFirstUploadSession && storageFirstUploadSession.uploadId ? storageFirstUploadSession.uploadId : null,

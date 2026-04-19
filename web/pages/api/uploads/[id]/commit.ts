@@ -24,6 +24,14 @@ type SavedPageMeta = {
   hasFrames: boolean;
 };
 
+function sanitizeStorageSegment(value: string, fallback: string) {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-');
+  return normalized || fallback;
+}
+
 function getChunkPageId(page: any, pageIndex: number): string {
   const rawId = typeof page?.pageId === 'string'
     ? page.pageId
@@ -140,8 +148,9 @@ async function persistSavedConnectionPageMeta(params: {
   fileKey: string;
   fileName: string;
   pageMeta: SavedPageMeta[];
+  fileThumbnailUrl?: string | null;
 }) {
-  const { supabaseAdmin, userId, fileKey, fileName, pageMeta } = params;
+  const { supabaseAdmin, userId, fileKey, fileName, pageMeta, fileThumbnailUrl } = params;
   if (!fileKey || !pageMeta.length) return;
 
   const { data: existingConnection, error: existingConnectionError } = await supabaseAdmin
@@ -162,6 +171,9 @@ async function persistSavedConnectionPageMeta(params: {
       file_name: fileName,
       page_meta: mergedPageMeta,
     };
+    if (fileThumbnailUrl) {
+      updatePayload.file_thumbnail_url = fileThumbnailUrl;
+    }
     if (!existingConnection.figma_token) {
       updatePayload.figma_token = '__storage_first_placeholder__';
     }
@@ -184,8 +196,35 @@ async function persistSavedConnectionPageMeta(params: {
       pages: [],
       image_quality: 'med',
       page_meta: mergedPageMeta,
+      file_thumbnail_url: fileThumbnailUrl || null,
     });
   if (insertError) throw insertError;
+}
+
+async function uploadCoverFromDataUrl(params: {
+  supabaseAdmin: any;
+  userId: string;
+  fileKey: string;
+  coverImageDataUrl?: string | null;
+}) {
+  const { supabaseAdmin, userId, fileKey, coverImageDataUrl } = params;
+  if (!coverImageDataUrl || !coverImageDataUrl.startsWith('data:image/')) return null;
+  const base64Match = coverImageDataUrl.match(/^data:image\/[^;]+;base64,(.+)$/);
+  const base64 = base64Match ? base64Match[1] : null;
+  if (!base64) return null;
+
+  const buffer = Buffer.from(base64, 'base64');
+  const safeFileKey = sanitizeStorageSegment(fileKey, 'file');
+  const objectPath = `user/${sanitizeStorageSegment(userId, 'user')}/covers/${safeFileKey}_cover.png`;
+  const bucket = 'figdex-uploads';
+  const upload = await supabaseAdmin.storage.from(bucket).upload(objectPath, buffer, {
+    contentType: 'image/png',
+    upsert: true,
+  });
+  if (upload?.error) {
+    throw new Error(upload.error.message || 'Failed to upload cover image');
+  }
+  return `${bucket}:${objectPath}`;
 }
 
 function sleep(ms: number) {
@@ -314,6 +353,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const documentId = manifest.documentId || finalFileKey;
   const manifestPageMeta = normalizeSavedPageMeta(manifest?.pageMeta);
   const indexedPageMeta = buildIndexedPageMeta(allPages);
+  const uploadedCoverImageUrl = await uploadCoverFromDataUrl({
+    supabaseAdmin,
+    userId: user.id,
+    fileKey: finalFileKey,
+    coverImageDataUrl: typeof manifest?.coverImageDataUrl === 'string' ? manifest.coverImageDataUrl : null,
+  });
   const framesCount = allPages.reduce((sum, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
   const finalizePageIds = allPages
     .map((page: any, pageIndex: number) => getChunkPageId(page, pageIndex))
@@ -325,6 +370,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fileKey: finalFileKey,
     projectId: documentId,
     fileName: finalFileName,
+    coverImageUrl: uploadedCoverImageUrl,
     pages: allPages,
     syncId: uploadId,
     finalizePageIds,
@@ -336,6 +382,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fileKey: finalFileKey,
     fileName: finalFileName,
     pageMeta: mergeSavedPageMeta(manifestPageMeta, indexedPageMeta),
+    fileThumbnailUrl: uploadedCoverImageUrl,
   });
 
   // Do NOT process images here (to keep commit fast). We'll post-process asynchronously.
