@@ -201,16 +201,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const pagesMap = new Map<string, { id: string; name: string; frameCount: number; sortOrder: number; isIndexed: boolean }>();
       const fileKey = typeof req.query.fileKey === 'string' ? req.query.fileKey.trim() : '';
       const userId = fileKey ? await getUserIdFromApiKey(req) : null;
+      let connectionPages: any[] = [];
+      let savedConnectionId: string | null = null;
+      let fetchedConnectionPagesFromFigma = false;
 
       if (fileKey && userId) {
         const { data: savedConnection } = await svc
           .from('saved_connections')
-          .select('page_meta, figma_token')
+          .select('id, page_meta, figma_token')
           .eq('user_id', userId)
           .eq('file_key', fileKey)
           .maybeSingle();
+        savedConnectionId = savedConnection?.id ? String(savedConnection.id) : null;
 
-        let connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
+        connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
         if (connectionPages.length === 0 && typeof savedConnection?.figma_token === 'string' && savedConnection.figma_token.trim()) {
           try {
             const figmaFile = await fetchFigmaFile(fileKey, savedConnection.figma_token.trim(), true);
@@ -223,6 +227,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 pageName: child.name || `Page ${pageIndex + 1}`,
                 sortOrder: pageIndex,
               }));
+            fetchedConnectionPagesFromFigma = connectionPages.length > 0;
           } catch {
             connectionPages = [];
           }
@@ -294,6 +299,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
         return a.name.localeCompare(b.name);
       });
+
+      if (fileKey && connectionPages.length > 0) {
+        const sortOrderByPageId = new Map<string, number>();
+        connectionPages.forEach((page: any, pageIndex: number) => {
+          const pageIdValue = String(page?.id || page?.pageId || '').trim();
+          if (!pageIdValue) return;
+          const pageSortOrder = typeof page?.sortOrder === 'number' ? page.sortOrder : pageIndex;
+          sortOrderByPageId.set(pageIdValue, pageSortOrder);
+        });
+
+        if (fetchedConnectionPagesFromFigma && savedConnectionId) {
+          await svc
+            .from('saved_connections')
+            .update({ page_meta: connectionPages })
+            .eq('id', savedConnectionId);
+        }
+
+        if (sortOrderByPageId.size > 0) {
+          for (const file of normalizedFiles) {
+            const { data: storedPages } = await svc
+              .from('indexed_pages')
+              .select('id, figma_page_id, sort_order')
+              .eq('file_id', file.id);
+
+            for (const page of storedPages || []) {
+              const figmaPageId = String(page?.figma_page_id || '').trim();
+              if (!figmaPageId || !sortOrderByPageId.has(figmaPageId)) continue;
+              const desiredSortOrder = sortOrderByPageId.get(figmaPageId);
+              if (typeof desiredSortOrder !== 'number' || page?.sort_order === desiredSortOrder) continue;
+              await svc
+                .from('indexed_pages')
+                .update({ sort_order: desiredSortOrder })
+                .eq('id', page.id);
+            }
+          }
+        }
+      }
 
       await logIndexActivity(svc, {
         requestId: `file_summary_${indexIds.join(',')}_${Date.now()}`,
