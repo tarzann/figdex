@@ -1251,6 +1251,52 @@ export default function Home() {
     if (queryFileKey) setDismissedSuccessFileKey(queryFileKey);
     clearSuccessFileQuery();
   };
+
+  useEffect(() => {
+    if (!router.isReady || indexFiles.length === 0) return;
+    if (viewMode === 'file' && selectedFile) return;
+
+    const rawFileKey = router.query.fileKey;
+    const queryFileKey =
+      typeof rawFileKey === 'string'
+        ? rawFileKey.trim()
+        : Array.isArray(rawFileKey)
+          ? (rawFileKey[0] || '').trim()
+          : '';
+
+    const rawIndex = router.query.index;
+    const queryIndexId =
+      typeof rawIndex === 'string'
+        ? rawIndex.trim()
+        : Array.isArray(rawIndex)
+          ? (rawIndex[0] || '').trim()
+          : '';
+
+    let targetFile: any = null;
+
+    if (queryFileKey) {
+      targetFile = indexFiles.find((file: any) => {
+        const figmaFileKey = typeof file?.figma_file_key === 'string' ? file.figma_file_key.trim() : '';
+        const stableFileKey = getStableLogicalFileId(file);
+        return figmaFileKey === queryFileKey || stableFileKey === queryFileKey;
+      }) || null;
+    }
+
+    if (!targetFile && queryIndexId) {
+      targetFile = indexFiles.find((file: any) => {
+        if (String(file?.id || '') === queryIndexId) return true;
+        const chunks = Array.isArray(file?._chunks) ? file._chunks : [];
+        return chunks.some((chunk: any) => String(chunk?.id || '') === queryIndexId);
+      }) || null;
+    }
+
+    if (!targetFile) return;
+
+    loadFileFrames({
+      ...targetFile,
+      fileKey: targetFile.figma_file_key || null,
+    });
+  }, [router.isReady, router.query.fileKey, router.query.index, indexFiles, viewMode, selectedFile]);
   
   // Load frames for specific index
   const loadIndexFrames = async (indexId: string) => {
