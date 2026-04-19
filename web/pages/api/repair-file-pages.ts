@@ -73,6 +73,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const svc = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    const { data: indexedFiles, error: indexedFilesError } = await svc
+      .from('indexed_files')
+      .select('id, file_name')
+      .eq('user_id', userId)
+      .eq('figma_file_key', fileKey);
+
+    if (indexedFilesError) {
+      return res.status(500).json({ success: false, error: 'Failed to load indexed files' });
+    }
+
     const { data: savedConnection, error: savedConnectionError } = await svc
       .from('saved_connections')
       .select('id')
@@ -83,14 +93,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (savedConnectionError) {
       return res.status(500).json({ success: false, error: 'Failed to load saved connection' });
     }
-    if (!savedConnection?.id) {
-      return res.status(404).json({ success: false, error: 'Saved connection not found for this file' });
+
+    let savedConnectionId = savedConnection?.id || null;
+    if (!savedConnectionId) {
+      const fallbackFileName =
+        String(req.body?.fileName || '').trim() ||
+        String(indexedFiles?.[0]?.file_name || '').trim() ||
+        fileKey;
+
+      const { data: createdConnection, error: createConnectionError } = await svc
+        .from('saved_connections')
+        .insert({
+          user_id: userId,
+          file_key: fileKey,
+          file_name: fallbackFileName,
+          figma_token: '__plugin_repair_placeholder__',
+          pages: [],
+          image_quality: 'med',
+          page_meta: pageMeta,
+        })
+        .select('id')
+        .single();
+
+      if (createConnectionError) {
+        return res.status(500).json({ success: false, error: 'Failed to create saved connection for this file' });
+      }
+      savedConnectionId = createdConnection?.id || null;
+    }
+
+    if (!savedConnectionId) {
+      return res.status(500).json({ success: false, error: 'Saved connection repair failed for this file' });
     }
 
     const { error: updateConnectionError } = await svc
       .from('saved_connections')
       .update({ page_meta: pageMeta })
-      .eq('id', savedConnection.id)
+      .eq('id', savedConnectionId)
       .eq('user_id', userId);
 
     if (updateConnectionError) {
@@ -103,16 +141,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sortOrderByPageId.set(page.pageId, typeof page.sortOrder === 'number' ? page.sortOrder : index);
       pageNameByPageId.set(page.pageId, page.pageName || page.name || `Page ${index + 1}`);
     });
-
-    const { data: indexedFiles, error: indexedFilesError } = await svc
-      .from('indexed_files')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('figma_file_key', fileKey);
-
-    if (indexedFilesError) {
-      return res.status(500).json({ success: false, error: 'Failed to load indexed files' });
-    }
 
     let updatedPagesCount = 0;
     for (const file of indexedFiles || []) {
