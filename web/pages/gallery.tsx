@@ -592,7 +592,7 @@ export default function Home() {
   // Gallery Lobby state
   const [viewMode, setViewMode] = useState<'lobby' | 'allFrames' | 'file'>('lobby'); // 'lobby' = show file thumbnails, 'allFrames' = show all frames, 'file' = show frames of selected file
   const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string } | null>(null);
-  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number; sortOrder?: number }>>([]);
+  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number; sortOrder?: number; isIndexed?: boolean }>>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
   const [filePageLoading, setFilePageLoading] = useState(false);
@@ -1053,7 +1053,7 @@ export default function Home() {
   };
 
   // Load frames for specific file using lightweight page summary first
-  const loadFileFrames = async (fileInfo: { id: string; fileName: string; _chunks?: any[] }) => {
+  const loadFileFrames = async (fileInfo: { id: string; fileName: string; _chunks?: any[]; fileKey?: string | null }) => {
     try {
       setLoading(true);
       setError('');
@@ -1067,7 +1067,11 @@ export default function Home() {
       setFilePageLoading(false);
       setFileModeSearchActive(false);
 
-      const response = await fetch(`/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}`);
+      const user = getCurrentUser();
+      const summaryUrl = `/api/file-index-view?mode=summary&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}${fileInfo.fileKey ? `&fileKey=${encodeURIComponent(fileInfo.fileKey)}` : ''}`;
+      const response = await fetch(summaryUrl, {
+        headers: user?.api_key ? { Authorization: `Bearer ${user.api_key}` } : undefined,
+      });
       const data = await parseJsonResponse(response, 'Failed to load file summary');
       if (!data?.success) {
         setError(data?.error || 'Failed to load file summary');
@@ -1083,10 +1087,13 @@ export default function Home() {
         return;
       }
 
+      const firstIndexedPage = pagesSummary.find((pageInfo: any) => pageInfo?.isIndexed !== false) || null;
       setPage(1);
-      setSelectedFilePageId(String(pagesSummary[0].id));
+      setSelectedFilePageId(firstIndexedPage ? String(firstIndexedPage.id) : null);
       setSelectedFilePageFrameCount(
-        typeof pagesSummary[0].frameCount === 'number' ? pagesSummary[0].frameCount : 0
+        firstIndexedPage && typeof firstIndexedPage.frameCount === 'number'
+          ? firstIndexedPage.frameCount
+          : 0
       );
     } catch (err: any) {
       console.error('Error loading file summary:', err);
@@ -2442,7 +2449,7 @@ export default function Home() {
                       selected={isSelectedFile}
                       onClick={() => {
                         setSelectedIndex(file.id);
-                        loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}`, _chunks: file._chunks });
+                        loadFileFrames({ id: file.id, fileName: file.file_name || `Index ${file.id}`, _chunks: file._chunks, fileKey: file.figma_file_key || null });
                       }}
                       sx={{
                         borderRadius: 1,
@@ -2479,11 +2486,14 @@ export default function Home() {
                       >
                         {filePages.map((pageInfo) => {
                           const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+                          const isIndexedPage = pageInfo.isIndexed !== false;
                           return (
                             <ListItemButton
                               key={pageInfo.id}
                               selected={isSelectedPage}
+                              disabled={!isIndexedPage}
                               onClick={() => {
+                                if (!isIndexedPage) return;
                                 setSearch('');
                                 setPage(1);
                                 setFileModeSearchActive(false);
@@ -2501,12 +2511,16 @@ export default function Home() {
                                   '&:hover': {
                                     bgcolor: '#e0ecff',
                                   }
+                                },
+                                '&.Mui-disabled': {
+                                  opacity: 1,
+                                  color: '#98a2b3',
                                 }
                               }}
                             >
                               <ListItemText
                                 primary={pageInfo.name}
-                                secondary={`${pageInfo.frameCount.toLocaleString()} frames`}
+                                secondary={isIndexedPage ? `${pageInfo.frameCount.toLocaleString()} frames` : 'Not indexed'}
                                 primaryTypographyProps={{
                                   variant: 'body2',
                                   fontWeight: isSelectedPage ? 700 : 500,
@@ -2514,7 +2528,10 @@ export default function Home() {
                                 }}
                                 secondaryTypographyProps={{
                                   variant: 'caption',
-                                  sx: { lineHeight: 1.2 }
+                                  sx: {
+                                    lineHeight: 1.2,
+                                    color: isIndexedPage ? 'inherit' : '#98a2b3'
+                                  }
                                 }}
                               />
                             </ListItemButton>
@@ -3040,14 +3057,16 @@ export default function Home() {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   {filePages.map((pageInfo) => {
                     const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+                    const isIndexedPage = pageInfo.isIndexed !== false;
                     return (
                       <Chip
                         key={pageInfo.id}
-                        label={`${pageInfo.name} (${pageInfo.frameCount})`}
+                        label={isIndexedPage ? `${pageInfo.name} (${pageInfo.frameCount})` : `${pageInfo.name} • Not indexed`}
                         color={isSelected ? 'primary' : 'default'}
                         variant={isSelected ? 'filled' : 'outlined'}
-                        disabled={filePageLoading}
+                        disabled={filePageLoading || !isIndexedPage}
                         onClick={() => {
+                          if (!isIndexedPage) return;
                           setSearch('');
                           setPage(1);
                           setFileModeSearchActive(false);

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { logIndexActivity } from '../../lib/index-activity-log';
+import { getUserIdFromApiKey } from '../../lib/api-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
@@ -57,6 +58,13 @@ const getPagesFromIndexPayload = (raw: any): any[] => {
   const parsed = parseIndexPayload(raw);
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pages)) return parsed.pages;
+  return [];
+};
+
+const getPagesFromConnectionMeta = (raw: any): any[] => {
+  const parsed = parseIndexPayload(raw);
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).pages)) return (parsed as any).pages;
   return [];
 };
 
@@ -189,7 +197,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (mode === 'summary') {
-      const pagesMap = new Map<string, { id: string; name: string; frameCount: number; sortOrder: number }>();
+      const pagesMap = new Map<string, { id: string; name: string; frameCount: number; sortOrder: number; isIndexed: boolean }>();
+      const fileKey = typeof req.query.fileKey === 'string' ? req.query.fileKey.trim() : '';
+      const userId = fileKey ? await getUserIdFromApiKey(req) : null;
+
+      if (fileKey && userId) {
+        const { data: savedConnection } = await svc
+          .from('saved_connections')
+          .select('page_meta')
+          .eq('user_id', userId)
+          .eq('file_key', fileKey)
+          .maybeSingle();
+
+        const connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
+        connectionPages.forEach((page: any, pageIndex: number) => {
+          const key = String(page?.id || page?.pageId || page?.name || `page-${pageIndex}`);
+          if (!key) return;
+          const pageSortOrder = typeof page?.sortOrder === 'number' ? page.sortOrder : pageIndex;
+          pagesMap.set(key, {
+            id: key,
+            name: page?.name || page?.pageName || `Page ${pageIndex + 1}`,
+            frameCount: 0,
+            sortOrder: pageSortOrder,
+            isIndexed: false,
+          });
+        });
+      }
 
       for (const file of normalizedFiles) {
         const { data: pages } = await svc
@@ -205,12 +238,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (existing) {
             existing.frameCount += typeof page.frame_count === 'number' ? page.frame_count : 0;
             existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
+            existing.isIndexed = true;
           } else {
             pagesMap.set(key, {
               id: String(page.figma_page_id),
               name: page.page_name || 'Untitled Page',
               frameCount: typeof page.frame_count === 'number' ? page.frame_count : 0,
               sortOrder: pageSortOrder,
+              isIndexed: true,
             });
           }
         });
@@ -226,12 +261,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (existing) {
             existing.frameCount += frameCount;
             existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
+            existing.isIndexed = true;
           } else {
             pagesMap.set(key, {
               id: key,
               name: page?.pageName || page?.name || `Page ${pageIndex + 1}`,
               frameCount,
               sortOrder: pageSortOrder,
+              isIndexed: true,
             });
           }
         });
