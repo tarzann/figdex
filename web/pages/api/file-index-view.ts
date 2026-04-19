@@ -255,7 +255,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const existing = pagesMap.get(key);
           if (existing) {
             existing.frameCount += typeof page.frame_count === 'number' ? page.frame_count : 0;
-            existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
             existing.isIndexed = true;
           } else {
             pagesMap.set(key, {
@@ -278,7 +277,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const existing = pagesMap.get(key);
           if (existing) {
             existing.frameCount += frameCount;
-            existing.sortOrder = Math.min(existing.sortOrder, pageSortOrder);
             existing.isIndexed = true;
           } else {
             pagesMap.set(key, {

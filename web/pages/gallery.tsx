@@ -591,7 +591,7 @@ export default function Home() {
   
   // Gallery Lobby state
   const [viewMode, setViewMode] = useState<'lobby' | 'allFrames' | 'file'>('lobby'); // 'lobby' = show file thumbnails, 'allFrames' = show all frames, 'file' = show frames of selected file
-  const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string; fileKey?: string | null; _chunks?: any[] } | null>(null);
   const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number; sortOrder?: number; isIndexed?: boolean }>>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
@@ -3114,7 +3114,7 @@ export default function Home() {
                     position: 'relative',
                     ...GALLERY_CARD_SX,
                   }}
-                  onClick={() => loadFileFrames(file)}
+                  onClick={() => loadFileFrames({ ...file, fileKey: file.figma_file_key || null })}
                 >
                   {thumb.image ? (
                     <img
@@ -3319,7 +3319,7 @@ export default function Home() {
                     position: 'relative',
                     ...GALLERY_CARD_SX,
                   }}
-                  onClick={() => loadFileFrames(file)}
+                  onClick={() => loadFileFrames({ ...file, fileKey: file.figma_file_key || null })}
                 >
                   {thumb.image ? (
                     <img src={thumb.image} alt={thumb.label} loading="lazy" style={{ width: '100%', height: 156, display: 'block', objectFit: 'cover' }} onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; const box = el.parentElement; if (box && !box.querySelector('.placeholder')) { const p = document.createElement('div'); p.className = 'placeholder'; p.style.cssText = 'padding:40px;text-align:center;color:#999;background:#f5f5f5;'; p.textContent = 'No thumbnail'; box.appendChild(p); } }} />
@@ -3443,7 +3443,7 @@ export default function Home() {
                   variant="contained"
                   onClick={() => {
                     dismissFirstIndexSuccess();
-                    loadFileFrames(firstIndexedFile);
+                    loadFileFrames({ ...firstIndexedFile, fileKey: firstIndexedFile.figma_file_key || null });
                   }}
                   sx={{
                     bgcolor: '#111827',
