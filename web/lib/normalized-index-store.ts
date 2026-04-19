@@ -34,6 +34,8 @@ type OwnerUsageDelta = {
   deltaFrames?: number;
 };
 
+const INDEXED_FRAME_UPSERT_BATCH_SIZE = 100;
+
 function normalizeText(value?: string | null, fallback = ''): string {
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed || fallback;
@@ -516,10 +518,13 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
         created_at: nowIso,
       }));
 
-      const { error: frameError } = await supabaseAdmin
-        .from('indexed_frames')
-        .upsert(frameRows, { onConflict: 'page_id,figma_frame_id' });
-      if (frameError) throw frameError;
+      for (let batchStart = 0; batchStart < frameRows.length; batchStart += INDEXED_FRAME_UPSERT_BATCH_SIZE) {
+        const frameBatch = frameRows.slice(batchStart, batchStart + INDEXED_FRAME_UPSERT_BATCH_SIZE);
+        const { error: frameError } = await supabaseAdmin
+          .from('indexed_frames')
+          .upsert(frameBatch, { onConflict: 'page_id,figma_frame_id' });
+        if (frameError) throw frameError;
+      }
     }
 
     if (finalizeSet.has(figmaPageId)) {

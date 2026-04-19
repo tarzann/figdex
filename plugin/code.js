@@ -554,6 +554,29 @@ async function commitStorageFirstUploadSession(uploadSession, token, options) {
     return { success: true };
   }
 }
+
+async function applyLocalIndexedPageState(indexedMeta, pageIds, idToName, pageSignaturesById) {
+  var nextMeta = Array.isArray(indexedMeta) ? indexedMeta.slice() : [];
+  nextMeta = nextMeta.filter(function (m) {
+    return !(m && m.pageId && pageIds.indexOf(m.pageId) >= 0);
+  });
+  for (var i = 0; i < pageIds.length; i++) {
+    var pageId = pageIds[i];
+    nextMeta.push({
+      pageId: pageId,
+      pageName: idToName[pageId] || 'Page',
+      lastIndexedAt: Date.now(),
+      frameSignatures: Array.isArray(pageSignaturesById[pageId]) ? pageSignaturesById[pageId] : []
+    });
+  }
+  try {
+    await setStored(STORAGE_KEYS.INDEXED_PAGES, nextMeta);
+  } catch (_) {}
+  try {
+    figma.ui.postMessage({ type: 'pages-indexed', pageIds: pageIds });
+  } catch (_) {}
+  return nextMeta;
+}
 function estimateJsonBytes(value) {
   try {
     if (typeof TextEncoder !== 'undefined') {
@@ -2622,21 +2645,9 @@ figma.ui.onmessage = async (msg) => {
           return;
         }
 
-        try {
-          indexedMeta = indexedMeta.filter(function (m) {
-            return m.pageId && currentPageIds.indexOf(m.pageId) < 0;
-          });
-          for (var ni = 0; ni < currentPageIds.length; ni++) {
-            var dpid = currentPageIds[ni];
-            indexedMeta.push({
-              pageId: dpid,
-              pageName: idToName[dpid] || 'Page',
-              lastIndexedAt: Date.now(),
-              frameSignatures: Array.isArray(pageSignaturesById[dpid]) ? pageSignaturesById[dpid] : (newSignaturesByPage[dpid] || [])
-            });
-          }
-          await setStored(STORAGE_KEYS.INDEXED_PAGES, indexedMeta);
-        } catch (e) {}
+        if (!useStorageFirstUpload) {
+          indexedMeta = await applyLocalIndexedPageState(indexedMeta, currentPageIds, idToName, pageSignaturesById);
+        }
 
         completedPageIds = completedPageIds.concat(currentPageIds);
         completedFrameCount += allPageFrames.length;
@@ -2661,9 +2672,6 @@ figma.ui.onmessage = async (msg) => {
             }
           } catch (_) {}
         }
-        try {
-          figma.ui.postMessage({ type: 'pages-indexed', pageIds: currentPageIds });
-        } catch (e) {}
       }
 
       if (useStorageFirstUpload && storageFirstUploadSession) {
@@ -2686,6 +2694,7 @@ figma.ui.onmessage = async (msg) => {
             frameCount: completedFrameCount,
             pageCount: completedPageIds.length
           });
+          indexedMeta = await applyLocalIndexedPageState(indexedMeta, completedPageIds, idToName, pageSignaturesById);
         } catch (commitErr) {
           var commitMessage = commitErr && commitErr.message ? String(commitErr.message) : 'Failed to finalize uploaded pages';
           if (activeIndexRunMetrics) activeIndexRunMetrics.failed = true;
