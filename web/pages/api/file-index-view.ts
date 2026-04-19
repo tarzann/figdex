@@ -146,6 +146,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const mode = typeof req.query.mode === 'string' ? req.query.mode : 'summary';
   const pageId = typeof req.query.pageId === 'string' ? req.query.pageId : '';
+  const pageIds = typeof req.query.pageIds === 'string'
+    ? req.query.pageIds.split(',').map((value) => value.trim()).filter(Boolean)
+    : [];
   const query = typeof req.query.q === 'string' ? req.query.q : '';
   const parsedOffset = Number.parseInt(typeof req.query.offset === 'string' ? req.query.offset : '0', 10);
   const parsedLimit = Number.parseInt(typeof req.query.limit === 'string' ? req.query.limit : '24', 10);
@@ -360,45 +363,65 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (mode === 'page') {
-      if (!pageId) {
-        return res.status(400).json({ success: false, error: 'pageId is required' });
+      const requestedPageIds = pageIds.length > 0 ? pageIds : (pageId ? [pageId] : []);
+      if (requestedPageIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'pageId or pageIds is required' });
       }
 
       const frames: any[] = [];
       let totalFrames = 0;
 
       for (const file of normalizedFiles) {
-        const { data: normalizedPage } = await svc
+        const { data: normalizedPages } = await svc
           .from('indexed_pages')
-          .select('id, figma_page_id, page_name')
+          .select('id, figma_page_id, page_name, sort_order')
           .eq('file_id', file.id)
-          .eq('figma_page_id', pageId)
-          .maybeSingle();
+          .in('figma_page_id', requestedPageIds)
+          .order('sort_order', { ascending: true });
 
-        if (!normalizedPage) continue;
+        if (!normalizedPages || normalizedPages.length === 0) continue;
+
+        const normalizedPageIds = normalizedPages.map((page: any) => page.id);
+        const pageNameByPageId = new Map<string, string>();
+        const pageSortByPageId = new Map<string, number>();
+        normalizedPages.forEach((page: any, pageIndex: number) => {
+          const key = String(page.id);
+          pageNameByPageId.set(key, page.page_name || 'Untitled Page');
+          pageSortByPageId.set(key, typeof page.sort_order === 'number' ? page.sort_order : pageIndex);
+        });
 
         const { count } = await svc
           .from('indexed_frames')
           .select('id', { count: 'exact', head: true })
-          .eq('page_id', normalizedPage.id);
+          .in('page_id', normalizedPageIds);
 
         totalFrames += typeof count === 'number' ? count : 0;
 
         const { data: normalizedFrames } = await svc
           .from('indexed_frames')
-          .select('figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order, frame_url:frame_payload->>url')
-          .eq('page_id', normalizedPage.id)
-          .range(offset, offset + limit - 1)
+          .select('page_id, figma_frame_id, frame_name, search_text, frame_tags, custom_tags, image_url, thumb_url, sort_order, frame_url:frame_payload->>url')
+          .in('page_id', normalizedPageIds)
           .order('sort_order', { ascending: true });
 
-        for (const frame of normalizedFrames || []) {
+        const orderedNormalizedFrames = (normalizedFrames || [])
+          .slice()
+          .sort((a: any, b: any) => {
+            const pageSortA = pageSortByPageId.get(String(a.page_id)) ?? Number.MAX_SAFE_INTEGER;
+            const pageSortB = pageSortByPageId.get(String(b.page_id)) ?? Number.MAX_SAFE_INTEGER;
+            if (pageSortA !== pageSortB) return pageSortA - pageSortB;
+            return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+          })
+          .slice(offset, offset + limit);
+
+        for (const frame of orderedNormalizedFrames) {
           const payload: any = {};
-          const preview = resolveFramePreview({ ...frame, page_id: normalizedPage.id }, payload);
+          const pageKey = String(frame.page_id);
+          const preview = resolveFramePreview(frame, payload);
           frames.push(buildClientFrame(payload, {
             id: frame.figma_frame_id,
             name: frame.frame_name,
-            pageId,
-            pageName: normalizedPage.page_name,
+            pageId: requestedPageIds.length === 1 ? requestedPageIds[0] : pageKey,
+            pageName: pageNameByPageId.get(pageKey) || payload.pageName || '',
             texts: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.texts,
             textContent: typeof frame.search_text === 'string' && frame.search_text ? frame.search_text : payload.textContent,
             frameTags: Array.isArray(frame.frame_tags) ? frame.frame_tags : [],
@@ -414,22 +437,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pages = getPagesFromIndexPayload(file.index_data);
         pages.forEach((page: any, pageIndex: number) => {
           const candidatePageId = String(page?.pageId || page?.id || page?.name || `page-${pageIndex}`);
-          if (candidatePageId !== pageId || !Array.isArray(page?.frames)) return;
+          if (requestedPageIds.indexOf(candidatePageId) === -1 || !Array.isArray(page?.frames)) return;
           const normalizedPageFrames = page.frames.map((frame: any) => normalizeFrame(frame, page));
           totalFrames += normalizedPageFrames.length;
-          normalizedPageFrames
-            .slice(offset, offset + limit)
-            .forEach((frame: any) => frames.push(frame));
+          normalizedPageFrames.forEach((frame: any) => frames.push(frame));
         });
       }
 
       const dedupedFrames = dedupeFrames(frames);
       const hasSingleNormalizedSource = normalizedFiles.length === 1 && legacyFiles.length === 0;
-      const pageFrames = hasSingleNormalizedSource ? dedupedFrames : dedupedFrames.slice(0, limit);
+      const pageFrames = hasSingleNormalizedSource
+        ? dedupedFrames
+        : dedupedFrames.slice(offset, offset + limit);
       const safeTotalFrames = hasSingleNormalizedSource ? totalFrames : Math.max(totalFrames, dedupedFrames.length);
 
       await logIndexActivity(svc, {
-        requestId: `file_page_${indexIds.join(',')}_${pageId}_${Date.now()}`,
+        requestId: `file_page_${indexIds.join(',')}_${requestedPageIds.join('|')}_${Date.now()}`,
         source: 'web',
         eventType: 'file_page_viewed',
         status: 'completed',
@@ -438,7 +461,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         frameCount: safeTotalFrames,
         message: 'File page loaded',
         metadata: {
-          pageId,
+          pageId: requestedPageIds.join(','),
           offset,
           limit,
           returnedFrames: pageFrames.length,

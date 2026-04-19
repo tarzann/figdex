@@ -146,6 +146,21 @@ type Frame = {
   url?: string; // Optional Figma file link
 };
 
+type FilePageInfo = {
+  id: string;
+  name: string;
+  frameCount: number;
+  sortOrder?: number;
+  isIndexed?: boolean;
+};
+
+type DisplayFilePage = FilePageInfo & {
+  isFolder?: boolean;
+  childPageIds?: string[];
+  childPages?: FilePageInfo[];
+  displayFrameCount?: number;
+};
+
 // Helpers to derive tag categories from frame data (client-side)
 const deriveNamingTags = (rawName: string): string[] => {
   try {
@@ -345,6 +360,58 @@ function groupLogicalFiles(files: any[]): any[] {
   });
 
   return mergedDisplay.sort((a: any, b: any) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime());
+}
+
+const FOLDER_PAGE_ICON_PATTERN = /^[\s]*([📁🗂️🗂📂])\s*/u;
+
+function isFolderLikePageName(name: string): boolean {
+  return FOLDER_PAGE_ICON_PATTERN.test(String(name || ''));
+}
+
+function stripFolderPrefix(name: string): string {
+  return String(name || '').replace(FOLDER_PAGE_ICON_PATTERN, '').trim() || String(name || '');
+}
+
+function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
+  const sortedPages = [...pages].sort((a, b) => {
+    const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER;
+    const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return a.name.localeCompare(b.name);
+  });
+
+  const displayPages: DisplayFilePage[] = [];
+  let activeFolder: DisplayFilePage | null = null;
+
+  sortedPages.forEach((page) => {
+    if (isFolderLikePageName(page.name)) {
+      const folderPage: DisplayFilePage = {
+        ...page,
+        name: stripFolderPrefix(page.name),
+        isFolder: true,
+        isIndexed: true,
+        childPageIds: [],
+        childPages: [],
+        displayFrameCount: 0,
+      };
+      displayPages.push(folderPage);
+      activeFolder = folderPage;
+      return;
+    }
+
+    if (activeFolder) {
+      activeFolder.childPageIds = [...(activeFolder.childPageIds || []), page.id];
+      activeFolder.childPages = [...(activeFolder.childPages || []), page];
+      activeFolder.displayFrameCount = (activeFolder.displayFrameCount || 0) + (typeof page.frameCount === 'number' ? page.frameCount : 0);
+    }
+
+    displayPages.push({
+      ...page,
+      displayFrameCount: typeof page.frameCount === 'number' ? page.frameCount : 0,
+    });
+  });
+
+  return displayPages;
 }
 
 function buildLogicalFileMap(displayFiles: any[]) {
@@ -592,7 +659,7 @@ export default function Home() {
   // Gallery Lobby state
   const [viewMode, setViewMode] = useState<'lobby' | 'allFrames' | 'file'>('lobby'); // 'lobby' = show file thumbnails, 'allFrames' = show all frames, 'file' = show frames of selected file
   const [selectedFile, setSelectedFile] = useState<{ id: string; fileName: string; fileKey?: string | null; _chunks?: any[] } | null>(null);
-  const [filePages, setFilePages] = useState<Array<{ id: string; name: string; frameCount: number; sortOrder?: number; isIndexed?: boolean }>>([]);
+  const [filePages, setFilePages] = useState<FilePageInfo[]>([]);
   const [selectedFilePageId, setSelectedFilePageId] = useState<string | null>(null);
   const [selectedFilePageFrameCount, setSelectedFilePageFrameCount] = useState(0);
   const [filePageLoading, setFilePageLoading] = useState(false);
@@ -606,6 +673,7 @@ export default function Home() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0); // Incremented when tab becomes visible; triggers reload (e.g. after indexing from plugin)
   const [dismissedSuccessFileKey, setDismissedSuccessFileKey] = useState('');
   const [hasStoredUser, setHasStoredUser] = useState(false);
+  const displayFilePages = useMemo(() => buildDisplayFilePages(filePages), [filePages]);
 
   // Filter sidebar state
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(true);
@@ -990,15 +1058,20 @@ export default function Home() {
     fileInfo: { id: string; fileName: string; _chunks?: any[] },
     pageId: string,
     pageNumber: number,
-    pageSizeValue: number
+    pageSizeValue: number,
+    pageIds?: string[]
   ) => {
     try {
       setFilePageLoading(true);
       setFrames([]);
       setFileModeSearchActive(false);
       const offset = Math.max(0, (pageNumber - 1) * pageSizeValue);
+      const requestedPageIds = Array.isArray(pageIds) && pageIds.length > 0 ? pageIds : [pageId];
+      const pageQuery = requestedPageIds.length > 1
+        ? `pageIds=${encodeURIComponent(requestedPageIds.join(','))}`
+        : `pageId=${encodeURIComponent(pageId)}`;
       const response = await fetch(
-        `/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&pageId=${encodeURIComponent(pageId)}&offset=${offset}&limit=${pageSizeValue}`
+        `/api/file-index-view?mode=page&indexIds=${encodeURIComponent(getFileIndexIds(fileInfo).join(','))}&${pageQuery}&offset=${offset}&limit=${pageSizeValue}`
       );
       const data = await parseJsonResponse(response, 'Failed to load page frames');
       if (!data?.success) {
@@ -1087,12 +1160,14 @@ export default function Home() {
         return;
       }
 
-      const firstIndexedPage = pagesSummary.find((pageInfo: any) => pageInfo?.isIndexed !== false) || null;
+      const firstDisplayPage = buildDisplayFilePages(pagesSummary).find((pageInfo: DisplayFilePage) =>
+        pageInfo.isFolder ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false
+      ) || null;
       setPage(1);
-      setSelectedFilePageId(firstIndexedPage ? String(firstIndexedPage.id) : null);
+      setSelectedFilePageId(firstDisplayPage ? String(firstDisplayPage.id) : null);
       setSelectedFilePageFrameCount(
-        firstIndexedPage && typeof firstIndexedPage.frameCount === 'number'
-          ? firstIndexedPage.frameCount
+        firstDisplayPage && typeof (firstDisplayPage.displayFrameCount ?? firstDisplayPage.frameCount) === 'number'
+          ? Number(firstDisplayPage.displayFrameCount ?? firstDisplayPage.frameCount)
           : 0
       );
     } catch (err: any) {
@@ -1103,6 +1178,22 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const activateFilePage = (pageInfo: DisplayFilePage) => {
+    if (filePageLoading) return;
+    const isFolder = !!pageInfo.isFolder;
+    const isIndexedPage = isFolder ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false;
+    if (!isIndexedPage) return;
+    setSearch('');
+    setPage(1);
+    setFileModeSearchActive(false);
+    setSelectedFilePageId(pageInfo.id);
+    setSelectedFilePageFrameCount(
+      typeof pageInfo.displayFrameCount === 'number'
+        ? pageInfo.displayFrameCount
+        : (typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0)
+    );
   };
 
   const clearSuccessFileQuery = () => {
@@ -1183,12 +1274,14 @@ export default function Home() {
       if (trimmedQuery) {
         searchSelectedFile(selectedFile, trimmedQuery);
       } else if (selectedFilePageId) {
-        loadSelectedFilePage(selectedFile, selectedFilePageId, page, pageSize);
+        const selectedDisplayPage = displayFilePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
+        const requestedPageIds = selectedDisplayPage?.isFolder ? (selectedDisplayPage.childPageIds || []) : undefined;
+        loadSelectedFilePage(selectedFile, selectedFilePageId, page, pageSize, requestedPageIds);
       }
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [search, viewMode, selectedFile, selectedFilePageId, fileModeSearchActive, page, pageSize]);
+  }, [search, viewMode, selectedFile, selectedFilePageId, fileModeSearchActive, page, pageSize, displayFilePages]);
   
   // Save favorites to localStorage
   useEffect(() => {
@@ -2290,7 +2383,7 @@ export default function Home() {
     viewMode === 'file'
       ? (fileModeSearchActive
           ? `Searching across ${filePages.length} pages in this file`
-          : `${filePages.length || 0} pages available in this file`)
+          : `${displayFilePages.length || 0} items available in this file`)
       : viewMode === 'allFrames'
         ? `${allGalleryThumbs.length.toLocaleString()} frames across your indexed files`
         : `${indexFiles.length.toLocaleString()} indexed files ready to browse`;
@@ -2309,9 +2402,9 @@ export default function Home() {
         ? `${visibleThumbs.length.toLocaleString()} frames shown`
         : fileModeSearchActive
           ? `${visibleThumbs.length.toLocaleString()} search results`
-          : `${selectedFilePageFrameCount.toLocaleString()} frames in selected page`;
+          : `${selectedFilePageFrameCount.toLocaleString()} frames in selected item`;
 
-  const selectedPageInfo = filePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
+  const selectedPageInfo = displayFilePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
   const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
   const rawSuccessFileKey = router.query.fileKey;
   const successFileKey =
@@ -2472,39 +2565,37 @@ export default function Home() {
                       {isSelectedFile && filePages.length > 0 && <ExpandMoreIcon sx={{ fontSize: 18 }} />}
                     </ListItemButton>
 
-                    {isSelectedFile && filePages.length > 0 && (
+                    {isSelectedFile && displayFilePages.length > 0 && (
                       <List
                         dense
                         disablePadding
                         sx={{
-                          mt: 0.25,
-                          mb: 0.75,
+                          mt: 0.75,
+                          mb: 1.25,
                           ml: 3.5,
-                          pl: 1.5,
+                          pl: 2,
+                          pr: 0.5,
                           borderLeft: '1px solid #e5e7eb',
                         }}
                       >
-                        {filePages.map((pageInfo) => {
+                        {displayFilePages.map((pageInfo) => {
                           const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
-                          const isIndexedPage = pageInfo.isIndexed !== false;
+                          const isFolderPage = !!pageInfo.isFolder;
+                          const isIndexedPage = isFolderPage ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false;
                           return (
                             <ListItemButton
                               key={pageInfo.id}
                               selected={isSelectedPage}
-                              disabled={!isIndexedPage}
                               onClick={() => {
-                                if (!isIndexedPage) return;
-                                setSearch('');
-                                setPage(1);
-                                setFileModeSearchActive(false);
-                                setSelectedFilePageId(pageInfo.id);
-                                setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
+                                activateFilePage(pageInfo);
                               }}
                               sx={{
                                 borderRadius: 1,
-                                py: 0.5,
-                                px: 1,
-                                mb: 0.25,
+                                py: 0.7,
+                                px: 1.25,
+                                mb: 0.45,
+                                ml: isFolderPage ? 0 : 1.25,
+                                alignItems: 'flex-start',
                                 '&.Mui-selected': {
                                   bgcolor: '#eef4ff',
                                   color: '#3538cd',
@@ -2512,25 +2603,34 @@ export default function Home() {
                                     bgcolor: '#e0ecff',
                                   }
                                 },
-                                '&.Mui-disabled': {
-                                  opacity: 1,
-                                  color: '#98a2b3',
-                                }
+                                '&:hover': {
+                                  bgcolor: '#f8fafc',
+                                },
                               }}
                             >
+                              <Box sx={{ pt: 0.1, mr: 1, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3') }}>
+                                {isFolderPage ? <FolderOpenIcon sx={{ fontSize: 15 }} /> : null}
+                              </Box>
                               <ListItemText
                                 primary={pageInfo.name}
-                                secondary={isIndexedPage ? `${pageInfo.frameCount.toLocaleString()} frames` : 'Not indexed'}
+                                secondary={
+                                  isFolderPage
+                                    ? `${(pageInfo.displayFrameCount || 0).toLocaleString()} frames across ${(pageInfo.childPageIds || []).length} pages`
+                                    : isIndexedPage
+                                      ? `${(pageInfo.displayFrameCount || pageInfo.frameCount || 0).toLocaleString()} frames`
+                                      : 'Not indexed'
+                                }
                                 primaryTypographyProps={{
                                   variant: 'body2',
                                   fontWeight: isSelectedPage ? 700 : 500,
-                                  sx: { lineHeight: 1.2 }
+                                  sx: { lineHeight: 1.25, fontSize: '0.82rem' }
                                 }}
                                 secondaryTypographyProps={{
                                   variant: 'caption',
                                   sx: {
-                                    lineHeight: 1.2,
-                                    color: isIndexedPage ? 'inherit' : '#98a2b3'
+                                    lineHeight: 1.25,
+                                    color: isFolderPage ? '#175cd3' : (isIndexedPage ? 'inherit' : '#98a2b3'),
+                                    fontSize: '0.72rem'
                                   }
                                 }}
                               />
@@ -2994,12 +3094,12 @@ export default function Home() {
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', lg: '320px 1fr' },
-                gap: 2.5,
+                gridTemplateColumns: { xs: '1fr', lg: 'minmax(280px, 360px) 1fr' },
+                gap: 3,
                 alignItems: 'start'
               }}
             >
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
                 <Box>
                   <Typography variant="overline" sx={{ color: '#667085', letterSpacing: '0.08em', fontWeight: 700 }}>
                     File View
@@ -3019,7 +3119,7 @@ export default function Home() {
                   {!fileModeSearchActive && selectedPageInfo && (
                     <Chip
                       size="small"
-                      label={`${selectedPageInfo.frameCount.toLocaleString()} frames in ${selectedPageInfo.name}`}
+                      label={`${(selectedPageInfo.displayFrameCount || selectedPageInfo.frameCount || 0).toLocaleString()} frames in ${selectedPageInfo.name}`}
                       sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
                     />
                   )}
@@ -3050,40 +3150,50 @@ export default function Home() {
                 )}
               </Box>
 
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.25, color: '#111827' }}>
-                  Pages
+              <Box
+                sx={{
+                  borderRadius: 3,
+                  border: '1px solid #e4e7ec',
+                  background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                  p: 2.25,
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.75, color: '#111827' }}>
+                  Current selection
                 </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {filePages.map((pageInfo) => {
-                    const isSelected = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
-                    const isIndexedPage = pageInfo.isIndexed !== false;
-                    return (
+                {selectedPageInfo ? (
+                  <Stack spacing={1.1}>
+                    <Typography sx={{ fontSize: '0.96rem', fontWeight: 700, color: '#101828' }}>
+                      {selectedPageInfo.name}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.82rem', color: '#667085', lineHeight: 1.5 }}>
+                      {selectedPageInfo.isFolder
+                        ? `Showing the combined frames from ${(selectedPageInfo.childPageIds || []).length} pages grouped under this folder.`
+                        : selectedPageInfo.isIndexed === false
+                          ? 'This page exists in Figma but has not been indexed yet.'
+                          : 'Showing frames from the selected page.'}
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       <Chip
-                        key={pageInfo.id}
-                        label={isIndexedPage ? `${pageInfo.name} (${pageInfo.frameCount})` : `${pageInfo.name} • Not indexed`}
-                        color={isSelected ? 'primary' : 'default'}
-                        variant={isSelected ? 'filled' : 'outlined'}
-                        disabled={filePageLoading || !isIndexedPage}
-                        onClick={() => {
-                          if (!isIndexedPage) return;
-                          setSearch('');
-                          setPage(1);
-                          setFileModeSearchActive(false);
-                          setSelectedFilePageId(pageInfo.id);
-                          setSelectedFilePageFrameCount(typeof pageInfo.frameCount === 'number' ? pageInfo.frameCount : 0);
-                        }}
-                        sx={{
-                          borderRadius: '999px',
-                          fontWeight: isSelected ? 700 : 600,
-                          '& .MuiChip-label': {
-                            px: 1.5,
-                          }
-                        }}
+                        size="small"
+                        label={`${(selectedPageInfo.displayFrameCount || selectedPageInfo.frameCount || 0).toLocaleString()} frames`}
+                        sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
                       />
-                    );
-                  })}
-                </Box>
+                      {selectedPageInfo.isFolder && (
+                        <Chip
+                          size="small"
+                          icon={<FolderOpenIcon sx={{ fontSize: '0.95rem !important' }} />}
+                          label={`${(selectedPageInfo.childPageIds || []).length} child pages`}
+                          sx={{ bgcolor: '#eff8ff', color: '#175cd3', fontWeight: 700 }}
+                        />
+                      )}
+                    </Stack>
+                  </Stack>
+                ) : (
+                  <Typography sx={{ fontSize: '0.82rem', color: '#667085' }}>
+                    Choose a page from the left sidebar to browse its frames.
+                  </Typography>
+                )}
               </Box>
             </Box>
           </Box>
