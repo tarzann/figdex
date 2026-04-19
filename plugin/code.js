@@ -219,11 +219,11 @@ const STORAGE_FIRST_MAX_CHUNK_BYTES = Math.floor(2.2 * 1024 * 1024);
 const LARGE_FILE_TRIGGER_PAGES = 6;
 const LARGE_FILE_TRIGGER_FRAMES = 120;
 const INDEX_WARN_LOAD_SCORE = 75;
-const INDEX_BLOCK_LOAD_SCORE = 180;
 const INDEX_WARN_PAGE_COUNT = 8;
-const INDEX_BLOCK_PAGE_COUNT = 16;
 const INDEX_WARN_MAX_PAGE_FRAMES = 72;
-const INDEX_BLOCK_MAX_PAGE_FRAMES = 120;
+const INDEX_DANGER_LOAD_SCORE = 180;
+const INDEX_DANGER_PAGE_COUNT = 16;
+const INDEX_DANGER_MAX_PAGE_FRAMES = 120;
 
 function estimateIndexLoad(pageFrameCounts) {
   var counts = Array.isArray(pageFrameCounts) ? pageFrameCounts.slice() : [];
@@ -248,8 +248,8 @@ function estimateIndexLoad(pageFrameCounts) {
 
 function evaluateIndexAdmission(pageFrameCounts) {
   var load = estimateIndexLoad(pageFrameCounts);
-  var shouldBlock = load.score >= INDEX_BLOCK_LOAD_SCORE || load.pageCount >= INDEX_BLOCK_PAGE_COUNT || load.maxPageFrames >= INDEX_BLOCK_MAX_PAGE_FRAMES;
-  var shouldWarn = !shouldBlock && (load.score >= INDEX_WARN_LOAD_SCORE || load.pageCount >= INDEX_WARN_PAGE_COUNT || load.maxPageFrames >= INDEX_WARN_MAX_PAGE_FRAMES);
+  var isDanger = load.score >= INDEX_DANGER_LOAD_SCORE || load.pageCount >= INDEX_DANGER_PAGE_COUNT || load.maxPageFrames >= INDEX_DANGER_MAX_PAGE_FRAMES;
+  var shouldWarn = isDanger || load.score >= INDEX_WARN_LOAD_SCORE || load.pageCount >= INDEX_WARN_PAGE_COUNT || load.maxPageFrames >= INDEX_WARN_MAX_PAGE_FRAMES;
   var reasons = [];
   if (load.pageCount >= INDEX_WARN_PAGE_COUNT) reasons.push(load.pageCount + ' pages');
   if (load.totalFrames >= INDEX_WARN_LOAD_SCORE) reasons.push(load.totalFrames + ' frames');
@@ -260,7 +260,7 @@ function evaluateIndexAdmission(pageFrameCounts) {
     pageCount: load.pageCount,
     maxPageFrames: load.maxPageFrames,
     shouldWarn: shouldWarn,
-    shouldBlock: shouldBlock,
+    isDanger: isDanger,
     reasonText: reasons.join(', ')
   };
 }
@@ -2066,20 +2066,13 @@ figma.ui.onmessage = async (msg) => {
           maxPageFrames: indexAdmission.maxPageFrames,
           score: indexAdmission.score,
           shouldWarn: indexAdmission.shouldWarn,
-          shouldBlock: indexAdmission.shouldBlock
+          isDanger: indexAdmission.isDanger
         });
-        if (indexAdmission.shouldBlock) {
-          var admissionBlockMessage = 'This run is too large to index safely right now. Try indexing fewer pages at a time.';
-          var admissionBlockDetail = indexAdmission.reasonText ? ' Current selection: ' + indexAdmission.reasonText + '.' : '';
-          figma.notify(admissionBlockMessage, { error: true, timeout: 5000 });
-          figma.ui.postMessage({
-            type: 'error',
-            message: admissionBlockMessage + admissionBlockDetail + ' Recommended: split this into smaller batches.'
-          });
-          return;
-        }
         if (indexAdmission.shouldWarn) {
-          figma.notify('Large indexing run detected — continuing, but smaller batches will be more stable.', { timeout: 4000 });
+          var admissionWarnMessage = indexAdmission.isDanger
+            ? 'Very large indexing run detected — continuing anyway. This may take longer than usual.'
+            : 'Large indexing run detected — continuing, but smaller batches will be more stable.';
+          figma.notify(admissionWarnMessage, { timeout: 4000 });
         }
       }
       var pageBatches = dirtyPageIds.map(function (pageId) { return [pageId]; });
