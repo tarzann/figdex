@@ -1975,8 +1975,9 @@ figma.ui.onmessage = async (msg) => {
       await figma.loadAllPagesAsync();
       const allPages = figma.root.children
         .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
-        .map(p => ({ id: p.id, name: p.name || 'Untitled' }));
+        .map((p, index) => ({ id: p.id, name: p.name || 'Untitled', sortOrder: index }));
       const idToName = Object.fromEntries(allPages.map(p => [p.id, p.name]));
+      const pageSortOrderById = Object.fromEntries(allPages.map(p => [p.id, p.sortOrder]));
       if (selectedIds.length === 0) {
         selectedIds = allPages.map(p => p.id);
         figma.notify('No pages selected — using all pages');
@@ -1995,7 +1996,11 @@ figma.ui.onmessage = async (msg) => {
         indexingPageIds.push(coverPage.id);
         coverIndexedImplicitly = true;
       }
-      const selectedPages = indexingPageIds.map(id => ({ id, name: idToName[id] || 'Page' }));
+      const selectedPages = indexingPageIds.map(id => ({
+        id,
+        name: idToName[id] || 'Page',
+        sortOrder: typeof pageSortOrderById[id] === 'number' ? pageSortOrderById[id] : null
+      }));
       if (coverIndexedImplicitly) {
         pluginTrace('Cover page added to indexing run', {
           runId: activeIndexRunId,
@@ -2394,7 +2399,14 @@ figma.ui.onmessage = async (msg) => {
           var pageMap = {};
           for (var si = 0; si < slice.length; si++) {
             var s = slice[si];
-            if (!pageMap[s.pageId]) pageMap[s.pageId] = { id: s.pageId, name: s.pageName, frames: [] };
+            if (!pageMap[s.pageId]) {
+              pageMap[s.pageId] = {
+                id: s.pageId,
+                name: s.pageName,
+                sortOrder: typeof pageSortOrderById[s.pageId] === 'number' ? pageSortOrderById[s.pageId] : null,
+                frames: []
+              };
+            }
             pageMap[s.pageId].frames.push(s.frameItem);
           }
           var chunkPagesList = [];

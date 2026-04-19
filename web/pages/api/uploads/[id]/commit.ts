@@ -39,12 +39,18 @@ function mergeChunkPages(pages: any[]): any[] {
         pageId,
         name: page?.name || page?.pageName || 'Page',
         pageName: page?.pageName || page?.name || 'Page',
+        sortOrder: typeof page?.sortOrder === 'number' ? page.sortOrder : pageIndex,
         frames: nextFrames.slice(),
       });
       continue;
     }
 
     existing.frames = existing.frames.concat(nextFrames);
+    if (typeof page?.sortOrder === 'number') {
+      existing.sortOrder = typeof existing.sortOrder === 'number'
+        ? Math.min(existing.sortOrder, page.sortOrder)
+        : page.sortOrder;
+    }
     if (!existing.name && page?.name) existing.name = page.name;
     if (!existing.pageName && (page?.pageName || page?.name)) {
       existing.pageName = page.pageName || page.name;

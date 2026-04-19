@@ -9,6 +9,7 @@ type SyncPage = {
   pageId?: string;
   name?: string;
   pageName?: string;
+  sortOrder?: number | null;
   frames?: any[];
 };
 
@@ -82,6 +83,12 @@ function normalizePageId(page: SyncPage, pageIndex: number): string {
 
 function normalizePageDisplayName(page: SyncPage): string {
   return normalizeText(page.pageName || page.name, 'Untitled Page');
+}
+
+function normalizePageSortOrder(page: SyncPage, fallback: number): number {
+  return typeof page.sortOrder === 'number' && Number.isFinite(page.sortOrder)
+    ? page.sortOrder
+    : fallback;
 }
 
 function uniquePageIds(pages: SyncPage[]): string[] {
@@ -462,7 +469,7 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
     figma_page_id: normalizePageId(page, pageIndex),
     page_name: normalizePageDisplayName(page),
     normalized_page_name: normalizePageDisplayName(page).toLowerCase(),
-    sort_order: pageIndex,
+    sort_order: normalizePageSortOrder(page, pageIndex),
     last_sync_id: syncId,
     updated_at: nowIso,
     created_at: nowIso,
