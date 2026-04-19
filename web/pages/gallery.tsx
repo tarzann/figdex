@@ -2593,11 +2593,11 @@ export default function Home() {
                         dense
                         disablePadding
                         sx={{
-                          mt: 0.75,
-                          mb: 1.25,
+                          mt: 0.35,
+                          mb: 0.75,
                           ml: 3.5,
-                          pl: 2,
-                          pr: 0.5,
+                          pl: 1.25,
+                          pr: 0.25,
                           borderLeft: '1px solid #e5e7eb',
                         }}
                       >
@@ -2615,11 +2615,12 @@ export default function Home() {
                               }}
                               sx={{
                                 borderRadius: 1,
-                                py: 0.7,
-                                px: 1.25,
-                                mb: 0.45,
-                                ml: isFolderPage ? 0 : 1.25,
-                                alignItems: 'flex-start',
+                                py: 0.35,
+                                px: 0.9,
+                                minHeight: 34,
+                                mb: 0.1,
+                                ml: isFolderPage ? 0 : 0.8,
+                                alignItems: 'center',
                                 '&.Mui-selected': {
                                   bgcolor: '#eef4ff',
                                   color: '#3538cd',
@@ -2632,7 +2633,7 @@ export default function Home() {
                                 },
                               }}
                             >
-                              <Box sx={{ pt: 0.1, mr: 1, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3') }}>
+                              <Box sx={{ width: 16, minWidth: 16, mr: 0.75, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {isFolderPage ? <FolderOpenIcon sx={{ fontSize: 15 }} /> : null}
                               </Box>
                               <ListItemText
@@ -2646,17 +2647,27 @@ export default function Home() {
                                       ? `${(pageInfo.displayFrameCount || pageInfo.frameCount || 0).toLocaleString()} frames`
                                       : 'Not indexed'
                                 }
+                                sx={{ minWidth: 0, my: 0 }}
                                 primaryTypographyProps={{
                                   variant: 'body2',
                                   fontWeight: isSelectedPage ? 700 : 500,
-                                  sx: { lineHeight: 1.25, fontSize: '0.82rem' }
+                                  sx: {
+                                    lineHeight: 1.15,
+                                    fontSize: '0.76rem',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }
                                 }}
                                 secondaryTypographyProps={{
                                   variant: 'caption',
                                   sx: {
-                                    lineHeight: 1.25,
+                                    lineHeight: 1.05,
                                     color: isFolderPage ? '#175cd3' : (isIndexedPage ? 'inherit' : '#98a2b3'),
-                                    fontSize: '0.72rem'
+                                    fontSize: '0.66rem',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
                                   }
                                 }}
                               />
