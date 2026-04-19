@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { logIndexActivity } from '../../lib/index-activity-log';
 import { getUserIdFromApiKey } from '../../lib/api-auth';
+import { fetchFigmaFile } from '../../lib/figma-api';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
@@ -204,12 +205,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (fileKey && userId) {
         const { data: savedConnection } = await svc
           .from('saved_connections')
-          .select('page_meta')
+          .select('page_meta, figma_token')
           .eq('user_id', userId)
           .eq('file_key', fileKey)
           .maybeSingle();
 
-        const connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
+        let connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
+        if (connectionPages.length === 0 && typeof savedConnection?.figma_token === 'string' && savedConnection.figma_token.trim()) {
+          try {
+            const figmaFile = await fetchFigmaFile(fileKey, savedConnection.figma_token.trim(), true);
+            connectionPages = (figmaFile?.document?.children || [])
+              .filter((child: any) => child?.type === 'PAGE' || child?.type === 'CANVAS')
+              .map((child: any, pageIndex: number) => ({
+                id: child.id,
+                pageId: child.id,
+                name: child.name || `Page ${pageIndex + 1}`,
+                pageName: child.name || `Page ${pageIndex + 1}`,
+                sortOrder: pageIndex,
+              }));
+          } catch {
+            connectionPages = [];
+          }
+        }
+
         connectionPages.forEach((page: any, pageIndex: number) => {
           const key = String(page?.id || page?.pageId || page?.name || `page-${pageIndex}`);
           if (!key) return;
