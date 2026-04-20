@@ -3332,8 +3332,10 @@ export default function Home() {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 2.25,
+              gridTemplateColumns: viewMode === 'lobby'
+                ? 'repeat(auto-fill, minmax(260px, 1fr))'
+                : 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: viewMode === 'lobby' ? 2 : 2.25,
               width: '100%'
             }}
           >
@@ -3349,7 +3351,7 @@ export default function Home() {
                     cursor: 'pointer',
                     position: 'relative',
                     ...GALLERY_CARD_SX,
-                    width: '100%',
+                    width: viewMode === 'lobby' ? 260 : '100%',
                   }}
                   onClick={() => loadFileFrames({ ...file, fileKey: file.figma_file_key || null })}
                 >
