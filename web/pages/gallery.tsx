@@ -50,7 +50,6 @@ import {
   PaginationItem,
 } from '@mui/material';
 import { useRouter } from 'next/router';
-import Masonry from 'react-masonry-css';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -3330,13 +3329,11 @@ export default function Home() {
         )}
         {/* Categorized Tags Display (per frame) */}
         <Grid container spacing={4}>
-        {/* Main gallery: lobby/file use Grid, allFrames uses Masonry */}
-        {viewMode !== 'allFrames' ? (
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 2,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 2.25,
               width: '100%'
             }}
           >
@@ -3350,9 +3347,9 @@ export default function Home() {
                   key={thumb.thumbName + idx}
                   sx={{
                     cursor: 'pointer',
-                    width: 260,
                     position: 'relative',
                     ...GALLERY_CARD_SX,
+                    width: '100%',
                   }}
                   onClick={() => loadFileFrames({ ...file, fileKey: file.figma_file_key || null })}
                 >
@@ -3451,36 +3448,62 @@ export default function Home() {
               <Box
                 key={thumb.thumbName + idx}
                 sx={{
-                  mb: 2,
                   cursor: 'pointer',
-                  width: 260,
                   position: 'relative',
                   ...GALLERY_CARD_SX,
+                  width: '100%',
                   p: 1.25
                 }}
               >
-                <img
-                  src={thumb.thumbnail || thumb.image}
-                  alt={thumb.label}
-                  loading="lazy"
-                  style={{
-                    borderRadius: 14,
-                    border: (modalIndex === originalIndex) ? '3px solid #111827' : '1.5px solid #dbe3f0',
-                    background: '#f8fafc',
-                    marginBottom: 8,
-                    width: '100%',
-                    height: 'auto',
-                    display: 'block',
-                    objectFit: 'contain'
-                  }}
+                <Box
                   onClick={() => {
-                    // Find the index in frameThumbsForModal
                     const frameIndex = frameThumbsForModal.findIndex((item: any) => item.index === originalIndex);
                     if (frameIndex !== -1) {
                       handleOpenModal(frameIndex);
                     }
                   }}
-                />
+                  sx={{
+                    borderRadius: 3,
+                    border: (modalIndex === originalIndex) ? '3px solid #111827' : '1.5px solid #dbe3f0',
+                    background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)',
+                    minHeight: 228,
+                    height: 228,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    mb: 1,
+                    cursor: 'zoom-in',
+                    position: 'relative',
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.5) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.5) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.5) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.5) 75%)',
+                      backgroundSize: '24px 24px',
+                      backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px',
+                      opacity: 0.18,
+                      pointerEvents: 'none',
+                    }
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={thumb.thumbnail || thumb.image}
+                    alt={thumb.label}
+                    loading="lazy"
+                    sx={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      width: 'auto',
+                      height: 'auto',
+                      display: 'block',
+                      objectFit: 'contain',
+                      position: 'relative',
+                      zIndex: 1,
+                    }}
+                  />
+                </Box>
                 <IconButton
                   onClick={() => toggleFavorite(thumb.thumbName)}
                   color="error"
@@ -3492,11 +3515,35 @@ export default function Home() {
                 
                 {/* Frame name and file/page */}
                 <Box sx={{ px: 0.5, mt: 0.5, textAlign: 'left' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#111827' }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 700,
+                      color: '#111827',
+                      lineHeight: 1.35,
+                      minHeight: 40,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}
+                  >
                     {thumb.label}
                   </Typography>
                   {(thumb as any).filePageSubtitle && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        mt: 0.25,
+                        lineHeight: 1.35,
+                        minHeight: 32,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
                       {(thumb as any).filePageSubtitle}
                     </Typography>
                   )}
@@ -3540,91 +3587,6 @@ export default function Home() {
             );
           })}
           </Box>
-        ) : (
-        <Masonry
-          breakpointCols={{ default: 3, 1200: 3, 900: 2, 600: 1 }}
-          className="masonry-grid"
-          columnClassName="masonry-grid_column"
-          style={{ display: 'flex', gap: 16 }}
-        >
-          {pagedThumbs.map((item: any, idx: number) => {
-            if (item.isFile && item.file) {
-              const { file, thumb } = item;
-              return (
-                <Box
-                  key={thumb.thumbName + idx}
-                  sx={{
-                    cursor: 'pointer',
-                    width: 260,
-                    position: 'relative',
-                    ...GALLERY_CARD_SX,
-                  }}
-                  onClick={() => loadFileFrames({ ...file, fileKey: file.figma_file_key || null })}
-                >
-                  {thumb.image ? (
-                    <img src={thumb.image} alt={thumb.label} loading="lazy" style={{ width: '100%', height: 156, display: 'block', objectFit: 'cover' }} onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; const box = el.parentElement; if (box && !box.querySelector('.placeholder')) { const p = document.createElement('div'); p.className = 'placeholder'; p.style.cssText = 'padding:40px;text-align:center;color:#999;background:#f5f5f5;'; p.textContent = 'No thumbnail'; box.appendChild(p); } }} />
-                  ) : (
-                    <Box sx={{ background: '#f5f5f5', width: '100%', height: 156, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}><Typography variant="body2">No thumbnail</Typography></Box>
-                  )}
-                  <Box sx={{ p: 1.5 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                      <Chip size="small" label="Indexed file" sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }} />
-                      <Typography variant="caption" color="text.secondary">
-                        {file.uploadedAt ? formatDate(file.uploadedAt) : 'Recently updated'}
-                      </Typography>
-                    </Stack>
-                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75, minHeight: 40, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{file.fileName}</Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-                      <Chip size="small" label={`${file.frameCount} frames`} variant="outlined" sx={{ fontWeight: 600 }} />
-                      {file.projectId && <Chip size="small" label="Connected" variant="outlined" sx={{ color: '#027a48', borderColor: '#a6f4c5', fontWeight: 700 }} />}
-                    </Stack>
-                    <Typography variant="caption" sx={{ color: '#667085', fontWeight: 600 }}>Open file gallery</Typography>
-                  </Box>
-                </Box>
-              );
-            }
-            if (!item.frame || !item.thumb) return null;
-            const { frame, thumb, index } = item;
-            const allTagsFrame = [...(frame.frameTags || []), ...(frame.sizeTags || []), ...(frame.customTags || [])].filter(Boolean);
-            const originalIndexFrame = index;
-            return (
-              <Box key={thumb.thumbName + idx} sx={{ mb: 2, cursor: 'pointer', width: 260, position: 'relative', ...GALLERY_CARD_SX, p: 1.25 }}>
-                <img src={thumb.thumbnail || thumb.image} alt={thumb.label} loading="lazy" style={{ borderRadius: 14, border: (modalIndex === originalIndexFrame) ? '3px solid #111827' : '1.5px solid #dbe3f0', background: '#f8fafc', marginBottom: 8, width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} onClick={() => { const fi = frameThumbsForModal.findIndex((it: any) => it.index === originalIndexFrame); if (fi !== -1) handleOpenModal(fi); }} />
-                <IconButton onClick={() => toggleFavorite(thumb.thumbName)} color="error" sx={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.92)', zIndex: 1 }} aria-label="Add to favorites">{favorites.includes(thumb.thumbName) ? <FavoriteIcon /> : <FavoriteBorderIcon />}</IconButton>
-                <Box sx={{ px: 0.5, mt: 0.5, textAlign: 'left' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#111827' }}>{thumb.label}</Typography>
-                  {(thumb as any).filePageSubtitle && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{(thumb as any).filePageSubtitle}</Typography>
-                  )}
-                </Box>
-                {allTagsFrame.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'flex-start', mt: 1, px: 0.5 }}>
-                    {allTagsFrame.map((tag: string, tagIdx: number) => (
-                      <Box key={tagIdx} sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: '16px', bgcolor: '#f8fafc', border: '1px solid #e4e7ec', fontSize: '0.75rem', fontWeight: 500, color: '#344054', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{tag}</Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            );
-          })}
-        </Masonry>
-        )}
-        
-        <style jsx global>{`
-          .masonry-grid { 
-            display: flex; 
-            margin-left: -16px; 
-            width: auto; 
-          }
-          .masonry-grid_column { 
-            padding-left: 16px; 
-            background-clip: padding-box; 
-          }
-          .masonry-grid_column > div { 
-            margin-bottom: 16px; 
-            width: 260px;
-          }
-        `}</style>
         
         <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 2 }} dir="ltr">
           <Pagination
