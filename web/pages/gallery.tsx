@@ -2537,6 +2537,7 @@ export default function Home() {
   const selectedPageInfo = displayFilePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
   const selectedPageFrameCount = Number(selectedPageInfo?.displayFrameCount || selectedPageInfo?.frameCount || 0);
   const selectedFolderChildCount = (selectedPageInfo?.childPageIds || []).length;
+  const pageSizeOptions = viewMode === 'allFrames' ? [24] : [24, 48, 72];
   const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
   const rawSuccessFileKey = router.query.fileKey;
   const successFileKey =
@@ -2811,6 +2812,7 @@ export default function Home() {
               select
               size="small"
               value={pageSize}
+              disabled={viewMode === 'allFrames'}
               onChange={(e) => {
                 const value = Number(e.target.value) || 24;
                 setPageSize(value);
@@ -2818,8 +2820,9 @@ export default function Home() {
               }}
               fullWidth
               SelectProps={{ displayEmpty: true }}
+              helperText={viewMode === 'allFrames' ? 'All Frames stays capped at 24 per page for stability.' : undefined}
             >
-              {[24, 48, 72].map((value) => (
+              {pageSizeOptions.map((value) => (
                 <MenuItem key={value} value={value}>
                   {value}
                 </MenuItem>
