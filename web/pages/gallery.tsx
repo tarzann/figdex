@@ -2628,6 +2628,8 @@ export default function Home() {
                 sx={{
                   borderRadius: 1,
                   mb: 0.5,
+                  minHeight: 42,
+                  px: 1.5,
                   '&.Mui-selected': {
                     bgcolor: '#111827',
                     color: 'white',
@@ -2653,6 +2655,8 @@ export default function Home() {
                 sx={{
                   borderRadius: 1,
                   mb: 0.5,
+                  minHeight: 42,
+                  px: 1.5,
                   '&.Mui-selected': {
                     bgcolor: '#111827',
                     color: 'white',
@@ -2665,6 +2669,14 @@ export default function Home() {
                 <GridViewIcon sx={{ mr: 1, fontSize: 18 }} />
                 <ListItemText primary="All Frames" primaryTypographyProps={{ variant: 'body2' }} />
               </ListItemButton>
+
+              <Box
+                sx={{
+                  mx: 0.5,
+                  my: 1.25,
+                  borderTop: '1px solid #eef2f6',
+                }}
+              />
               
               {/* Files with page tree for the selected file */}
               {indexFiles.map((file) => {
@@ -2680,7 +2692,8 @@ export default function Home() {
                       sx={{
                         borderRadius: 1,
                         mb: 0.5,
-                        pl: 4,
+                        minHeight: 42,
+                        px: 1.5,
                         '&.Mui-selected': {
                           bgcolor: '#111827',
                           color: 'white',
