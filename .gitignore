@@ -47,6 +47,7 @@ yarn-error.log*
 web/.next/
 web/node_modules/
 web/.vercel/
+/.vercel/
 
 # Plugin specific (if needed)
 plugin/*.backup
@@ -68,4 +69,10 @@ web/docs/releases/*.tar.gz
 # Large data files
 web/data/
 
+# Separate local project / experiments not part of FigDex
+/slack-task-indexer/
+/web/lib/slack-task-indexer.ts
+/web/pages/api/slack-task-indexer/
+/web/pages/labs/slack-task-indexer.tsx
+/web/sql/create_slack_task_index_tables.sql
 
