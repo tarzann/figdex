@@ -1242,7 +1242,7 @@ async function fetchIndexSessionStatus(sessionId, token) {
   }
 }
 
-// --- Helpers for gallery index payload (per plugin/docs/OLD_INDEX_LOGIC_FINDINGS.md) ---
+// --- Helpers for gallery index payload ---
 // Top-level frames: (1) direct FRAME children of Page; (2) direct FRAME children of each Section (one level only). Excludes [NO_INDEX].
 function getTopLevelFrameIds(page) {
   var ids = [];

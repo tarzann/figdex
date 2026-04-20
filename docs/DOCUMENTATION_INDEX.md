@@ -58,10 +58,6 @@ This file is the recommended entry point for understanding the current FigDex pr
 ### Supabase Security Setup
 - [docs/SUPABASE_SECURITY_SETUP.md](/Users/ranmor/Documents/FigDex%20Codex/docs/SUPABASE_SECURITY_SETUP.md)
 
-### Historical Validation Notes
-- [docs/STAGE1_NEW_USER_VERIFIED.md](/Users/ranmor/Documents/FigDex%20Codex/docs/STAGE1_NEW_USER_VERIFIED.md)
-- [docs/NEW_USER_FULL_FLOW_READY.md](/Users/ranmor/Documents/FigDex%20Codex/docs/NEW_USER_FULL_FLOW_READY.md)
-
 ## Tools / Internal Scripts
 
 ### Production Load Smoke Test
@@ -70,12 +66,13 @@ This file is the recommended entry point for understanding the current FigDex pr
 
 ## Legacy / Historical Docs
 
-There are many older documents under:
+There are still older documents under:
 - [web/docs](/Users/ranmor/Documents/FigDex%20Codex/web/docs)
 
 Important note:
 - these contain useful historical context
 - but many of them predate the recent product simplification, normalized index migration, and credits removal from primary UX
 - they should not be treated as the default source of truth
+- the old `web/docs/archive/` and `web/docs/releases/` document sets were intentionally removed during cleanup
 
 When in doubt, prefer the root-level `docs/` files listed above.

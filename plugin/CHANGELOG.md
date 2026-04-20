@@ -30,24 +30,14 @@
 - Free plan flow now consistently enforces 2 files and 500 total frames.
 - Cover handling stays at file level and remains stable during chunked page uploads.
 
-## משתמש חדש – כל הפלואו מוכן (New User Full Flow Ready) ✅
-**Date:** January 31, 2026
+## Early 2026 Historical Milestones
+**Date:** January-February 2026
 
-### Milestone
-- **משתמש חדש – כל הפלואו מוכן.** תיעוד: `docs/NEW_USER_FULL_FLOW_READY.md`
-- טלמטריה מקצה־לקצה: אירועים נשמרים ב-DB, תצוגה באדמין `/admin/telemetry`
-- Plugin: `track(eventName, context)` שולח ל־`/api/telemetry` (fire-and-forget); אירועים: plugin_boot, filekey_saved, index_click, needs_connect, connect_success, connect_timeout, auth_expired, indexing_start, indexing_done, open_gallery
-- `anonId` נשמר ב־code.js (clientStorage); `sessionId` נוצר פעם אחת ב-UI; אין שליחת fileKey גולמי – רק fileKeyHash
-
----
-
-## שלב א – משתמש חדש (Stage 1 – New User) ✅
-**Date:** February 8, 2026
-
-### Milestone verified
-- **שלב א – משתמש חדש עובד בהצלחה.** תיעוד מלא: `docs/STAGE1_NEW_USER_VERIFIED.md`
-- Cover in plugin matches gallery lobby: `getCoverImageDataUrl()` sent as `coverImageDataUrl` to create-index-from-figma
-- Gallery lobby shows on landing with fileKey; clicking a file in sidebar shows frames (web fix)
+### Archived summary
+- New-user onboarding flow was stabilized and validated end-to-end during the early 2026 guest/free-flow work.
+- Telemetry events were added for plugin boot, connect flow, indexing start/done, and gallery open.
+- Cover handling was aligned between plugin and gallery lobby.
+- Gallery lobby file click behavior was stabilized so file selection opens frames correctly.
 
 ---
 
