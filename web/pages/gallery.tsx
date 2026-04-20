@@ -182,6 +182,19 @@ const deriveNamingTags = (rawName: string): string[] => {
   }
 };
 
+const getFrameDisplayLabel = (rawName: string): string => {
+  if (!rawName) return 'Untitled Frame';
+  const normalized = rawName
+    .replace(/\s+/g, ' ')
+    .replace(/[↪→]/g, '>')
+    .trim();
+  const segments = normalized
+    .split(/\s*(?:<>|>|\/|\\|\|)\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments[segments.length - 1] || normalized;
+};
+
 const getSizeTag = (w?: number, h?: number): string | null => {
   if (!w || !h) return null;
   const W = Math.round(w);
@@ -3449,6 +3462,7 @@ export default function Home() {
               frame.width && frame.height
                 ? `${Number(frame.width).toLocaleString()}×${Number(frame.height).toLocaleString()}`
                 : '';
+            const frameDisplayLabel = getFrameDisplayLabel(thumb.label);
             
             return (
               <Box
@@ -3558,7 +3572,7 @@ export default function Home() {
                       overflow: 'hidden'
                     }}
                   >
-                    {thumb.label}
+                    {frameDisplayLabel}
                   </Typography>
                 </Box>
                 
