@@ -3165,59 +3165,60 @@ export default function Home() {
             </Box>
           </Box>
 
+          {viewMode !== 'file' && (
             <Box
               sx={{
-              mt: 2,
-              px: 2,
-              py: 1.5,
-              ...GALLERY_SURFACE_SX
-            }}
-          >
-            <Typography variant="h6" sx={{ fontWeight: 700, color: '#18212f', lineHeight: 1.2 }}>
-              {gallerySectionTitle}
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
-              {gallerySectionSubtitle}
-            </Typography>
-          </Box>
+                mt: 2,
+                px: 2,
+                py: 1.5,
+                ...GALLERY_SURFACE_SX
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 700, color: '#18212f', lineHeight: 1.2 }}>
+                {gallerySectionTitle}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
+                {gallerySectionSubtitle}
+              </Typography>
+            </Box>
+          )}
         </Box>
       
         {/* Search and Filter Bar */}
-        <Box sx={{ px: 4, pb: 1.5 }}>
-          <Box
-            sx={{
-              px: 2,
-              py: 1.5,
-              ...GALLERY_SURFACE_SX
-            }}
-          >
-            <Box display="flex" alignItems="flex-end" gap={2} sx={{ width: '100%', flexWrap: 'nowrap', overflowX: 'auto' }}>
-              <Box sx={{ flex: '1 1 260px', minWidth: 180, maxWidth: 720 }}>
-                <TextField
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  size="medium"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
-                    ),
-                    endAdornment: viewMode === 'file' && fileSearchLoading ? (
-                      <CircularProgress size={16} />
-                    ) : undefined,
-                  }}
-                />
+        {viewMode !== 'file' && (
+          <Box sx={{ px: 4, pb: 1.5 }}>
+            <Box
+              sx={{
+                px: 2,
+                py: 1.5,
+                ...GALLERY_SURFACE_SX
+              }}
+            >
+              <Box display="flex" alignItems="flex-end" gap={2} sx={{ width: '100%', flexWrap: 'nowrap', overflowX: 'auto' }}>
+                <Box sx={{ flex: '1 1 260px', minWidth: 180, maxWidth: 720 }}>
+                  <TextField
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={searchPlaceholder}
+                    size="medium"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: (
+                        <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
+                      ),
+                    }}
+                  />
+                </Box>
               </Box>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+                <Chip size="small" label={resultsSummary} sx={{ bgcolor: '#f8fafc', color: '#475467' }} />
+                {search.trim() && (
+                  <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
+                )}
+              </Stack>
             </Box>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25, flexWrap: 'wrap' }}>
-              <Chip size="small" label={resultsSummary} sx={{ bgcolor: '#f8fafc', color: '#475467' }} />
-              {search.trim() && (
-                <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
-              )}
-            </Stack>
           </Box>
-        </Box>
+        )}
       </Box>
 
       {/* Main Content */}
@@ -3227,65 +3228,94 @@ export default function Home() {
         px: 4
       }}>
         {viewMode === 'file' && selectedFile && filePages.length > 0 && (
-          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
-            <Stack
-              direction={{ xs: 'column', lg: 'row' }}
-              spacing={1.5}
-              alignItems={{ xs: 'flex-start', lg: 'center' }}
-              justifyContent="space-between"
-            >
-              <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#111827', lineHeight: 1.2 }}>
-                  {selectedPageInfo ? selectedPageInfo.name : selectedFile.fileName}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#667085', mt: 0.35 }}>
-                  {fileModeSearchActive
-                    ? `Showing ${visibleThumbs.length.toLocaleString()} search results across ${filePages.length} pages`
-                    : selectedPageInfo
-                      ? selectedPageInfo.isFolder
-                        ? `Combined view from ${selectedFolderChildCount} pages in this folder`
-                        : selectedPageInfo.isIndexed === false
-                          ? 'This page exists in Figma but is not indexed yet'
-                          : `Browsing frames from this page inside ${selectedFile.fileName}`
-                      : `Browsing ${filePages.length} pages in ${selectedFile.fileName}`}
-                </Typography>
-              </Box>
-
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" label={`${filePages.length} pages`} sx={{ bgcolor: '#f8fafc', color: '#344054', fontWeight: 700 }} />
-                {selectedPageInfo && (
-                  <Chip
-                    size="small"
-                    label={`${selectedPageFrameCount.toLocaleString()} frames`}
-                    sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2.25 }}>
+            <Stack spacing={1.75}>
+              <Stack
+                direction={{ xs: 'column', lg: 'row' }}
+                spacing={1.5}
+                alignItems={{ xs: 'stretch', lg: 'flex-start' }}
+                justifyContent="space-between"
+              >
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#18212f', lineHeight: 1.15 }}>
+                    {selectedFile.fileName}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#667085', mt: 0.4 }}>
+                    {gallerySectionSubtitle}
+                  </Typography>
+                </Box>
+                <Box sx={{ width: '100%', maxWidth: { xs: '100%', lg: 420 }, flexShrink: 0 }}>
+                  <TextField
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={searchPlaceholder}
+                    size="medium"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: (
+                        <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
+                      ),
+                      endAdornment: fileSearchLoading ? <CircularProgress size={16} /> : undefined,
+                    }}
                   />
-                )}
-                {selectedPageInfo?.isFolder && (
-                  <Chip
-                    size="small"
-                    icon={<FolderOpenIcon sx={{ fontSize: '0.95rem !important' }} />}
-                    label={`${selectedFolderChildCount} child pages`}
-                    sx={{ bgcolor: '#eff8ff', color: '#175cd3', fontWeight: 700 }}
-                  />
-                )}
-                {fileModeSearchActive && (
-                  <Chip
-                    size="small"
-                    label={`${visibleThumbs.length.toLocaleString()} search results`}
-                    sx={{ bgcolor: '#eff8ff', color: '#175cd3', fontWeight: 700 }}
-                  />
-                )}
+                </Box>
               </Stack>
-            </Stack>
 
-            {(filePageLoading && !fileModeSearchActive) || fileSearchLoading ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.25 }}>
-                <CircularProgress size={16} />
-                <Typography variant="caption" color="text.secondary">
-                  {fileSearchLoading ? 'Searching file...' : 'Loading page...'}
-                </Typography>
-              </Box>
-            ) : null}
+              <Stack
+                direction={{ xs: 'column', lg: 'row' }}
+                spacing={1.25}
+                alignItems={{ xs: 'flex-start', lg: 'center' }}
+                justifyContent="space-between"
+              >
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#111827', lineHeight: 1.2 }}>
+                    {selectedPageInfo ? selectedPageInfo.name : selectedFile.fileName}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#667085', mt: 0.35 }}>
+                    {fileModeSearchActive
+                      ? `Showing ${visibleThumbs.length.toLocaleString()} search results across ${filePages.length} pages`
+                      : selectedPageInfo
+                        ? selectedPageInfo.isFolder
+                          ? `Combined view from ${selectedFolderChildCount} pages in this folder`
+                          : selectedPageInfo.isIndexed === false
+                            ? 'This page exists in Figma but is not indexed yet'
+                            : `Browsing frames from this page inside ${selectedFile.fileName}`
+                        : `Browsing ${filePages.length} pages in ${selectedFile.fileName}`}
+                  </Typography>
+                </Box>
+
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip size="small" label={`${filePages.length} pages`} sx={{ bgcolor: '#f8fafc', color: '#344054', fontWeight: 700 }} />
+                  {selectedPageInfo && (
+                    <Chip
+                      size="small"
+                      label={`${selectedPageFrameCount.toLocaleString()} frames`}
+                      sx={{ bgcolor: '#eef4ff', color: '#3538cd', fontWeight: 700 }}
+                    />
+                  )}
+                  {selectedPageInfo?.isFolder && (
+                    <Chip
+                      size="small"
+                      icon={<FolderOpenIcon sx={{ fontSize: '0.95rem !important' }} />}
+                      label={`${selectedFolderChildCount} child pages`}
+                      sx={{ bgcolor: '#eff8ff', color: '#175cd3', fontWeight: 700 }}
+                    />
+                  )}
+                  {search.trim() && (
+                    <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
+                  )}
+                </Stack>
+              </Stack>
+
+              {(filePageLoading && !fileModeSearchActive) || fileSearchLoading ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="caption" color="text.secondary">
+                    {fileSearchLoading ? 'Searching file...' : 'Loading page...'}
+                  </Typography>
+                </Box>
+              ) : null}
+            </Stack>
           </Box>
         )}
         {/* Categorized Tags Display (per frame) */}
