@@ -2611,11 +2611,26 @@ export default function Home() {
           </Box>
 
           {/* Navigation - Unified */}
-          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2, maxHeight: 400, overflowY: 'auto' }}>
-            <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, color: '#111827' }}>
+          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 0, maxHeight: 520, overflowY: 'auto' }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                px: 2,
+                pt: 2,
+                pb: 1.5,
+                fontWeight: 700,
+                color: '#111827',
+                bgcolor: 'rgba(255,255,255,0.96)',
+                backdropFilter: 'blur(10px)',
+                borderBottom: '1px solid #eef2f6',
+              }}
+            >
               Navigation
             </Typography>
-            <List dense sx={{ p: 0 }}>
+            <List dense sx={{ p: 2, pt: 1.5 }}>
               {/* Gallery Lobby - First item */}
               <ListItemButton
                 selected={viewMode === 'lobby' && !selectedFile}
@@ -2797,23 +2812,6 @@ export default function Home() {
                 );
               })}
             </List>
-          </Box>
-
-          {/* Results Count - SECOND */}
-          <Box sx={{ ...GALLERY_SURFACE_SX, mb: 3, p: 2 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
-              Results
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {viewMode === 'lobby' ? 
-                `Showing ${visibleThumbs.length} files (${pagedThumbs.length} on page ${page}/${totalPages})` :
-                viewMode === 'allFrames' ?
-                  `Showing ${visibleThumbs.length} of ${allGalleryThumbs.length} frames (${pagedThumbs.length} on page ${page}/${totalPages})` :
-                selectedIndex ? 
-                  `Showing frames from: ${indexFiles.find(f => f.id === selectedIndex)?.file_name || 'Selected File'}` : 
-                  `Showing ${visibleThumbs.length} of ${allGalleryThumbs.length} frames (${pagedThumbs.length} on page ${page}/${totalPages})`
-              }
-            </Typography>
           </Box>
 
           {/* Images per page - ADDED */}
