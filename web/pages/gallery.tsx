@@ -3170,55 +3170,51 @@ export default function Home() {
               sx={{
                 mt: 2,
                 px: 2,
-                py: 1.5,
+                py: 1.75,
                 ...GALLERY_SURFACE_SX
               }}
             >
-              <Typography variant="h6" sx={{ fontWeight: 700, color: '#18212f', lineHeight: 1.2 }}>
-                {gallerySectionTitle}
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#667085', mt: 0.5 }}>
-                {gallerySectionSubtitle}
-              </Typography>
+              <Stack spacing={1.75}>
+                <Stack
+                  direction={{ xs: 'column', lg: 'row' }}
+                  spacing={1.5}
+                  alignItems={{ xs: 'stretch', lg: 'flex-start' }}
+                  justifyContent="space-between"
+                >
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: '#18212f', lineHeight: 1.15 }}>
+                      {gallerySectionTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#667085', mt: 0.4 }}>
+                      {gallerySectionSubtitle}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ width: '100%', maxWidth: { xs: '100%', lg: 420 }, flexShrink: 0 }}>
+                    <TextField
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder={searchPlaceholder}
+                      size="medium"
+                      fullWidth
+                      InputProps={{
+                        startAdornment: (
+                          <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
+                        ),
+                      }}
+                    />
+                  </Box>
+                </Stack>
+
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+                  <Chip size="small" label={resultsSummary} sx={{ bgcolor: '#f8fafc', color: '#475467' }} />
+                  {search.trim() && (
+                    <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
+                  )}
+                </Stack>
+              </Stack>
             </Box>
           )}
         </Box>
-      
-        {/* Search and Filter Bar */}
-        {viewMode !== 'file' && (
-          <Box sx={{ px: 4, pb: 1.5 }}>
-            <Box
-              sx={{
-                px: 2,
-                py: 1.5,
-                ...GALLERY_SURFACE_SX
-              }}
-            >
-              <Box display="flex" alignItems="flex-end" gap={2} sx={{ width: '100%', flexWrap: 'nowrap', overflowX: 'auto' }}>
-                <Box sx={{ flex: '1 1 260px', minWidth: 180, maxWidth: 720 }}>
-                  <TextField
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={searchPlaceholder}
-                    size="medium"
-                    fullWidth
-                    InputProps={{
-                      startAdornment: (
-                        <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
-                      ),
-                    }}
-                  />
-                </Box>
-              </Box>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25, flexWrap: 'wrap' }}>
-                <Chip size="small" label={resultsSummary} sx={{ bgcolor: '#f8fafc', color: '#475467' }} />
-                {search.trim() && (
-                  <Chip size="small" label={`Searching: ${search}`} sx={{ bgcolor: '#eef5ff', color: '#1d4ed8' }} />
-                )}
-              </Stack>
-            </Box>
-          </Box>
-        )}
       </Box>
 
       {/* Main Content */}
