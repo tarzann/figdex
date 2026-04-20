@@ -6,7 +6,7 @@
 
 ## 1. Release Readiness Summary
 
-FigDex is now beyond the "unstable prototype" phase and is close to an early market-ready release.
+FigDex is now past the unstable early-testing phase and is close to an early market-ready release.
 
 The product is already strong in:
 - plugin indexing flow

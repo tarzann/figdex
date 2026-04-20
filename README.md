@@ -121,5 +121,5 @@ cd web && npm run build
 ## Current Caveats
 
 - `All Frames` intentionally stays capped at `24` items per page for stability
-- legacy docs under `web/docs/` still contain useful history, but many are not current source of truth
+- the remaining docs under `web/docs/` are secondary reference material, not the primary source of truth
 - `Repair gallery` exists as a temporary operational tool for older files and should eventually become unnecessary
