@@ -3547,10 +3547,11 @@ export default function Home() {
                   <Typography
                     variant="body2"
                     sx={{
-                      fontWeight: 700,
+                      fontWeight: 500,
                       color: '#111827',
                       lineHeight: 1.35,
                       minHeight: 40,
+                      fontSize: '0.82rem',
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -3559,23 +3560,6 @@ export default function Home() {
                   >
                     {thumb.label}
                   </Typography>
-                  {(thumb as any).filePageSubtitle && (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        mt: 0.25,
-                        lineHeight: 1.35,
-                        minHeight: 32,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {(thumb as any).filePageSubtitle}
-                    </Typography>
-                  )}
                 </Box>
                 
                 {/* Tags Display */}
