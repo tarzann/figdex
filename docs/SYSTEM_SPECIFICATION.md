@@ -1,6 +1,6 @@
 # FigDex System Specification
 
-**Last updated:** March 31, 2026  
+**Last updated:** April 20, 2026  
 **Status:** current specification of the active FigDex product and platform
 
 ## 1. Product Definition
@@ -88,6 +88,14 @@ Plugin output includes:
 - file metadata
 - sync identifiers used by normalized storage
 
+Important current plugin behavior:
+- `storage-first` is the default indexing path
+- the plugin always includes the `cover` page in indexing runs
+- hidden frames are excluded from indexing
+- heavy runs warn but do not block
+- progress UI shows elapsed / total / remaining time
+- a temporary `Repair gallery` action exists for older indexed files
+
 ## 3.2 Web App
 
 Main entry areas:
@@ -124,11 +132,14 @@ Important APIs include:
 - account/admin APIs
 
 Key current hot paths:
-- [web/pages/api/create-index-from-figma.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/create-index-from-figma.ts)
 - [web/pages/api/get-indices.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/get-indices.ts)
 - [web/pages/api/get-index-data.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/get-index-data.ts)
 - [web/pages/api/file-index-view.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/file-index-view.ts)
 - [web/pages/api/user/share.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/user/share.ts)
+- [web/pages/api/uploads/index.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/index.ts)
+- [web/pages/api/uploads/[id]/append.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/%5Bid%5D/append.ts)
+- [web/pages/api/uploads/[id]/commit.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/%5Bid%5D/commit.ts)
+- [web/pages/api/repair-file-pages.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/repair-file-pages.ts)
 
 ## 3.4 Supabase
 
@@ -208,9 +219,10 @@ The system was recently updated to support this path more explicitly across:
 4. pages are loaded
 5. indexable pages are selected
 6. plugin exports frames/images/metadata
-7. upload/index route stores data
-8. normalized tables are updated
-9. gallery reflects the result
+7. plugin creates upload session
+8. plugin appends chunks
+9. commit route finalizes upload and syncs normalized rows
+10. gallery reflects the result
 
 ## 5.2 Gallery Lobby Flow
 
@@ -223,6 +235,11 @@ The system was recently updated to support this path more explicitly across:
    - frame count
 4. user clicks a file
 5. file view opens
+
+Current lobby behavior:
+- file cards remain cover-first and are intentionally visually different from frame cards
+- sidebar reflects logical files
+- older files may be repaired into current page metadata/order state
 
 For a first-time user with no indices:
 - the gallery should show guided onboarding, not a generic empty state

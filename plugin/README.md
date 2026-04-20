@@ -1,19 +1,20 @@
 # FigDex Plugin
 
-**Version:** v1.32.02  
-**Last Updated:** March 23, 2026
+**Runtime version:** `v1.32.39`  
+**Last Updated:** April 20, 2026
 
 ---
 
 ## 📋 Description
 
-The FigDex Plugin is a Figma plugin that allows users to:
-- Index Figma frames from the "IndeXo" page
-- Upload indices to the FigDex web system
-- Tag frames for better organization
-- Manage file connections and limits
-- Exclude pages from indexing
-- Secure storage of sensitive data (tokens, user info)
+The FigDex Plugin is the current production plugin used to:
+- connect the active Figma file to FigDex Web
+- select pages for indexing
+- always include the `cover` page on indexing runs
+- exclude hidden frames from indexing
+- upload through the stable `storage-first` session flow
+- repair older gallery metadata when needed
+- show progress, ETA, and end-of-run summaries
 
 ---
 
@@ -57,13 +58,16 @@ The plugin implements encryption for sensitive data stored in the FigDex page:
 
 ---
 
-## ✨ Features
+## ✨ Current Features
 
-- **Frame Indexing**: Index frames from the "IndeXo" page
-- **Web Upload**: Upload indices to FigDex Web system
-- **Frame Tagging**: Add tags to frames for better organization
-- **File Limits**: View and manage file limits based on subscription plan
-- **Quality Control**: Adjust image quality for indexed frames
+- **Storage-first indexing**: `session -> append -> commit`
+- **Page selection**: Select which pages to include
+- **Automatic cover refresh**: `cover` is always re-indexed
+- **Hidden frame filtering**: hidden frames are skipped
+- **Progress feedback**: progress bar, elapsed time, total estimate, time remaining
+- **Run summary logging**: request load summary and verdict in console
+- **Repair flow**: temporary `Repair gallery` support for older files
+- **Secure storage**: encrypted sensitive identity/session data
 
 ---
 
@@ -75,13 +79,19 @@ The plugin implements encryption for sensitive data stored in the FigDex page:
 
 ---
 
-## 📝 Usage
+## 📝 Current Usage
 
-1. **Create IndeXo Page**: Create a page named "IndeXo" in your Figma file
-2. **Add Frames**: Add frames to the IndeXo page that you want to index
-3. **Connect to Web**: Log in to FigDex Web and save your API key
-4. **Index Frames**: Use the plugin to index frames from the IndeXo page
-5. **Upload to Web**: Upload the index to the FigDex web system
+1. Open the plugin in a Figma file
+2. Connect your FigDex account if needed
+3. Save / confirm the active file link
+4. Select pages for indexing
+5. Start indexing
+6. Review the result in FigDex Web
+
+Notes:
+- the `cover` page is included automatically
+- hidden frames are skipped automatically
+- large runs may warn, but they are not blocked
 
 ---
 
@@ -92,28 +102,32 @@ The plugin implements encryption for sensitive data stored in the FigDex page:
 
 ---
 
-## 📄 Files
+## 📄 Important Files
 
-- `manifest.json` - Plugin manifest file
-- `code.js` - Plugin code (runs in Figma)
-- `ui.html` - Plugin UI (runs in iframe)
-- `README.md` - This file
+- [plugin/code.js](/Users/ranmor/Documents/FigDex%20Codex/plugin/code.js) - active plugin runtime and bundled UI source
+- [plugin/manifest.json](/Users/ranmor/Documents/FigDex%20Codex/plugin/manifest.json) - plugin manifest
+- [plugin/ui.html](/Users/ranmor/Documents/FigDex%20Codex/plugin/ui.html) - legacy/reference UI file only
+- [web/lib/plugin-release.ts](/Users/ranmor/Documents/FigDex%20Codex/web/lib/plugin-release.ts) - release version source of truth
+- [plugin/CHANGELOG.md](/Users/ranmor/Documents/FigDex%20Codex/plugin/CHANGELOG.md) - plugin history
 
 ---
 
-**Version:** v1.32.02  
-**Build Date:** March 23, 2026
+**Runtime Version:** `v1.32.39`  
+**Build Date:** April 20, 2026
 
 ---
 
 ## 🔄 Recent Updates
 
-### v1.32.02 (March 23, 2026)
-- ✅ Guest and free user flows stabilized end-to-end
-- ✅ Correct per-file detection across reopen, reconnect, and multi-file switching
-- ✅ Pre-check of limits before any export or upload begins
-- ✅ Free plan aligned to 2 files and 500 total frames
-- ✅ File-level cover preserved across page updates and chunked uploads
+### v1.32.39 (April 2026)
+- ✅ `storage-first` indexing stabilized as the active plugin path
+- ✅ upload session flow now persists page metadata and cover metadata
+- ✅ hidden frames no longer get indexed
+- ✅ cover page is always included in indexing runs
+- ✅ progress bar and ETA added to indexing flow
+- ✅ end-of-run summary log added
+- ✅ temporary `Repair gallery` action added for older files
+- ✅ gallery/order repair flow hardened for existing files
 
 ### v1.30.65 (January 2, 2026)
 - ✅ Frame indexing improvements

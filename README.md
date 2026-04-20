@@ -1,377 +1,125 @@
-# FigDex - Complete System Documentation
+# FigDex
 
-**System Version:** v1.32.02  
-**Last Updated:** March 23, 2026  
-**Status:** ✅ Production Ready
+**Project status:** Active founder-led production testing  
+**Plugin runtime version:** `v1.32.39`  
+**Web app version:** `v1.32.02`  
+**Last updated:** April 20, 2026
 
----
+FigDex is a two-part system for indexing Figma files and browsing them on the web:
 
-## 📁 מיקום הפרויקט / Project Location
+- `plugin/` – Figma plugin for file connection, page selection, indexing, repair, and upload
+- `web/` – Next.js app for gallery browsing, file view, search, sharing, account, and admin
 
-**הפרויקט המלא ממוקם בתיקיית FigDex**  
-The entire project is located in the `FigDex` folder:
+GitHub: [tarzann/figdex](https://github.com/tarzann/figdex)
 
-- **`FigDex/`** – Root (plugin + web)
-- **`FigDex/plugin/`** – Figma Plugin
-- **`FigDex/web/`** – Web Application (Next.js)
+## Current Product State
 
-**Git Repository:** https://github.com/tarzann/figdex
+The current production system is built around these realities:
 
----
+- `storage-first` indexing is the active plugin upload path
+- plugin uploads use `session -> append -> commit`
+- direct signed chunk upload is currently disabled in favor of the more stable append flow
+- normalized gallery storage is the operational model:
+  - `indexed_files`
+  - `indexed_pages`
+  - `indexed_frames`
+  - `indexed_owner_usage`
+- cover handling is file-level and is refreshed during indexing and repair
+- hidden Figma frames are excluded from indexing
+- the plugin always includes the `cover` page in indexing runs, even if the user did not select it
+- large runs are warned, not blocked
+- gallery sidebar now reflects Figma page order and can self-heal older files via repair
 
-## 📋 System Overview
-
-FigDex is a comprehensive platform for creating, managing, and sharing searchable indexes of Figma files. The system consists of two main components:
-
-1. **Figma Plugin** - Allows users to index frames from Figma files and upload them to the web system
-2. **Web Application** - Provides cloud storage, team sharing, advanced search, and gallery management
-
----
-
-## 🏗️ System Architecture
-
-```
-FigDex/
-├── plugin/          # Figma Plugin (Figma Desktop App)
-│   ├── manifest.json
-│   ├── code.js      # Plugin runtime code
-│   ├── ui.html      # Plugin UI
-│   └── README.md
-│
-└── web/             # Web Application (Next.js)
-    ├── pages/       # Next.js pages and API routes
-    ├── lib/         # Shared libraries and utilities
-    ├── components/  # React components
-    ├── docs/        # Documentation
-    └── package.json
-```
-
----
-
-## 📦 Component Versions
-
-### Plugin Version: v1.32.02
-- **Location:** `plugin/`
-- **Main Files:**
-  - `code.js` - Plugin runtime (v1.32.02)
-  - `ui.html` - Plugin UI (v1.32.02)
-  - `manifest.json` - Plugin manifest
-- **Key Features:**
-  - Reads __FRAME_TEXTS__ from thumbnail frames
-  - Complete text extraction and search token generation
-  - Cover image upload support
-  - **Data encryption for sensitive tokens and user info**
-  - **Page exclusion from indexing**
-
-### Web Application Version: v1.32.02
-- **Location:** `FigDex/web/` (production source for www.figdex.com)
-- **Main Components:**
-  - API Routes: v1.32.02
-  - Gallery Pages: v1.32.02
-  - Core Libraries: Latest
-- **Key Features:**
-  - Advanced search with textContent and searchTokens
-  - Cover image display and management
-  - Frame count tracking
-
----
-
-## 🚀 Quick Start
-
-### For AI Assistants
-
-This README provides complete system context. When working on FigDex:
-
-1. **Plugin Development**: Work in `FigDex/plugin/` directory
-   - Main code: `FigDex/plugin/code.js`
-   - UI: `FigDex/plugin/ui.html`
-   - Manifest: `FigDex/plugin/manifest.json`
-
-2. **Web Development**: Work in `FigDex/web/` directory
-   - Pages: `FigDex/web/pages/`
-   - API Routes: `FigDex/web/pages/api/`
-   - Libraries: `FigDex/web/lib/`
-
-3. **Version Tracking**: Always update version numbers in:
-   - Plugin: `FigDex/plugin/code.js` (PLUGIN_VERSION)
-   - Plugin UI: `FigDex/plugin/ui.html` (menuVersionText)
-   - API: `FigDex/web/pages/api/upload-index-v2.ts` (API_VERSION)
-   - Pages: `FigDex/web/pages/gallery.tsx` (PAGE_VERSION)
-
----
-
-## 📁 Directory Structure
-
-### Plugin Directory (`plugin/`)
-
-```
-plugin/
-├── manifest.json          # Plugin manifest (required by Figma)
-├── code.js                # Plugin runtime code (Figma Plugin API)
-├── ui.html                # Plugin UI (HTML/CSS/JavaScript)
-├── README.md              # Plugin-specific documentation
-├── CHANGELOG.md           # Plugin changelog
-└── VERSIONS.md            # Version history
-```
-
-**Key Features:**
-- Frame indexing from FigDex page
-- Text extraction from frames (via __FRAME_TEXTS__)
-- Image export and upload
-- Tag management
-- Web system integration
-
-### Web Directory (`web/`)
-
-```
-web/
-├── pages/                 # Next.js pages and API routes
-│   ├── api/               # API endpoints
-│   │   ├── upload-index-v2.ts    # Main upload endpoint
-│   │   ├── get-index-data.ts     # Index data retrieval
-│   │   ├── get-indices.ts        # List indices
-│   │   └── storage/               # Storage utilities
-│   ├── gallery.tsx        # Main gallery page
-│   ├── index-management.tsx      # Index management
-│   └── share/[token].tsx  # Shared gallery view
-│
-├── lib/                   # Shared libraries
-│   ├── supabase.ts       # Supabase client
-│   ├── plans.ts          # Subscription plans
-│   ├── figma-api.ts      # Figma API integration
-│   └── ...
-│
-├── components/           # React components
-├── docs/                 # Documentation
-│   ├── INSTALLATION.md   # Installation guide
-│   ├── SPECIFICATION.md  # System specification
-│   └── setup/            # Setup guides
-│
-├── package.json          # Dependencies
-└── vercel.json          # Vercel configuration
-```
-
----
-
-## 🔧 Installation & Setup
-
-### Plugin Installation
-
-1. Open Figma Desktop App
-2. Go to **Plugins → Development → Import plugin from manifest...**
-3. Select `plugin/manifest.json`
-4. The plugin will appear in your plugins list
-
-### Web Application Setup
-
-See `web/docs/INSTALLATION.md` for complete setup instructions.
-
-**Quick Setup:**
-1. Install dependencies: `cd FigDex/web && npm install`
-2. Configure environment variables (see `FigDex/web/docs/setup/ENV_SETUP.md`)
-3. Set up Supabase database (see `FigDex/web/docs/setup/SETUP.md`)
-4. Deploy to Vercel (see `FigDex/web/docs/setup/VERCEL_SETUP.md`)
-
----
-
-## 🔑 Key Features
-
-### Plugin Features
-- ✅ Frame indexing from FigDex page
-- ✅ Complete text extraction (via __FRAME_TEXTS__)
-- ✅ Image export with quality control
-- ✅ Tag management (predefined + custom tags)
-- ✅ Web system integration
-- ✅ Cover image upload
-- ✅ Progress tracking
-
-### Web Application Features
-- ✅ Cloud storage (Supabase Storage)
-- ✅ Advanced search (by text content, tags, names)
-- ✅ Gallery view with filtering
-- ✅ Index management
-- ✅ Team sharing (shareable links)
-- ✅ User authentication
-- ✅ Subscription management (Paddle integration)
-
----
-
-## 🔄 Data Flow
-
-1. **User creates FigDex page** in Figma with frames
-2. **Plugin indexes frames**:
-   - Extracts text content (saves to __FRAME_TEXTS__)
-   - Exports images
-   - Collects tags
-3. **Plugin uploads to web**:
-   - Images → Supabase Storage
-   - Index data → Supabase Database
-4. **Web system processes**:
-   - Stores index data
-   - Generates signed URLs for images
-   - Enables search and gallery features
-
----
-
-## 📊 Database Schema
-
-### Main Tables (Supabase)
-
-- `index_files` - Stores index metadata and data
-- `users` - User accounts
-- `saved_connections` - Figma file connections
-- `subscriptions` - User subscriptions (Paddle)
-
-See `web/docs/SPECIFICATION.md` for complete schema.
-
----
-
-## 🔍 Search Functionality
-
-The search system indexes:
-- **Frame names**
-- **Text content** (from __FRAME_TEXTS__)
-- **Search tokens** (tokenized text)
-- **Tags** (predefined + custom)
-
-Search is performed client-side in `web/pages/gallery.tsx` using:
-- Word boundary matching
-- Token matching
-- Case-insensitive search
-
----
-
-## 🚢 Deployment
+## What Is Stable Right Now
 
 ### Plugin
-- No deployment needed (runs locally in Figma)
-- Users install via manifest.json
 
-### Web Application
-- **Production**: Deployed on Vercel
-- **Database**: Supabase (PostgreSQL)
-- **Storage**: Supabase Storage
-- **CDN**: Vercel Edge Network
+- account reconnect and auth recovery
+- file linking
+- page selection
+- progress bar with elapsed / total / remaining time
+- indexing summary log
+- storage-first session creation and commit
+- cover upload / refresh
+- repair action for legacy gallery metadata
 
----
+Main runtime file:
+- [plugin/code.js](/Users/ranmor/Documents/FigDex%20Codex/plugin/code.js)
 
-## 📝 Version History
+Plugin release source of truth:
+- [web/lib/plugin-release.ts](/Users/ranmor/Documents/FigDex%20Codex/web/lib/plugin-release.ts)
 
-### v1.32.02 (Current - March 23, 2026)
-- ✅ Guest and free flows stabilized end-to-end
-- ✅ Logical file grouping fixed in gallery lobby
-- ✅ File-level cover preserved during chunked updates
-- ✅ Reconnect and reopen behavior fixed for connected users
-- ✅ Free plan limits enforced early: 2 files, 500 total frames
+### Web App
 
-### v1.30.40 (January 3, 2026)
-- ✅ Fixed text extraction from __FRAME_TEXTS__
-- ✅ Improved search functionality
-- ✅ Added comprehensive logging
-- ✅ Fixed cover image upload
-- ✅ Fixed frame count display
+- gallery lobby
+- file view
+- all-frames view
+- normalized reads
+- file/page tree in Figma order
+- disabled display of non-indexed pages
+- folder-aware page grouping
+- improved frame cards with normalized preview area
+- stable public gallery/share/account/download/admin flows
 
-### Previous Versions
-See `plugin/VERSIONS.md` and `web/docs/VERSION.md` for detailed history.
+Main web file for current gallery UX:
+- [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
 
----
+## Architecture Snapshot
 
-## 🛠️ Development
+### Plugin upload path
 
-### Plugin Development
-- Edit `plugin/code.js` for plugin logic
-- Edit `plugin/ui.html` for UI
-- Test in Figma Desktop App
-- Reload plugin after changes
+1. user links file
+2. plugin loads pages and builds page metadata
+3. plugin includes cover metadata and selected pages
+4. plugin creates storage-first upload session
+5. plugin appends chunks
+6. plugin commits upload session
+7. server syncs normalized gallery rows
 
-### Web Development
-- Edit `FigDex/web/pages/` for pages
-- Edit `FigDex/web/pages/api/` for API routes
-- Run `npm run dev` from `FigDex/web` for local development
-- Deploy with `cd FigDex/web && npx vercel --prod`
+Relevant routes:
+- [web/pages/api/uploads/index.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/index.ts)
+- [web/pages/api/uploads/[id]/append.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/%5Bid%5D/append.ts)
+- [web/pages/api/uploads/[id]/commit.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/uploads/%5Bid%5D/commit.ts)
 
----
+### Legacy repair path
 
-## 📚 Documentation
+Used for older files that need page metadata / order / cover repair:
 
-### Plugin Documentation
-- `plugin/README.md` - Plugin overview
-- `plugin/CHANGELOG.md` - Plugin changelog
+- [web/pages/api/repair-file-pages.ts](/Users/ranmor/Documents/FigDex%20Codex/web/pages/api/repair-file-pages.ts)
 
-### Web Documentation
-- `web/docs/INSTALLATION.md` - Installation guide
-- `web/docs/SPECIFICATION.md` - System specification
-- `web/docs/FEATURES.md` - Features list
-- `web/docs/setup/` - Setup guides
+## Source Of Truth Docs
 
----
+If you need current project context, start here:
 
-## 🔗 External Services
+- [docs/DOCUMENTATION_INDEX.md](/Users/ranmor/Documents/FigDex%20Codex/docs/DOCUMENTATION_INDEX.md)
+- [docs/STATUS_REPORT.md](/Users/ranmor/Documents/FigDex%20Codex/docs/STATUS_REPORT.md)
+- [docs/SYSTEM_SPECIFICATION.md](/Users/ranmor/Documents/FigDex%20Codex/docs/SYSTEM_SPECIFICATION.md)
+- [docs/NORMALIZED_INDEX_ARCHITECTURE.md](/Users/ranmor/Documents/FigDex%20Codex/docs/NORMALIZED_INDEX_ARCHITECTURE.md)
+- [plugin/README.md](/Users/ranmor/Documents/FigDex%20Codex/plugin/README.md)
 
-- **Figma API** - Frame data and images
-- **Supabase** - Database and storage
-- **Vercel** - Hosting and deployment
-- **Paddle** - Payment processing
-- **Resend** - Email service
+## Quick Dev Notes
 
----
+### Plugin
 
-## ⚙️ Environment Variables
+- runtime entry: [plugin/code.js](/Users/ranmor/Documents/FigDex%20Codex/plugin/code.js)
+- local UI reference file exists at [plugin/ui.html](/Users/ranmor/Documents/FigDex%20Codex/plugin/ui.html), but the active shipped UI is bundled from `plugin/code.js`
 
-### Web Application Required Variables
+### Web
 
-See `web/docs/setup/ENVIRONMENT_VARIABLES.md` for complete list.
+- app root: [web](/Users/ranmor/Documents/FigDex%20Codex/web)
+- gallery: [web/pages/gallery.tsx](/Users/ranmor/Documents/FigDex%20Codex/web/pages/gallery.tsx)
+- install: [web/README.md](/Users/ranmor/Documents/FigDex%20Codex/web/README.md)
 
-**Key Variables:**
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `PADDLE_API_KEY` - Paddle API key (for payments)
-- `RESEND_API_KEY` - Resend API key (for emails)
+### Verification
 
----
+Common verification command:
 
-## 🐛 Troubleshooting
+```bash
+cd web && npm run build
+```
 
-### Plugin Issues
-- **Plugin not loading**: Check manifest.json path
-- **Text not extracted**: Verify __FRAME_TEXTS__ exists in FigDex page
-- **Upload fails**: Check API key and network connection
+## Current Caveats
 
-### Web Issues
-- **Search not working**: Verify textContent and searchTokens in database
-- **Images not loading**: Check Supabase Storage configuration
-- **API errors**: Check Vercel logs and environment variables
-
----
-
-## 📞 Support
-
-For issues or questions:
-1. Check documentation in `web/docs/`
-2. Review changelogs in `plugin/CHANGELOG.md`
-3. Check Vercel logs for API errors
-4. Review browser console for client-side errors
-
----
-
-## 📄 License
-
-[Add license information if applicable]
-
----
-
-## 🎯 Next Steps
-
-When continuing development:
-
-1. **Always update version numbers** in all relevant files
-2. **Test plugin in Figma** before committing changes
-3. **Test web locally** with `npm run dev`
-4. **Deploy to Vercel** for production testing
-5. **Update this README** with significant changes
-
----
-
-**Last Updated:** March 23, 2026  
-**System Version:** v1.32.02  
-**Status:** ✅ Production Ready
+- `All Frames` intentionally stays capped at `24` items per page for stability
+- legacy docs under `web/docs/` still contain useful history, but many are not current source of truth
+- `Repair gallery` exists as a temporary operational tool for older files and should eventually become unnecessary

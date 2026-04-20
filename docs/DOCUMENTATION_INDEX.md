@@ -1,6 +1,6 @@
 # FigDex Documentation Index
 
-**Last updated:** March 31, 2026
+**Last updated:** April 20, 2026
 
 This file is the recommended entry point for understanding the current FigDex project documentation.
 
@@ -8,11 +8,15 @@ This file is the recommended entry point for understanding the current FigDex pr
 
 ### Product / System Status
 - [docs/STATUS_REPORT.md](/Users/ranmor/Documents/FigDex%20Codex/docs/STATUS_REPORT.md)
-  Current high-level system status, architecture state, performance state, product decisions, and next priorities.
+  Current high-level system status, architecture state, storage-first indexing state, gallery status, and next priorities.
 
 ### Full System Specification
 - [docs/SYSTEM_SPECIFICATION.md](/Users/ranmor/Documents/FigDex%20Codex/docs/SYSTEM_SPECIFICATION.md)
-  Comprehensive specification of the current FigDex system: plugin, web app, backend, data model, flows, admin, and operational behavior.
+  Comprehensive specification of the current FigDex system: plugin, web app, backend, data model, storage-first flow, gallery behavior, admin, and operational behavior.
+
+### Root README
+- [README.md](/Users/ranmor/Documents/FigDex%20Codex/README.md)
+  Fast project-level overview of the current system, active indexing flow, and source-of-truth docs.
 
 ### Normalized Storage Architecture
 - [docs/NORMALIZED_INDEX_ARCHITECTURE.md](/Users/ranmor/Documents/FigDex%20Codex/docs/NORMALIZED_INDEX_ARCHITECTURE.md)
@@ -41,6 +45,10 @@ This file is the recommended entry point for understanding the current FigDex pr
 ### Plugin Release
 - [docs/PLUGIN_RELEASE_PROCESS.md](/Users/ranmor/Documents/FigDex%20Codex/docs/PLUGIN_RELEASE_PROCESS.md)
   Release checklist for plugin version sync, ZIP packaging, and public download updates.
+
+### Plugin Runtime Overview
+- [plugin/README.md](/Users/ranmor/Documents/FigDex%20Codex/plugin/README.md)
+  Current plugin behavior, runtime entry points, and operational notes for active testing.
 
 ## Supporting Docs
 

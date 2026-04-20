@@ -1,21 +1,21 @@
 # FigDex Status Report
 
-**Date:** March 31, 2026  
-**Plugin version:** `v1.32.35`  
-**Web status:** current `main` after normalized-index migration, gallery/search/performance hardening, public-site shell unification, activation-path cleanup, and user-app UX cleanup  
+**Date:** April 20, 2026  
+**Plugin runtime version:** `v1.32.39`  
+**Web status:** current `main` after storage-first stabilization, gallery tree unification, page-order repair, cover refresh hardening, and frame-card redesign  
 **Production URL:** [https://www.figdex.com](https://www.figdex.com)
 
 ## 1. Executive Summary
 
-FigDex is now in a much stronger state than it was at the start of this stabilization cycle.
+FigDex is now in a stable enough state for real founder-led product testing, including multi-page indexing, gallery browsing, page deletion, and repeated file updates.
 
-The system has moved from a heavy legacy JSON-first index model toward a normalized storage model, the plugin flow is materially more stable, the gallery and file-view performance issues were resolved, and the core manual smoke-test flow passed end to end.
+The most important change in this cycle was the shift from a heavy per-request indexing path to a stable `storage-first` upload flow with normalized writes and gallery-side self-healing for older files.
 
 At this point:
-- The product is usable for serious founder-led testing.
-- The main bottlenecks that previously caused `429`, `504`, `statement timeout`, and slow gallery file loads have been addressed.
-- The UX across plugin, gallery, landing, pricing, account, download, auth, and admin is materially more coherent.
-- The system still contains some legacy compatibility layers, but they are no longer the dominant path.
+- The plugin is stable enough for regular iterative indexing work.
+- The gallery file tree is much closer to the real Figma structure and order.
+- The main timeout and request-load regressions were materially reduced.
+- The system still contains some legacy repair and compatibility behavior, but it is now an exception path rather than the main product path.
 
 ## 2. Current Product Scope
 
@@ -31,22 +31,26 @@ FigDex currently consists of three connected layers:
 
 ### 3.1 Plugin
 
-The plugin was cleaned up and stabilized across:
+The plugin was stabilized across:
 - auth recovery
-- deleted-user handling
 - file linking
 - page selection
-- progress/status feedback
-- upload retry behavior
-- unsupported syntax cleanup for Figma runtime
-- stale local state after server resets
+- storage-first upload session flow
+- commit handling
+- cover refresh
+- stale local state after resets
+- upload progress visibility
 
-Recent UX improvements include:
-- clearer top-level hierarchy
-- improved `Account` card
-- cleaner `Pages` selection controls
-- better indexing status presentation
-- removal of noisy and redundant controls
+Recent plugin behavior now includes:
+- `storage-first` indexing by default
+- append-based chunk upload
+- commit-based finalize
+- cover page auto-inclusion on every indexing run
+- hidden frame exclusion
+- progress bar with elapsed / total / remaining time
+- run summary log with load verdict
+- warning-only admission control for heavy runs
+- temporary `Repair gallery` action for older files
 
 Plugin code:
 - [plugin/code.js](/Users/ranmor/Documents/FigDex%20Codex/plugin/code.js)
@@ -57,13 +61,12 @@ Plugin code:
 The web app received major improvements in:
 - gallery hierarchy
 - file view structure
+- all-frames consistency
+- page ordering by Figma order
+- older file self-healing
 - share flow UX
 - account usage UX
-- landing page clarity
-- pricing page clarity
-- admin user/index views
-- download and auth flow clarity
-- public-site shell consistency across marketing/support/legal pages
+- public-site shell consistency
 - first-use and first-success onboarding states
 - index management polish
 
@@ -80,7 +83,12 @@ Key files:
 
 ### 3.3 Backend / DB
 
-The most important architectural change was the move to normalized index storage:
+The most important architectural changes were:
+
+1. the move to normalized index storage
+2. the storage-first upload session flow
+
+Normalized model:
 
 - `indexed_files`
 - `indexed_pages`
@@ -88,6 +96,13 @@ The most important architectural change was the move to normalized index storage
 - `indexed_owner_usage`
 
 This replaced the previous over-reliance on `index_files.index_data` as the operational source of truth.
+
+Current indexing write path:
+- create upload session
+- append chunks
+- commit upload
+- sync normalized rows
+- refresh cover metadata
 
 Reference docs and SQL:
 - [docs/NORMALIZED_INDEX_ARCHITECTURE.md](/Users/ranmor/Documents/FigDex%20Codex/docs/NORMALIZED_INDEX_ARCHITECTURE.md)
@@ -113,6 +128,7 @@ Current reality:
 - normalized write paths are active
 - normalized read paths are active in major flows
 - legacy fallback still exists in some routes
+- `Repair gallery` exists for older files with missing page metadata / ordering
 - the platform is in late migration, not full deletion
 
 ### 4.3 Route Cleanup Status

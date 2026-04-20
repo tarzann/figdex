@@ -1,6 +1,6 @@
 # FigDex Version Information
 
-**Last Updated:** March 23, 2026
+**Last Updated:** April 20, 2026
 
 ---
 
@@ -23,31 +23,35 @@
 
 ---
 
-## Current System Version: v1.32.02
+## Current System Version
 
 ### Component Versions
 
 | Component | Version | Location | Last Updated |
 |-----------|---------|----------|--------------|
-| **Plugin Runtime** | v1.32.02 | `plugin/code.js` | Mar 23, 2026 |
-| **Plugin UI** | v1.32.02 | `plugin/ui.html` | Mar 23, 2026 |
-| **Web App** | v1.32.02 | `web/package.json` / `web/lib/version.ts` | Mar 23, 2026 |
-| **Create Index API** | v1.32.02 | `web/pages/api/create-index-from-figma.ts` | Mar 23, 2026 |
-| **Gallery Flow** | v1.32.02 | `web/pages/gallery.tsx` | Mar 23, 2026 |
+| **Plugin Runtime** | v1.32.39 | `plugin/code.js` | Apr 20, 2026 |
+| **Plugin Release** | v1.32.39 | `web/lib/plugin-release.ts` | Apr 20, 2026 |
+| **Plugin UI Reference** | legacy reference | `plugin/ui.html` | not source of truth |
+| **Web App** | v1.32.02 | `web/package.json` | active |
+| **Gallery Flow** | current main | `web/pages/gallery.tsx` | Apr 20, 2026 |
+| **Upload Session Flow** | current main | `web/pages/api/uploads/*` | Apr 20, 2026 |
 
 ---
 
 ## Version History
 
-### v1.32.02 - Free and Guest Flow Stabilization (March 23, 2026)
+### v1.32.39 - Storage-first indexing and gallery repair stabilization (April 2026)
 **Plugin + Web**
-- Guest users now appear in admin and can be deleted from user management.
-- Grouping now treats multiple indexed pages from the same Figma file as one logical file in the gallery lobby.
-- File cover handling was stabilized so the cover is kept at file level and is not replaced by later chunk uploads.
-- Connected-user file detection was fixed, including reopen behavior and avoiding stale file keys across files.
-- Free plan limits were aligned and enforced end-to-end: 2 files and 500 total frames.
-- Limit checks now run before plugin export/upload starts, so blocked indexing stops immediately.
-- Plugin no longer disconnects users on normal plan-limit responses.
+- storage-first upload session flow stabilized as the main indexing path
+- append / commit flow now persists page metadata and cover metadata
+- cover page is always included in indexing runs
+- hidden frames are excluded from indexing
+- indexing progress now includes elapsed / total / remaining time
+- plugin run summary log added
+- gallery repair flow added for older files
+- file/page tree now follows Figma order in gallery
+- frame cards redesigned into normalized preview cards
+- `All Frames` remains capped to 24 items per page for stability
 
 ### v1.31.00 – משתמש חדש כל הפלואו מוכן (January 31, 2026)
 **Plugin + Web**
@@ -122,4 +126,3 @@ When updating versions:
 ---
 
 **Note:** Always verify version numbers match across all components before deployment.
-

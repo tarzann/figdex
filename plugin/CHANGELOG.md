@@ -1,5 +1,22 @@
 # Indexo Plugin - Changelog
 
+## Version 1.32.39 - Storage-First Stabilization and Gallery Repair
+**Date:** April 2026
+
+### ✅ Added / Changed
+- `storage-first` indexing is now the active plugin upload path
+- upload session flow sends page metadata and cover metadata
+- cover page is always included in indexing runs
+- hidden frames are skipped during indexing
+- plugin progress UI now shows elapsed / total / remaining time
+- run summary log added for indexing load analysis
+- temporary `Repair gallery` action added for legacy files
+
+### ✅ Gallery / Web Alignment
+- repaired page order and page metadata can now be pushed from plugin repair flow
+- cover refresh is included in repair and indexing paths
+- plugin no longer marks pages as indexed before commit really succeeds
+
 ## Version 1.32.02 - Guest and Free Flow Stabilization
 **Date:** March 23, 2026
 
