@@ -3445,6 +3445,10 @@ export default function Home() {
             
             // Use the original index from visibleThumbs, not the paged index
             const originalIndex = index;
+            const frameDimensions =
+              frame.width && frame.height
+                ? `${Number(frame.width).toLocaleString()}×${Number(frame.height).toLocaleString()}`
+                : '';
             
             return (
               <Box
@@ -3468,8 +3472,8 @@ export default function Home() {
                     borderRadius: 3,
                     border: (modalIndex === originalIndex) ? '3px solid #111827' : '1.5px solid #dbe3f0',
                     background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)',
-                    minHeight: 228,
-                    height: 228,
+                    minHeight: 216,
+                    height: 216,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -3489,6 +3493,29 @@ export default function Home() {
                     }
                   }}
                 >
+                  {frameDimensions && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        left: 10,
+                        bottom: 10,
+                        zIndex: 2,
+                        px: 1,
+                        py: 0.45,
+                        borderRadius: 999,
+                        bgcolor: 'rgba(255,255,255,0.92)',
+                        border: '1px solid rgba(219,227,240,0.95)',
+                        color: '#475467',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        backdropFilter: 'blur(8px)',
+                        boxShadow: '0 6px 16px rgba(15,23,42,0.08)',
+                      }}
+                    >
+                      {frameDimensions}
+                    </Box>
+                  )}
                   <Box
                     component="img"
                     src={thumb.thumbnail || thumb.image}
