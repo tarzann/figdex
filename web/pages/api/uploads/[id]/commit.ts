@@ -24,6 +24,17 @@ type SavedPageMeta = {
   hasFrames: boolean;
 };
 
+function isOversizedObjectPersistError(errorMessage: string | null | undefined): boolean {
+  const message = String(errorMessage || '').toLowerCase();
+  if (!message) return false;
+  return (
+    message.includes('maximum allowed size') ||
+    message.includes('object exceeded') ||
+    message.includes('entity too large') ||
+    message.includes('payload too large')
+  );
+}
+
 function sanitizeStorageSegment(value: string, fallback: string) {
   const normalized = String(value || '')
     .trim()
@@ -394,7 +405,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const blob = new Blob([mergedJson], { type: 'application/json' });
   const storagePath = `indices/${uploadId}.json`;
   const up = await (supabaseAdmin as any).storage.from(bucket).upload(storagePath, blob, { upsert: true, contentType: 'application/json' });
-  if (up?.error) {
+  const mergedJsonPersistWarning =
+    up?.error && isOversizedObjectPersistError(up.error.message)
+      ? String(up.error.message || 'Merged JSON exceeded maximum allowed object size')
+      : null;
+  if (up?.error && !mergedJsonPersistWarning) {
     return res.status(500).json({ success: false, error: 'Failed to persist merged JSON', details: up.error.message });
   }
 
@@ -403,8 +418,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     project_id: documentId,
     figma_file_key: finalFileKey,
     file_name: finalFileName,
-    // Store a lightweight pointer in DB; actual JSON is in storage
-    index_data: { storageRef: `${bucket}:${storagePath}` },
+    // Store a lightweight pointer in DB; actual JSON is in storage when available.
+    // If the merged JSON is too large to persist as a single legacy object, the
+    // normalized model remains the operational source of truth.
+    index_data: mergedJsonPersistWarning
+      ? {
+          normalizedOnly: true,
+          compatibilityWarning: 'merged_json_too_large',
+          syncId: uploadId,
+        }
+      : { storageRef: `${bucket}:${storagePath}` },
     uploaded_at: new Date().toISOString(),
     file_size: fileSizeBytes,
     frame_count: framesCount
@@ -475,6 +498,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     success: true,
     indexId: resp.data?.id,
     frames: framesCount,
-    size: +(fileSizeBytes / 1024 / 1024).toFixed(2)
+    size: +(fileSizeBytes / 1024 / 1024).toFixed(2),
+    compatibilityWarning: mergedJsonPersistWarning
+      ? {
+          code: 'merged_json_too_large',
+          message: mergedJsonPersistWarning,
+        }
+      : null,
   });
 }

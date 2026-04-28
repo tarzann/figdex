@@ -2902,6 +2902,14 @@ figma.ui.onmessage = async (msg) => {
             chunkPaths: storageFirstUploadedChunkPaths
           });
           if (commitData && commitData.viewToken) lastViewToken = commitData.viewToken;
+          if (commitData && commitData.compatibilityWarning) {
+            pluginTrace('Storage-first commit compatibility warning', {
+              runId: activeIndexRunId,
+              uploadId: storageFirstUploadSession.uploadId || null,
+              warningCode: commitData.compatibilityWarning.code || null,
+              warningMessage: commitData.compatibilityWarning.message || null
+            });
+          }
           pluginTrace('Storage-first upload committed', {
             runId: activeIndexRunId,
             uploadId: storageFirstUploadSession.uploadId || null,
