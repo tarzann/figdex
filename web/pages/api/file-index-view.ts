@@ -217,10 +217,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .maybeSingle();
         savedConnectionId = savedConnection?.id ? String(savedConnection.id) : null;
 
-        connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
-        if (connectionPages.length === 0 && typeof savedConnection?.figma_token === 'string' && savedConnection.figma_token.trim()) {
+        const savedConnectionToken = typeof savedConnection?.figma_token === 'string'
+          ? savedConnection.figma_token.trim()
+          : '';
+        const canFetchLiveFigmaPages =
+          !!savedConnectionToken &&
+          savedConnectionToken !== '__storage_first_placeholder__';
+
+        if (canFetchLiveFigmaPages) {
           try {
-            const figmaFile = await fetchFigmaFile(fileKey, savedConnection.figma_token.trim(), true);
+            const figmaFile = await fetchFigmaFile(fileKey, savedConnectionToken, true);
             connectionPages = (figmaFile?.document?.children || [])
               .filter((child: any) => child?.type === 'PAGE' || child?.type === 'CANVAS')
               .map((child: any, pageIndex: number) => ({
@@ -232,8 +238,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               }));
             fetchedConnectionPagesFromFigma = connectionPages.length > 0;
           } catch {
-            connectionPages = [];
+            connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
           }
+        } else {
+          connectionPages = getPagesFromConnectionMeta(savedConnection?.page_meta);
         }
 
         connectionPages.forEach((page: any, pageIndex: number) => {
