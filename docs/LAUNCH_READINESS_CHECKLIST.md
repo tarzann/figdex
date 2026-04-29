@@ -99,6 +99,7 @@ These are not hard blockers, but they should be planned quickly after launch.
 - [ ] continue refining status copy during indexing
 - [ ] verify all limit states feel consistent and intentional
 - [ ] check plugin UI on multiple real Figma files and window sizes
+- [ ] define a safe full-file reconciliation mode for pages that were indexed and later deleted from the Figma file, without risking accidental deletion during partial indexing
 
 ### 3.3 Gallery Product Polish
 

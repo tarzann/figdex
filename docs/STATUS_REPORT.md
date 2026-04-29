@@ -363,6 +363,7 @@ Known remaining reality:
 - `index_files` is still present and still used in compatibility paths
 - some older admin/debug/payment surfaces may still need cleanup
 - there is still room for more backend hardening and observability
+- indexed pages that were later deleted from the Figma file are not yet pruned automatically during normal partial indexing; this still needs a deliberate full-file reconciliation path
 
 This is not a blocker for founder-led testing, but it is still worth tracking.
 
