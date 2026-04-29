@@ -158,6 +158,7 @@ type DisplayFilePage = FilePageInfo & {
   childPageIds?: string[];
   childPages?: FilePageInfo[];
   displayFrameCount?: number;
+  pendingLeadingChildPages?: DisplayFilePage[];
 };
 
 // Helpers to derive tag categories from frame data (client-side)
@@ -425,6 +426,20 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
     folderPage.displayFrameCount = (folderPage.displayFrameCount || 0) + (typeof childPage.frameCount === 'number' ? childPage.frameCount : 0);
   };
 
+  const flushPendingChildrenIntoActiveFolder = () => {
+    if (!activeFolder || !activeFolder.pendingLeadingChildPages || activeFolder.pendingLeadingChildPages.length === 0) {
+      return;
+    }
+    activeFolder.pendingLeadingChildPages.forEach((childPage) => {
+      attachChildPageToFolder(activeFolder as DisplayFilePage, childPage);
+      displayPages.push({
+        ...childPage,
+        isFolder: false,
+      });
+    });
+    activeFolder.pendingLeadingChildPages = [];
+  };
+
   sortedPages.forEach((page) => {
     if (shouldHidePageFromTree(page.name)) {
       return;
@@ -439,17 +454,12 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
         childPageIds: [],
         childPages: [],
         displayFrameCount: 0,
+        pendingLeadingChildPages: [],
       };
       displayPages.push(folderPage);
       activeFolder = folderPage;
       if (pendingChildPages.length > 0) {
-        pendingChildPages.forEach((childPage) => {
-          attachChildPageToFolder(folderPage, childPage);
-          displayPages.push({
-            ...childPage,
-            isFolder: false,
-          });
-        });
+        folderPage.pendingLeadingChildPages = pendingChildPages.slice();
         pendingChildPages = [];
       }
       return;
@@ -468,6 +478,7 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
       pendingChildPages.push(normalizedPage);
       return;
     } else {
+      flushPendingChildrenIntoActiveFolder();
       activeFolder = null;
     }
 
@@ -476,6 +487,8 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
       isFolder: false,
     });
   });
+
+  flushPendingChildrenIntoActiveFolder();
 
   if (pendingChildPages.length > 0) {
     pendingChildPages.forEach((page) => {
