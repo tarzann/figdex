@@ -363,16 +363,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      const sortedPages = Array.from(pagesMap.values()).sort((a, b) => {
-        const aOrder = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder)
-          ? a.sortOrder
-          : Number.MAX_SAFE_INTEGER;
-        const bOrder = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder)
-          ? b.sortOrder
-          : Number.MAX_SAFE_INTEGER;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return a.name.localeCompare(b.name);
-      });
+      let sortedPages: Array<{ id: string; name: string; frameCount: number; sortOrder: number; isIndexed: boolean }> = [];
+
+      if (connectionPages.length > 0) {
+        const consumedPageIds = new Set<string>();
+        sortedPages = connectionPages.map((page: any, pageIndex: number) => {
+          const pageId = String(page?.id || page?.pageId || '').trim() || `page-${pageIndex}`;
+          consumedPageIds.add(pageId);
+          const existing = pagesMap.get(pageId);
+          return {
+            id: pageId,
+            name: page?.name || page?.pageName || existing?.name || `Page ${pageIndex + 1}`,
+            frameCount: existing?.frameCount || 0,
+            sortOrder: typeof page?.sortOrder === 'number' && Number.isFinite(page.sortOrder) ? page.sortOrder : pageIndex,
+            isIndexed: existing?.isIndexed === true,
+          };
+        });
+
+        const orphanIndexedPages = Array.from(pagesMap.values())
+          .filter((page) => !consumedPageIds.has(page.id))
+          .sort((a, b) => {
+            const aOrder = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder)
+              ? a.sortOrder
+              : Number.MAX_SAFE_INTEGER;
+            const bOrder = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder)
+              ? b.sortOrder
+              : Number.MAX_SAFE_INTEGER;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return a.name.localeCompare(b.name);
+          });
+
+        sortedPages = sortedPages.concat(orphanIndexedPages);
+      } else {
+        sortedPages = Array.from(pagesMap.values()).sort((a, b) => {
+          const aOrder = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder)
+            ? a.sortOrder
+            : Number.MAX_SAFE_INTEGER;
+          const bOrder = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder)
+            ? b.sortOrder
+            : Number.MAX_SAFE_INTEGER;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.name.localeCompare(b.name);
+        });
+      }
 
       await logIndexActivity(svc, {
         requestId: `file_summary_${indexIds.join(',')}_${Date.now()}`,
