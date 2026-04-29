@@ -61,6 +61,45 @@ const PLUGIN_UI_PATCH_SCRIPT = `
       button.textContent = inFlight ? 'Repairing…' : 'Repair gallery';
     }
 
+    function syncIndexedPageActions() {
+      if (!window.state || !Array.isArray(window.state.pages)) return;
+      var listDiv = document.getElementById('pagesList');
+      if (!listDiv) return;
+      var rows = listDiv.querySelectorAll('label');
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var page = window.state.pages[i];
+        if (!page) continue;
+        var canRemove = page.status === 'up_to_date' || page.status === 'needs_update' || page.status === 'indexed';
+        var rightSide = row.querySelector('div:last-child');
+        if (!rightSide) continue;
+        var existingBtn = row.querySelector('[data-remove-page-id]');
+        if (canRemove && !existingBtn) {
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'pages-action-btn';
+          removeBtn.setAttribute('data-remove-page-id', page.id);
+          removeBtn.style.fontSize = '0.62em';
+          removeBtn.style.color = '#c62828';
+          removeBtn.style.borderColor = '#ef9a9a';
+          removeBtn.textContent = 'Remove';
+          removeBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var pid = this.getAttribute('data-remove-page-id');
+            var pageEntry = (window.state.pages || []).find(function (entry) { return entry && entry.id === pid; });
+            var pageLabel = pageEntry && (pageEntry.displayName || pageEntry.name) ? (pageEntry.displayName || pageEntry.name) : 'this page';
+            var confirmed = window.confirm('Remove the indexed copy of "' + pageLabel + '" from FigDex?');
+            if (!confirmed) return;
+            if (typeof window.sendIntent === 'function') window.sendIntent('remove-indexed-page', { pageId: pid, pageName: pageLabel });
+          });
+          rightSide.insertBefore(removeBtn, rightSide.firstChild);
+        } else if (!canRemove && existingBtn) {
+          existingBtn.remove();
+        }
+      }
+    }
+
     function patchRender() {
       if (window.__figdexRepairRenderPatched || typeof window.render !== 'function') return;
       var originalRender = window.render;
@@ -68,6 +107,7 @@ const PLUGIN_UI_PATCH_SCRIPT = `
         var result = originalRender.apply(this, arguments);
         try {
           syncRepairButton(arguments[1] || getModel());
+          syncIndexedPageActions();
         } catch (e) {}
         return result;
       };
@@ -89,6 +129,7 @@ const PLUGIN_UI_PATCH_SCRIPT = `
       patchRender();
       ensureRepairButton();
       syncRepairButton(getModel());
+      syncIndexedPageActions();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
@@ -1357,6 +1398,85 @@ function getContentHint(node) {
   } catch (e) { return '0'; }
 }
 
+function getNodeStyleHint(node) {
+  if (!node) return '';
+  var fillsCount = 0;
+  var fillTypes = '';
+  var strokeCount = 0;
+  var strokeTypes = '';
+  var effectCount = 0;
+  var opacity = '';
+  var visible = '';
+  var rotation = '';
+  var cornerRadius = '';
+  try {
+    if ('fills' in node && Array.isArray(node.fills)) {
+      fillsCount = node.fills.length;
+      fillTypes = node.fills.map(function (fill) {
+        return fill && fill.type ? String(fill.type) : 'X';
+      }).join('|');
+    }
+  } catch (e) {}
+  try {
+    if ('strokes' in node && Array.isArray(node.strokes)) {
+      strokeCount = node.strokes.length;
+      strokeTypes = node.strokes.map(function (stroke) {
+        return stroke && stroke.type ? String(stroke.type) : 'X';
+      }).join('|');
+    }
+  } catch (e) {}
+  try {
+    if ('effects' in node && Array.isArray(node.effects)) effectCount = node.effects.length;
+  } catch (e) {}
+  try {
+    if ('opacity' in node && typeof node.opacity === 'number') opacity = String(Math.round(node.opacity * 1000));
+  } catch (e) {}
+  try {
+    if ('visible' in node) visible = node.visible === false ? '0' : '1';
+  } catch (e) {}
+  try {
+    if ('rotation' in node && typeof node.rotation === 'number') rotation = String(Math.round(node.rotation));
+  } catch (e) {}
+  try {
+    if ('cornerRadius' in node && typeof node.cornerRadius === 'number') cornerRadius = String(Math.round(node.cornerRadius));
+  } catch (e) {}
+  return [
+    fillsCount,
+    fillTypes,
+    strokeCount,
+    strokeTypes,
+    effectCount,
+    opacity,
+    visible,
+    rotation,
+    cornerRadius
+  ].join(':');
+}
+
+function getVisualHint(node, depth, acc, budget) {
+  if (!node || depth > 4 || budget.count > 120) return acc;
+  acc = acc || [];
+  budget = budget || { count: 0 };
+  budget.count += 1;
+  var width = '';
+  var height = '';
+  try { if (typeof node.width === 'number') width = String(Math.round(node.width)); } catch (e) {}
+  try { if (typeof node.height === 'number') height = String(Math.round(node.height)); } catch (e) {}
+  acc.push([
+    node.type || 'NODE',
+    (node.name || '').trim().slice(0, 40),
+    width,
+    height,
+    getNodeStyleHint(node)
+  ].join('#'));
+  if ('children' in node && node.children) {
+    for (var i = 0; i < node.children.length; i++) {
+      getVisualHint(node.children[i], depth + 1, acc, budget);
+    }
+  }
+  return acc;
+}
+
 // Lightweight text signature: avoid loading fonts during indexing because it is very expensive.
 // If characters cannot be read safely, we still keep structural hints and skip the text payload.
 function getTextHint(node, depth, acc) {
@@ -1389,13 +1509,16 @@ async function getFrameSignaturesForPage(page) {
       if (typeof frame.loadAsync === 'function') await frame.loadAsync();
       var textParts = getTextHint(frame, 0, []);
       var textHint = textParts.join('|').slice(0, 500);
+      var visualParts = getVisualHint(frame, 0, [], { count: 0 });
+      var visualHint = visualParts.join('|').slice(0, 1200);
       sigs.push({
         id: frame.id,
         name: (frame.name || '').trim(),
         width: Math.round(frame.width),
         height: Math.round(frame.height),
         contentHint: getContentHint(frame),
-        textHint: textHint
+        textHint: textHint,
+        visualHint: visualHint
       });
     } catch (e) { /* skip */ }
   }
@@ -1409,22 +1532,24 @@ function frameSignaturesEqual(a, b) {
     if (!x || !y || x.id !== y.id || (x.name || '') !== (y.name || '') || x.width !== y.width || x.height !== y.height) return false;
     if (x.contentHint && y.contentHint && x.contentHint !== y.contentHint) return false;
     if (x.textHint && y.textHint && x.textHint !== y.textHint) return false;
+    if (x.visualHint && y.visualHint && x.visualHint !== y.visualHint) return false;
   }
   return true;
 }
 
 async function resolveIndexedPageDisplayState(pageNode, storedMeta, serverIndexed) {
+  var isIndexed = !!serverIndexed || !!storedMeta;
   if (!pageNode) {
     return {
-      status: serverIndexed ? 'indexed' : 'not_indexed',
-      icon: serverIndexed ? '✅' : '➕'
+      status: isIndexed ? 'indexed' : 'not_indexed',
+      icon: isIndexed ? '✅' : '➕'
     };
   }
   var hasStoredSignatures = !!(storedMeta && Array.isArray(storedMeta.frameSignatures) && storedMeta.frameSignatures.length > 0);
   if (!hasStoredSignatures) {
     return {
-      status: serverIndexed ? 'indexed' : 'not_indexed',
-      icon: serverIndexed ? '✅' : '➕'
+      status: isIndexed ? 'indexed' : 'not_indexed',
+      icon: isIndexed ? '✅' : '➕'
     };
   }
   try {
@@ -1435,8 +1560,8 @@ async function resolveIndexedPageDisplayState(pageNode, storedMeta, serverIndexe
     return { status: 'needs_update', icon: '🟠' };
   } catch (e) {
     return {
-      status: serverIndexed ? 'indexed' : 'not_indexed',
-      icon: serverIndexed ? '✅' : '➕'
+      status: isIndexed ? 'indexed' : 'not_indexed',
+      icon: isIndexed ? '✅' : '➕'
     };
   }
 }
