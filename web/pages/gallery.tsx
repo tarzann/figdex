@@ -417,6 +417,13 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
 
   const displayPages: DisplayFilePage[] = [];
   let activeFolder: DisplayFilePage | null = null;
+  let pendingChildPages: DisplayFilePage[] = [];
+
+  const attachChildPageToFolder = (folderPage: DisplayFilePage, childPage: DisplayFilePage) => {
+    folderPage.childPageIds = [...(folderPage.childPageIds || []), childPage.id];
+    folderPage.childPages = [...(folderPage.childPages || []), childPage];
+    folderPage.displayFrameCount = (folderPage.displayFrameCount || 0) + (typeof childPage.frameCount === 'number' ? childPage.frameCount : 0);
+  };
 
   sortedPages.forEach((page) => {
     if (shouldHidePageFromTree(page.name)) {
@@ -435,6 +442,16 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
       };
       displayPages.push(folderPage);
       activeFolder = folderPage;
+      if (pendingChildPages.length > 0) {
+        pendingChildPages.forEach((childPage) => {
+          attachChildPageToFolder(folderPage, childPage);
+          displayPages.push({
+            ...childPage,
+            isFolder: false,
+          });
+        });
+        pendingChildPages = [];
+      }
       return;
     }
 
@@ -446,9 +463,10 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
     };
 
     if (activeFolder && isChildPage) {
-      activeFolder.childPageIds = [...(activeFolder.childPageIds || []), page.id];
-      activeFolder.childPages = [...(activeFolder.childPages || []), normalizedPage];
-      activeFolder.displayFrameCount = (activeFolder.displayFrameCount || 0) + (typeof page.frameCount === 'number' ? page.frameCount : 0);
+      attachChildPageToFolder(activeFolder, normalizedPage);
+    } else if (isChildPage) {
+      pendingChildPages.push(normalizedPage);
+      return;
     } else {
       activeFolder = null;
     }
@@ -458,6 +476,15 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
       isFolder: false,
     });
   });
+
+  if (pendingChildPages.length > 0) {
+    pendingChildPages.forEach((page) => {
+      displayPages.push({
+        ...page,
+        isFolder: false,
+      });
+    });
+  }
 
   return displayPages;
 }
