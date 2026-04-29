@@ -100,6 +100,17 @@ const PLUGIN_UI_PATCH_SCRIPT = `
       }
     }
 
+    function ensureRefreshBypass() {
+      var refreshBtn = document.getElementById('refreshPagesBtn');
+      if (!refreshBtn || refreshBtn.__figdexRefreshBypassBound) return;
+      refreshBtn.__figdexRefreshBypassBound = true;
+      refreshBtn.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof window.sendIntent === 'function') window.sendIntent('get-pages');
+      }, true);
+    }
+
     function patchRender() {
       if (window.__figdexRepairRenderPatched || typeof window.render !== 'function') return;
       var originalRender = window.render;
@@ -108,6 +119,7 @@ const PLUGIN_UI_PATCH_SCRIPT = `
         try {
           syncRepairButton(arguments[1] || getModel());
           syncIndexedPageActions();
+          ensureRefreshBypass();
         } catch (e) {}
         return result;
       };
@@ -130,6 +142,7 @@ const PLUGIN_UI_PATCH_SCRIPT = `
       ensureRepairButton();
       syncRepairButton(getModel());
       syncIndexedPageActions();
+      ensureRefreshBypass();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
