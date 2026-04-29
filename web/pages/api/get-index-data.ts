@@ -105,7 +105,11 @@ export default async function handler(
         throw new Error(normalizedPagesError.message);
       }
 
-      const pageIds = Array.isArray(normalizedPages) ? normalizedPages.map((page: any) => page.id) : [];
+      const filteredNormalizedPages = Array.isArray(normalizedPages)
+        ? normalizedPages.filter((page: any) => page?.frame_count !== 0)
+        : [];
+
+      const pageIds = filteredNormalizedPages.map((page: any) => page.id);
       let framesByPageId = new Map<string, any[]>();
 
       if (pageIds.length > 0) {
@@ -142,7 +146,7 @@ export default async function handler(
 
       return {
         coverImageUrl: normalizedIndex.cover_image_url || null,
-        pages: (normalizedPages || []).map((page: any) => ({
+        pages: filteredNormalizedPages.map((page: any) => ({
           id: page.figma_page_id,
           pageId: page.figma_page_id,
           name: page.page_name,

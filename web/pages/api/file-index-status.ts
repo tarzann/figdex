@@ -70,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .from('indexed_pages')
           .select('figma_page_id')
           .eq('file_id', normalized.data.id)
+          .gt('frame_count', 0)
           .order('sort_order', { ascending: true });
 
         return res.status(200).json({
@@ -107,6 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from('indexed_pages')
         .select('figma_page_id')
         .eq('file_id', normalizedGuest.data.id)
+        .gt('frame_count', 0)
         .order('sort_order', { ascending: true });
 
       return res.status(200).json({

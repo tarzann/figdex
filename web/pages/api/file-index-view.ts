@@ -257,18 +257,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .eq('file_id', file.id)
           .order('sort_order', { ascending: true });
         (pages || []).forEach((page: any) => {
+          const normalizedFrameCount = typeof page.frame_count === 'number' ? page.frame_count : 0;
+          if (normalizedFrameCount <= 0) return;
           const key = String(page.figma_page_id || page.page_name || '');
           if (!key) return;
           const pageSortOrder = typeof page.sort_order === 'number' ? page.sort_order : Number.MAX_SAFE_INTEGER;
           const existing = pagesMap.get(key);
           if (existing) {
-            existing.frameCount += typeof page.frame_count === 'number' ? page.frame_count : 0;
+            existing.frameCount += normalizedFrameCount;
             existing.isIndexed = true;
           } else {
             pagesMap.set(key, {
               id: String(page.figma_page_id),
               name: page.page_name || 'Untitled Page',
-              frameCount: typeof page.frame_count === 'number' ? page.frame_count : 0,
+              frameCount: normalizedFrameCount,
               sortOrder: pageSortOrder,
               isIndexed: true,
             });
