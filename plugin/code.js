@@ -1182,8 +1182,11 @@ async function refreshPagesToUI() {
     var frameIds = getTopLevelFrameIds(p);
     var hasFrames = frameIds.length > 0;
     var meta = indexedMeta.find(function (entry) { return entry && entry.pageId === p.id; }) || null;
-    var status = hasFrames ? (meta ? 'indexed' : 'ready') : 'empty';
-    var icon = hasFrames ? (meta ? 'indexed' : 'ready') : 'empty';
+    var displayState = hasFrames
+      ? await resolveIndexedPageDisplayState(p, meta, !!meta)
+      : { status: 'empty', icon: 'empty' };
+    var status = displayState.status;
+    var icon = displayState.icon;
     pages.push({
       id: p.id,
       name: p.name,
@@ -1408,6 +1411,34 @@ function frameSignaturesEqual(a, b) {
     if (x.textHint && y.textHint && x.textHint !== y.textHint) return false;
   }
   return true;
+}
+
+async function resolveIndexedPageDisplayState(pageNode, storedMeta, serverIndexed) {
+  if (!pageNode) {
+    return {
+      status: serverIndexed ? 'indexed' : 'not_indexed',
+      icon: serverIndexed ? '✅' : '➕'
+    };
+  }
+  var hasStoredSignatures = !!(storedMeta && Array.isArray(storedMeta.frameSignatures) && storedMeta.frameSignatures.length > 0);
+  if (!hasStoredSignatures) {
+    return {
+      status: serverIndexed ? 'indexed' : 'not_indexed',
+      icon: serverIndexed ? '✅' : '➕'
+    };
+  }
+  try {
+    var currentSigs = await getFrameSignaturesForPage(pageNode);
+    if (frameSignaturesEqual(currentSigs, storedMeta.frameSignatures)) {
+      return { status: 'up_to_date', icon: '✅' };
+    }
+    return { status: 'needs_update', icon: '🟠' };
+  } catch (e) {
+    return {
+      status: serverIndexed ? 'indexed' : 'not_indexed',
+      icon: serverIndexed ? '✅' : '➕'
+    };
+  }
 }
 
 function getAdaptiveCoverExportScales(frame) {
@@ -1779,6 +1810,7 @@ figma.ui.onmessage = async (msg) => {
         .filter(p => p.type === 'PAGE' && p.name !== 'FigDex')
         .map(p => ({
           id: p.id,
+          node: p,
           name: p.name,
           frameCount: getTopLevelFrameIds(p).length,
           hasFrames: p.children && p.children.some(n => n.type === 'FRAME' || (n.type === 'SECTION' && n.children && n.children.some(c => c.type === 'FRAME'))),
@@ -1827,10 +1859,9 @@ figma.ui.onmessage = async (msg) => {
           status = 'index_page';
           icon = '📄';
         } else if (metaByPage[p.id] || serverIndexedPageIdMap[p.id]) {
-          // Keep page loading fast: existence is enough for refresh.
-          // Change detection still happens during indexing for the selected pages.
-          status = 'up_to_date';
-          icon = '✅';
+          var displayState = await resolveIndexedPageDisplayState(p.node, metaByPage[p.id] || null, !!serverIndexedPageIdMap[p.id]);
+          status = displayState.status;
+          icon = displayState.icon;
         }
         pages.push({
           id: p.id,
