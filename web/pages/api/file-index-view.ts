@@ -272,6 +272,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const pageSortOrder = typeof page.sort_order === 'number' ? page.sort_order : Number.MAX_SAFE_INTEGER;
           const existing = pagesMap.get(key);
           if (existing) {
+            existing.id = key;
+            existing.name = existing.name || page.page_name || 'Untitled Page';
+            if (typeof existing.sortOrder !== 'number' || !Number.isFinite(existing.sortOrder)) {
+              existing.sortOrder = pageSortOrder;
+            }
             existing.frameCount += normalizedFrameCount;
             existing.isIndexed = true;
           } else {
@@ -308,11 +313,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
-      const sortedPages = Array.from(pagesMap.values()).sort((a, b) => {
-        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-        return a.name.localeCompare(b.name);
-      });
-
       if (fileKey && connectionPages.length > 0) {
         const sortOrderByPageId = new Map<string, number>();
         connectionPages.forEach((page: any, pageIndex: number) => {
@@ -320,6 +320,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (!pageIdValue) return;
           const pageSortOrder = typeof page?.sortOrder === 'number' ? page.sortOrder : pageIndex;
           sortOrderByPageId.set(pageIdValue, pageSortOrder);
+          const existing = pagesMap.get(pageIdValue);
+          if (existing) {
+            existing.sortOrder = pageSortOrder;
+            existing.name = page?.name || page?.pageName || existing.name || `Page ${pageIndex + 1}`;
+          } else {
+            pagesMap.set(pageIdValue, {
+              id: pageIdValue,
+              name: page?.name || page?.pageName || `Page ${pageIndex + 1}`,
+              frameCount: 0,
+              sortOrder: pageSortOrder,
+              isIndexed: false,
+            });
+          }
         });
 
         if (fetchedConnectionPagesFromFigma && savedConnectionId) {
@@ -349,6 +362,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
       }
+
+      const sortedPages = Array.from(pagesMap.values()).sort((a, b) => {
+        const aOrder = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder)
+          ? a.sortOrder
+          : Number.MAX_SAFE_INTEGER;
+        const bOrder = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder)
+          ? b.sortOrder
+          : Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.name.localeCompare(b.name);
+      });
 
       await logIndexActivity(svc, {
         requestId: `file_summary_${indexIds.join(',')}_${Date.now()}`,
