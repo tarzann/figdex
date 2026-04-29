@@ -413,12 +413,7 @@ function shouldHidePageFromTree(name: string): boolean {
 }
 
 function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
-  const sortedPages = [...pages].sort((a, b) => {
-    const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER;
-    const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER;
-    if (aOrder !== bOrder) return aOrder - bOrder;
-    return a.name.localeCompare(b.name);
-  });
+  const sortedPages = [...pages];
 
   const displayPages: DisplayFilePage[] = [];
   let activeFolder: DisplayFilePage | null = null;
