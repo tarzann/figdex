@@ -269,241 +269,306 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ success: false, error: 'Server configuration error' });
   }
   const supabaseAdmin = createClient(serviceUrl, serviceKey);
+  let stage = 'boot';
+  let normalizedSyncComplete = false;
+  const compatibilityWarnings: Array<{ code: string; message: string }> = [];
 
-  // Auth
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'API key required' });
-  }
-  const apiKey = authHeader.replace('Bearer ', '');
-  const { data: user, error: userError } = await supabaseAdmin
-    .from('users')
-    .select('id, email')
-    .eq('api_key', apiKey)
-    .single();
-  if (userError || !user) {
-    return res.status(401).json({ success: false, error: 'Invalid API key' });
-  }
-
-  const uploadId = req.query.id as string;
-  const bucket = 'figdex-uploads';
-  if (!uploadId) {
-    return res.status(400).json({ success: false, error: 'uploadId is required' });
-  }
-  const body = (req.body || {}) as CommitBody;
-  const directChunkPaths = Array.isArray(body.chunkPaths)
-    ? body.chunkPaths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    : [];
-
-  // Load manifest
-  const manifestPath = `sessions/${uploadId}/session.json`;
-  const manResp = await (supabaseAdmin as any).storage.from(bucket).download(manifestPath);
-  if (manResp?.error) {
-    return res.status(400).json({ success: false, error: 'Session not found' });
-  }
-  const manifestText = await manResp.data.text();
-  const manifest = JSON.parse(manifestText || '{}');
-
-  // List chunks. Direct-to-storage uploads can take a brief moment before they
-  // become visible to list/download operations, so retry a few times first.
-  let files: any[] = [];
-  let listError: any = null;
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const listed = await listSessionChunkFiles((supabaseAdmin as any).storage, bucket, uploadId);
-    files = listed.files;
-    listError = listed.error;
-    if (files.length > 0 || directChunkPaths.length > 0) break;
-    if (attempt < 5) {
-      await sleep(attempt * 700);
+  try {
+    // Auth
+    stage = 'auth';
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'API key required' });
     }
-  }
-  const listedChunkPaths = files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`);
-  const chunkPaths = Array.from(new Set([...directChunkPaths, ...listedChunkPaths]));
-  if (!chunkPaths.length) {
-    return res.status(400).json({
-      success: false,
-      error: 'No chunks uploaded',
-      details: listError?.message || null,
-      uploadId,
-      checkedPrefix: `sessions/${uploadId}/chunks`,
-      providedChunkPaths: directChunkPaths.length
-    });
-  }
-
-  // Merge pages from chunks
-  const collectedPages: any[] = [];
-  const failedChunkDownloads: Array<{ path: string; error: string }> = [];
-  for (const chunkPath of chunkPaths) {
-    const p = await (supabaseAdmin as any).storage.from(bucket).download(chunkPath);
-    if (p?.error) {
-      failedChunkDownloads.push({ path: chunkPath, error: String(p.error.message || 'Download failed') });
-      continue;
-    }
-    const txt = await p.data.text();
-    const json = JSON.parse(txt || '{}');
-    if (Array.isArray(json?.pages)) {
-      collectedPages.push(...json.pages);
-    }
-  }
-
-  const allPages = mergeChunkPages(collectedPages);
-
-  if (!allPages.length) {
-    return res.status(400).json({
-      success: false,
-      error: 'Merged pages are empty',
-      uploadId,
-      chunkPathsCount: chunkPaths.length,
-      failedChunkDownloads: failedChunkDownloads.slice(0, 10)
-    });
-  }
-
-  // Prepare index_files insert (reuse current table)
-  const finalFileName = manifest.fileName || 'Figma Index';
-  const finalFileKey = manifest.fileKey || 'unknown';
-  const documentId = manifest.documentId || finalFileKey;
-  const manifestPageMeta = normalizeSavedPageMeta(manifest?.pageMeta);
-  const indexedPageMeta = buildIndexedPageMeta(allPages);
-  const uploadedCoverImageUrl = await uploadCoverFromDataUrl({
-    supabaseAdmin,
-    userId: user.id,
-    fileKey: finalFileKey,
-    coverImageDataUrl: typeof manifest?.coverImageDataUrl === 'string' ? manifest.coverImageDataUrl : null,
-  });
-  const framesCount = allPages.reduce((sum, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
-  const finalizePageIds = allPages
-    .map((page: any, pageIndex: number) => getChunkPageId(page, pageIndex))
-    .filter(Boolean);
-
-  await syncNormalizedIndexChunk({
-    supabaseAdmin,
-    owner: { type: 'user', userId: user.id },
-    fileKey: finalFileKey,
-    projectId: documentId,
-    fileName: finalFileName,
-    coverImageUrl: uploadedCoverImageUrl,
-    pages: allPages,
-    syncId: uploadId,
-    finalizePageIds,
-  });
-
-  await persistSavedConnectionPageMeta({
-    supabaseAdmin,
-    userId: user.id,
-    fileKey: finalFileKey,
-    fileName: finalFileName,
-    pageMeta: mergeSavedPageMeta(manifestPageMeta, indexedPageMeta),
-    fileThumbnailUrl: uploadedCoverImageUrl,
-  });
-
-  // Do NOT process images here (to keep commit fast). We'll post-process asynchronously.
-  const jsonBytes = Buffer.byteLength(JSON.stringify(allPages), 'utf8');
-  const fileSizeBytes = jsonBytes;
-
-  // Persist merged JSON to storage (to avoid huge DB rows/timeouts)
-  const mergedJson = JSON.stringify(allPages);
-  const blob = new Blob([mergedJson], { type: 'application/json' });
-  const storagePath = `indices/${uploadId}.json`;
-  const up = await (supabaseAdmin as any).storage.from(bucket).upload(storagePath, blob, { upsert: true, contentType: 'application/json' });
-  const mergedJsonPersistWarning =
-    up?.error && isOversizedObjectPersistError(up.error.message)
-      ? String(up.error.message || 'Merged JSON exceeded maximum allowed object size')
-      : null;
-  if (up?.error && !mergedJsonPersistWarning) {
-    return res.status(500).json({ success: false, error: 'Failed to persist merged JSON', details: up.error.message });
-  }
-
-  const insertData: any = {
-    user_id: user.id,
-    project_id: documentId,
-    figma_file_key: finalFileKey,
-    file_name: finalFileName,
-    // Store a lightweight pointer in DB; actual JSON is in storage when available.
-    // If the merged JSON is too large to persist as a single legacy object, the
-    // normalized model remains the operational source of truth.
-    index_data: mergedJsonPersistWarning
-      ? {
-          normalizedOnly: true,
-          compatibilityWarning: 'merged_json_too_large',
-          syncId: uploadId,
-        }
-      : { storageRef: `${bucket}:${storagePath}` },
-    uploaded_at: new Date().toISOString(),
-    file_size: fileSizeBytes,
-    frame_count: framesCount
-  };
-
-  // Insert with fallback if file_size column is missing
-  const selectWithSize = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size';
-  const selectNoSize   = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
-
-  let resp = await supabaseAdmin
-    .from('index_files')
-    .insert(insertData)
-    .select(selectWithSize)
-    .single();
-  if (resp.error && /(file_size|frame_count)/.test(resp.error.message || '')) {
-    const fallback = { ...insertData } as any;
-    delete fallback.file_size;
-    delete fallback.frame_count;
-    resp = await supabaseAdmin
-      .from('index_files')
-      .insert(fallback)
-      .select(selectNoSize)
+    const apiKey = authHeader.replace('Bearer ', '');
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email')
+      .eq('api_key', apiKey)
       .single();
-  }
-  if (resp.error) {
-    return res.status(500).json({ success: false, error: 'Failed to save index', details: resp.error.message });
-  }
-
-  // After successful insert: delete older indices for same user + fileKey (keep newest)
-  try {
-    const newId = (resp as any).data?.id;
-    const keyValid = finalFileKey && typeof finalFileKey === 'string' && finalFileKey.trim() !== '' && finalFileKey !== 'unknown';
-    if (newId && keyValid) {
-      await supabaseAdmin
-        .from('index_files')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('figma_file_key', finalFileKey)
-        .neq('id', newId)
-        .not('file_name', 'like', '%(Part %/%)%'); // don't touch chunks
+    if (userError || !user) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
     }
-  } catch (e) {
-    // best-effort, do not fail
+
+    const uploadId = req.query.id as string;
+    const bucket = 'figdex-uploads';
+    if (!uploadId) {
+      return res.status(400).json({ success: false, error: 'uploadId is required' });
+    }
+    const body = (req.body || {}) as CommitBody;
+    const directChunkPaths = Array.isArray(body.chunkPaths)
+      ? body.chunkPaths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : [];
+
+    // Load manifest
+    stage = 'load_manifest';
+    const manifestPath = `sessions/${uploadId}/session.json`;
+    const manResp = await (supabaseAdmin as any).storage.from(bucket).download(manifestPath);
+    if (manResp?.error) {
+      return res.status(400).json({ success: false, error: 'Session not found' });
+    }
+    const manifestText = await manResp.data.text();
+    const manifest = JSON.parse(manifestText || '{}');
+
+    // List chunks. Direct-to-storage uploads can take a brief moment before they
+    // become visible to list/download operations, so retry a few times first.
+    stage = 'discover_chunks';
+    let files: any[] = [];
+    let listError: any = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const listed = await listSessionChunkFiles((supabaseAdmin as any).storage, bucket, uploadId);
+      files = listed.files;
+      listError = listed.error;
+      if (files.length > 0 || directChunkPaths.length > 0) break;
+      if (attempt < 5) {
+        await sleep(attempt * 700);
+      }
+    }
+    const listedChunkPaths = files.map((f: any) => `sessions/${uploadId}/chunks/${f.name}`);
+    const chunkPaths = Array.from(new Set([...directChunkPaths, ...listedChunkPaths]));
+    if (!chunkPaths.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'No chunks uploaded',
+        details: listError?.message || null,
+        uploadId,
+        checkedPrefix: `sessions/${uploadId}/chunks`,
+        providedChunkPaths: directChunkPaths.length
+      });
+    }
+
+    // Merge pages from chunks
+    stage = 'merge_chunks';
+    const collectedPages: any[] = [];
+    const failedChunkDownloads: Array<{ path: string; error: string }> = [];
+    for (const chunkPath of chunkPaths) {
+      const p = await (supabaseAdmin as any).storage.from(bucket).download(chunkPath);
+      if (p?.error) {
+        failedChunkDownloads.push({ path: chunkPath, error: String(p.error.message || 'Download failed') });
+        continue;
+      }
+      const txt = await p.data.text();
+      const json = JSON.parse(txt || '{}');
+      if (Array.isArray(json?.pages)) {
+        collectedPages.push(...json.pages);
+      }
+    }
+
+    const allPages = mergeChunkPages(collectedPages);
+
+    if (!allPages.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'Merged pages are empty',
+        uploadId,
+        chunkPathsCount: chunkPaths.length,
+        failedChunkDownloads: failedChunkDownloads.slice(0, 10)
+      });
+    }
+
+    // Prepare index_files insert (reuse current table)
+    const finalFileName = manifest.fileName || 'Figma Index';
+    const finalFileKey = manifest.fileKey || 'unknown';
+    const documentId = manifest.documentId || finalFileKey;
+    const manifestPageMeta = normalizeSavedPageMeta(manifest?.pageMeta);
+    const indexedPageMeta = buildIndexedPageMeta(allPages);
+    let uploadedCoverImageUrl: string | null = null;
+    try {
+      stage = 'upload_cover';
+      uploadedCoverImageUrl = await uploadCoverFromDataUrl({
+        supabaseAdmin,
+        userId: user.id,
+        fileKey: finalFileKey,
+        coverImageDataUrl: typeof manifest?.coverImageDataUrl === 'string' ? manifest.coverImageDataUrl : null,
+      });
+    } catch (coverError: any) {
+      compatibilityWarnings.push({
+        code: 'cover_upload_failed',
+        message: coverError?.message || 'Failed to upload cover image'
+      });
+    }
+    const framesCount = allPages.reduce((sum, p: any) => sum + (Array.isArray(p?.frames) ? p.frames.length : 0), 0);
+    const finalizePageIds = allPages
+      .map((page: any, pageIndex: number) => getChunkPageId(page, pageIndex))
+      .filter(Boolean);
+
+    stage = 'sync_normalized';
+    await syncNormalizedIndexChunk({
+      supabaseAdmin,
+      owner: { type: 'user', userId: user.id },
+      fileKey: finalFileKey,
+      projectId: documentId,
+      fileName: finalFileName,
+      coverImageUrl: uploadedCoverImageUrl,
+      pages: allPages,
+      syncId: uploadId,
+      finalizePageIds,
+    });
+    normalizedSyncComplete = true;
+
+    try {
+      stage = 'persist_saved_connection';
+      await persistSavedConnectionPageMeta({
+        supabaseAdmin,
+        userId: user.id,
+        fileKey: finalFileKey,
+        fileName: finalFileName,
+        pageMeta: mergeSavedPageMeta(manifestPageMeta, indexedPageMeta),
+        fileThumbnailUrl: uploadedCoverImageUrl,
+      });
+    } catch (savedConnectionError: any) {
+      compatibilityWarnings.push({
+        code: 'saved_connection_sync_failed',
+        message: savedConnectionError?.message || 'Failed to persist saved connection metadata'
+      });
+    }
+
+    // Do NOT process images here (to keep commit fast). We'll post-process asynchronously.
+    stage = 'prepare_legacy_payload';
+    const jsonBytes = Buffer.byteLength(JSON.stringify(allPages), 'utf8');
+    const fileSizeBytes = jsonBytes;
+
+    // Persist merged JSON to storage (to avoid huge DB rows/timeouts)
+    stage = 'persist_legacy_json';
+    const mergedJson = JSON.stringify(allPages);
+    const blob = new Blob([mergedJson], { type: 'application/json' });
+    const storagePath = `indices/${uploadId}.json`;
+    const up = await (supabaseAdmin as any).storage.from(bucket).upload(storagePath, blob, { upsert: true, contentType: 'application/json' });
+    const mergedJsonPersistWarning =
+      up?.error && isOversizedObjectPersistError(up.error.message)
+        ? String(up.error.message || 'Merged JSON exceeded maximum allowed object size')
+        : null;
+    if (up?.error && !mergedJsonPersistWarning) {
+      compatibilityWarnings.push({
+        code: 'legacy_json_persist_failed',
+        message: up.error.message || 'Failed to persist merged JSON'
+      });
+    }
+    if (mergedJsonPersistWarning) {
+      compatibilityWarnings.push({
+        code: 'merged_json_too_large',
+        message: mergedJsonPersistWarning
+      });
+    }
+
+    const insertData: any = {
+      user_id: user.id,
+      project_id: documentId,
+      figma_file_key: finalFileKey,
+      file_name: finalFileName,
+      // Store a lightweight pointer in DB; actual JSON is in storage when available.
+      // If the merged JSON is too large to persist as a single legacy object, the
+      // normalized model remains the operational source of truth.
+      index_data: mergedJsonPersistWarning || (up && up.error)
+        ? {
+            normalizedOnly: true,
+            compatibilityWarning: mergedJsonPersistWarning ? 'merged_json_too_large' : 'legacy_json_persist_failed',
+            syncId: uploadId,
+          }
+        : { storageRef: `${bucket}:${storagePath}` },
+      uploaded_at: new Date().toISOString(),
+      file_size: fileSizeBytes,
+      frame_count: framesCount
+    };
+
+    // Insert with fallback if file_size column is missing
+    stage = 'persist_legacy_index';
+    const selectWithSize = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at, file_size';
+    const selectNoSize   = 'id, user_id, project_id, figma_file_key, file_name, uploaded_at';
+
+    let resp = await supabaseAdmin
+      .from('index_files')
+      .insert(insertData)
+      .select(selectWithSize)
+      .single();
+    if (resp.error && /(file_size|frame_count)/.test(resp.error.message || '')) {
+      const fallback = { ...insertData } as any;
+      delete fallback.file_size;
+      delete fallback.frame_count;
+      resp = await supabaseAdmin
+        .from('index_files')
+        .insert(fallback)
+        .select(selectNoSize)
+        .single();
+    }
+    if (resp.error) {
+      compatibilityWarnings.push({
+        code: 'legacy_index_save_failed',
+        message: resp.error.message || 'Failed to save legacy index'
+      });
+    }
+
+    // After successful insert: delete older indices for same user + fileKey (keep newest)
+    try {
+      stage = 'cleanup_legacy_indices';
+      const newId = (resp as any).data?.id;
+      const keyValid = finalFileKey && typeof finalFileKey === 'string' && finalFileKey.trim() !== '' && finalFileKey !== 'unknown';
+      if (newId && keyValid) {
+        await supabaseAdmin
+          .from('index_files')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('figma_file_key', finalFileKey)
+          .neq('id', newId)
+          .not('file_name', 'like', '%(Part %/%)%'); // don't touch chunks
+      }
+    } catch (cleanupError: any) {
+      compatibilityWarnings.push({
+        code: 'legacy_cleanup_failed',
+        message: cleanupError?.message || 'Failed to clean up older legacy indices'
+      });
+    }
+
+    // Fire-and-forget: trigger post-processing (compress images and move to storage)
+    try {
+      stage = 'postprocess_legacy_index';
+      const host = req.headers.host || 'www.figdex.com';
+      const url = `https://${host}/api/postprocess-index?id=${encodeURIComponent(String(resp.data?.id || ''))}`;
+      // Intentionally not awaited
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        keepalive: true
+      }).catch(() => {});
+    } catch {}
+
+    // Best-effort: delete session temp files
+    try {
+      stage = 'cleanup_session';
+      await (supabaseAdmin as any).storage.from(bucket).remove([
+        `sessions/${uploadId}/session.json`,
+        ...chunkPaths
+      ]);
+    } catch {}
+
+    // Return stats
+    return res.status(200).json({
+      success: true,
+      indexId: resp.data?.id || null,
+      frames: framesCount,
+      size: +(fileSizeBytes / 1024 / 1024).toFixed(2),
+      compatibilityWarning: compatibilityWarnings.length > 0 ? compatibilityWarnings[0] : null,
+      compatibilityWarnings: compatibilityWarnings.length > 0 ? compatibilityWarnings : null,
+    });
+  } catch (error: any) {
+    const message = error?.message || 'Commit failed';
+    if (normalizedSyncComplete) {
+      compatibilityWarnings.push({
+        code: 'post_sync_commit_failed',
+        message: `Commit hit a non-fatal error after normalized sync: ${message}`
+      });
+      return res.status(200).json({
+        success: true,
+        indexId: null,
+        compatibilityWarning: compatibilityWarnings[0],
+        compatibilityWarnings,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: message,
+      details: error?.stack ? String(error.stack).slice(0, 4000) : null,
+      stage,
+    });
   }
-
-  // Fire-and-forget: trigger post-processing (compress images and move to storage)
-  try {
-    const host = req.headers.host || 'www.figdex.com';
-    const url = `https://${host}/api/postprocess-index?id=${encodeURIComponent(String(resp.data?.id || ''))}`;
-    // Intentionally not awaited
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      keepalive: true
-    }).catch(() => {});
-  } catch {}
-
-  // Best-effort: delete session temp files
-  try {
-    const delChunks = await (supabaseAdmin as any).storage.from(bucket).remove([
-      `sessions/${uploadId}/session.json`,
-      ...chunkPaths
-    ]);
-  } catch {}
-
-  // Return stats
-  return res.status(200).json({
-    success: true,
-    indexId: resp.data?.id,
-    frames: framesCount,
-    size: +(fileSizeBytes / 1024 / 1024).toFixed(2),
-    compatibilityWarning: mergedJsonPersistWarning
-      ? {
-          code: 'merged_json_too_large',
-          message: mergedJsonPersistWarning,
-        }
-      : null,
-  });
 }
