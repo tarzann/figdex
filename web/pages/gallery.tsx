@@ -158,7 +158,6 @@ type DisplayFilePage = FilePageInfo & {
   childPageIds?: string[];
   childPages?: FilePageInfo[];
   displayFrameCount?: number;
-  pendingLeadingChildPages?: DisplayFilePage[];
 };
 
 // Helpers to derive tag categories from frame data (client-side)
@@ -418,26 +417,13 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
 
   const displayPages: DisplayFilePage[] = [];
   let activeFolder: DisplayFilePage | null = null;
-  let pendingChildPages: DisplayFilePage[] = [];
+  let leadingChildPages: DisplayFilePage[] = [];
+  let lastFolder: DisplayFilePage | null = null;
 
   const attachChildPageToFolder = (folderPage: DisplayFilePage, childPage: DisplayFilePage) => {
     folderPage.childPageIds = [...(folderPage.childPageIds || []), childPage.id];
     folderPage.childPages = [...(folderPage.childPages || []), childPage];
     folderPage.displayFrameCount = (folderPage.displayFrameCount || 0) + (typeof childPage.frameCount === 'number' ? childPage.frameCount : 0);
-  };
-
-  const flushPendingChildrenIntoActiveFolder = () => {
-    if (!activeFolder || !activeFolder.pendingLeadingChildPages || activeFolder.pendingLeadingChildPages.length === 0) {
-      return;
-    }
-    activeFolder.pendingLeadingChildPages.forEach((childPage) => {
-      attachChildPageToFolder(activeFolder as DisplayFilePage, childPage);
-      displayPages.push({
-        ...childPage,
-        isFolder: false,
-      });
-    });
-    activeFolder.pendingLeadingChildPages = [];
   };
 
   sortedPages.forEach((page) => {
@@ -454,14 +440,10 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
         childPageIds: [],
         childPages: [],
         displayFrameCount: 0,
-        pendingLeadingChildPages: [],
       };
       displayPages.push(folderPage);
       activeFolder = folderPage;
-      if (pendingChildPages.length > 0) {
-        folderPage.pendingLeadingChildPages = pendingChildPages.slice();
-        pendingChildPages = [];
-      }
+      lastFolder = folderPage;
       return;
     }
 
@@ -475,10 +457,9 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
     if (activeFolder && isChildPage) {
       attachChildPageToFolder(activeFolder, normalizedPage);
     } else if (isChildPage) {
-      pendingChildPages.push(normalizedPage);
+      leadingChildPages.push(normalizedPage);
       return;
     } else {
-      flushPendingChildrenIntoActiveFolder();
       activeFolder = null;
     }
 
@@ -488,18 +469,35 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
     });
   });
 
-  flushPendingChildrenIntoActiveFolder();
-
-  if (pendingChildPages.length > 0) {
-    pendingChildPages.forEach((page) => {
-      displayPages.push({
-        ...page,
-        isFolder: false,
+  if (leadingChildPages.length > 0) {
+    if (lastFolder) {
+      leadingChildPages.forEach((page) => {
+        attachChildPageToFolder(lastFolder as DisplayFilePage, page);
+        displayPages.push({
+          ...page,
+          isFolder: false,
+        });
       });
-    });
+    } else {
+      leadingChildPages.forEach((page) => {
+        displayPages.push({
+          ...page,
+          isFolder: false,
+        });
+      });
+    }
   }
 
   return displayPages;
+}
+
+function hasDisplayFrames(pageInfo: DisplayFilePage | FilePageInfo | null | undefined): boolean {
+  const displayFrameCount = typeof (pageInfo as DisplayFilePage | undefined)?.displayFrameCount === 'number'
+    ? Number((pageInfo as DisplayFilePage).displayFrameCount)
+    : null;
+  const frameCount = typeof pageInfo?.frameCount === 'number' ? Number(pageInfo.frameCount) : 0;
+  const effectiveFrameCount = displayFrameCount !== null ? displayFrameCount : frameCount;
+  return effectiveFrameCount > 0;
 }
 
 function buildLogicalFileMap(displayFiles: any[]) {
@@ -1291,9 +1289,12 @@ export default function Home() {
         return;
       }
 
-      const firstDisplayPage = buildDisplayFilePages(pagesSummary).find((pageInfo: DisplayFilePage) =>
-        pageInfo.isFolder ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false
-      ) || null;
+      const firstDisplayPage = buildDisplayFilePages(pagesSummary).find((pageInfo: DisplayFilePage) => {
+        if (pageInfo.isFolder) {
+          return hasDisplayFrames(pageInfo);
+        }
+        return pageInfo.isIndexed !== false && hasDisplayFrames(pageInfo);
+      }) || null;
       setPage(1);
       setSelectedFilePageId(firstDisplayPage ? String(firstDisplayPage.id) : null);
       setSelectedFilePageFrameCount(
@@ -1314,7 +1315,9 @@ export default function Home() {
   const activateFilePage = (pageInfo: DisplayFilePage) => {
     if (filePageLoading) return;
     const isFolder = !!pageInfo.isFolder;
-    const isIndexedPage = isFolder ? (pageInfo.childPageIds || []).length > 0 : pageInfo.isIndexed !== false;
+    const isIndexedPage = isFolder
+      ? hasDisplayFrames(pageInfo)
+      : pageInfo.isIndexed !== false && hasDisplayFrames(pageInfo);
     if (!isIndexedPage) return;
     setSearch('');
     setPage(1);
@@ -2790,8 +2793,10 @@ export default function Home() {
                           const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
                           const isFolderPage = !!pageInfo.isFolder;
                           const folderChildCount = (pageInfo.childPageIds || []).length;
-                          const isIndexedPage = isFolderPage ? folderChildCount > 0 : pageInfo.isIndexed !== false;
-                          const isDisabledPage = !isFolderPage && !isIndexedPage;
+                          const isIndexedPage = isFolderPage
+                            ? hasDisplayFrames(pageInfo)
+                            : pageInfo.isIndexed !== false && hasDisplayFrames(pageInfo);
+                          const isDisabledPage = !isIndexedPage;
                           const pageFrameCount = Number(pageInfo.displayFrameCount || pageInfo.frameCount || 0);
                           const inlineLabel = isFolderPage
                             ? folderChildCount > 0
