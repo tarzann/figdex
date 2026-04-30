@@ -508,6 +508,16 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
     if (!pageId) continue;
 
     const frames = page.frames;
+    const shouldReplaceFrames = finalizeSet.has(figmaPageId);
+
+    if (shouldReplaceFrames) {
+      const { error: deleteExistingFramesError } = await supabaseAdmin
+        .from('indexed_frames')
+        .delete()
+        .eq('page_id', pageId);
+      if (deleteExistingFramesError) throw deleteExistingFramesError;
+    }
+
     if (frames.length > 0) {
       const frameRows = frames.map((frame: any, frameIndex: number) => ({
         page_id: pageId,
@@ -527,27 +537,20 @@ export async function syncNormalizedIndexChunk(params: SyncChunkParams): Promise
 
       for (let batchStart = 0; batchStart < frameRows.length; batchStart += INDEXED_FRAME_UPSERT_BATCH_SIZE) {
         const frameBatch = frameRows.slice(batchStart, batchStart + INDEXED_FRAME_UPSERT_BATCH_SIZE);
-        const { error: frameError } = await supabaseAdmin
-          .from('indexed_frames')
-          .upsert(frameBatch, { onConflict: 'page_id,figma_frame_id' });
+        const frameWrite = shouldReplaceFrames
+          ? await supabaseAdmin
+              .from('indexed_frames')
+              .insert(frameBatch)
+          : await supabaseAdmin
+              .from('indexed_frames')
+              .upsert(frameBatch, { onConflict: 'page_id,figma_frame_id' });
+        const { error: frameError } = frameWrite;
         if (frameError) throw frameError;
       }
     }
 
-    if (finalizeSet.has(figmaPageId)) {
-      const staleDelete = await supabaseAdmin
-        .from('indexed_frames')
-        .delete()
-        .eq('page_id', pageId)
-        .or(`last_sync_id.is.null,last_sync_id.neq.${syncId}`);
-      if (staleDelete.error) throw staleDelete.error;
-
-      const { count: pageFrameCount, error: pageFrameCountError } = await supabaseAdmin
-        .from('indexed_frames')
-        .select('id', { count: 'exact', head: true })
-        .eq('page_id', pageId);
-      if (pageFrameCountError) throw pageFrameCountError;
-      const nextFrameCount = pageFrameCount || 0;
+    if (shouldReplaceFrames) {
+      const nextFrameCount = frames.length;
       const previousFrameCount = existingPageFrameCountByFigmaPageId.get(figmaPageId) || 0;
       deltaFrames += nextFrameCount - previousFrameCount;
       finalizedCounts.set(pageId, nextFrameCount);
