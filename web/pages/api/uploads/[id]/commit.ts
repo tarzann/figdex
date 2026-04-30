@@ -153,6 +153,35 @@ function mergeSavedPageMeta(existingPages: SavedPageMeta[], nextPages: SavedPage
   });
 }
 
+function overlaySavedPageMeta(basePages: SavedPageMeta[], indexedPages: SavedPageMeta[]): SavedPageMeta[] {
+  if (basePages.length === 0) {
+    return indexedPages.slice().sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.pageName.localeCompare(b.pageName);
+    });
+  }
+
+  const indexedByPageId = new Map<string, SavedPageMeta>();
+  for (const page of indexedPages) {
+    indexedByPageId.set(page.pageId, page);
+  }
+
+  return basePages
+    .map((page) => {
+      const indexed = indexedByPageId.get(page.pageId);
+      if (!indexed) return { ...page };
+      return {
+        ...page,
+        frameCount: typeof indexed.frameCount === 'number' ? indexed.frameCount : page.frameCount,
+        hasFrames: indexed.hasFrames !== false,
+      };
+    })
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.pageName.localeCompare(b.pageName);
+    });
+}
+
 async function persistSavedConnectionPageMeta(params: {
   supabaseAdmin: any;
   userId: string;
@@ -160,8 +189,9 @@ async function persistSavedConnectionPageMeta(params: {
   fileName: string;
   pageMeta: SavedPageMeta[];
   fileThumbnailUrl?: string | null;
+  replaceExisting?: boolean;
 }) {
-  const { supabaseAdmin, userId, fileKey, fileName, pageMeta, fileThumbnailUrl } = params;
+  const { supabaseAdmin, userId, fileKey, fileName, pageMeta, fileThumbnailUrl, replaceExisting } = params;
   if (!fileKey || !pageMeta.length) return;
 
   const { data: existingConnection, error: existingConnectionError } = await supabaseAdmin
@@ -172,10 +202,12 @@ async function persistSavedConnectionPageMeta(params: {
     .maybeSingle();
   if (existingConnectionError) throw existingConnectionError;
 
-  const mergedPageMeta = mergeSavedPageMeta(
-    normalizeSavedPageMeta(existingConnection?.page_meta),
-    pageMeta
-  );
+  const mergedPageMeta = replaceExisting
+    ? pageMeta
+    : mergeSavedPageMeta(
+        normalizeSavedPageMeta(existingConnection?.page_meta),
+        pageMeta
+      );
 
   if (existingConnection?.id) {
     const updatePayload: Record<string, any> = {
@@ -372,6 +404,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const documentId = manifest.documentId || finalFileKey;
     const manifestPageMeta = normalizeSavedPageMeta(manifest?.pageMeta);
     const indexedPageMeta = buildIndexedPageMeta(allPages);
+    const canonicalSavedPageMeta = manifestPageMeta.length > 0
+      ? overlaySavedPageMeta(manifestPageMeta, indexedPageMeta)
+      : indexedPageMeta;
     let uploadedCoverImageUrl: string | null = null;
     try {
       stage = 'upload_cover';
@@ -413,8 +448,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         userId: user.id,
         fileKey: finalFileKey,
         fileName: finalFileName,
-        pageMeta: mergeSavedPageMeta(manifestPageMeta, indexedPageMeta),
+        pageMeta: canonicalSavedPageMeta,
         fileThumbnailUrl: uploadedCoverImageUrl,
+        replaceExisting: manifestPageMeta.length > 0,
       });
     } catch (savedConnectionError: any) {
       compatibilityWarnings.push({
