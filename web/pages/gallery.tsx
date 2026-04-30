@@ -456,6 +456,7 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
 
     if (activeFolder && isChildPage) {
       attachChildPageToFolder(activeFolder, normalizedPage);
+      return;
     } else if (isChildPage) {
       leadingChildPages.push(normalizedPage);
       return;
