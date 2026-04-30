@@ -131,6 +131,8 @@ export default async function handler(
     const logicalFileId = getLogicalFileId(projectId, figmaFileKey);
     const chunkGroup = getChunkGroup(projectId, fileName);
     const deletedIds = new Set<string>();
+    let deletedNormalizedCount = 0;
+    let deletedLegacyCount = 0;
 
     if (logicalFileId) {
       let legacyDeleteQuery = supabaseAdmin
@@ -158,6 +160,7 @@ export default async function handler(
       (deletedLegacyRows || []).forEach((row: any) => {
         if (row?.id) deletedIds.add(String(row.id));
       });
+      deletedLegacyCount += Array.isArray(deletedLegacyRows) ? deletedLegacyRows.length : 0;
 
       let normalizedDeleteQuery = supabaseAdmin
         .from('indexed_files')
@@ -184,6 +187,7 @@ export default async function handler(
       (deletedNormalizedRows || []).forEach((row: any) => {
         if (row?.id) deletedIds.add(String(row.id));
       });
+      deletedNormalizedCount += Array.isArray(deletedNormalizedRows) ? deletedNormalizedRows.length : 0;
 
       let jobsDeleteQuery = supabaseAdmin
         .from('index_jobs')
@@ -218,6 +222,7 @@ export default async function handler(
           });
         }
         deletedIds.add(String(legacyIndex.id));
+        deletedLegacyCount += 1;
       }
 
       if (normalizedIndex?.id) {
@@ -235,6 +240,26 @@ export default async function handler(
           });
         }
         deletedIds.add(String(normalizedIndex.id));
+        deletedNormalizedCount += 1;
+      }
+    }
+
+    if ((deletedNormalizedCount > 0 || deletedLegacyCount > 0) && figmaFileKey) {
+      const { error: resetSavedConnectionError } = await supabaseAdmin
+        .from('saved_connections')
+        .update({
+          page_meta: [],
+          file_thumbnail_url: null,
+        })
+        .eq('user_id', user.id)
+        .eq('file_key', figmaFileKey);
+
+      if (resetSavedConnectionError) {
+        console.warn('[delete-index] failed to reset saved connection metadata', {
+          userId: user.id,
+          fileKey: figmaFileKey,
+          message: resetSavedConnectionError.message,
+        });
       }
     }
 

@@ -1220,6 +1220,7 @@ async function postIndexProgress(step, meta) {
 }
 
 async function refreshPagesToUI() {
+  lastPagesPayloadSignature = '';
   var resolvedRefreshFileKey = await resolveCurrentFileKey();
   var refreshFileKey = resolvedRefreshFileKey.fileKey || '';
   globalFileKey = refreshFileKey || globalFileKey || '';
@@ -1925,6 +1926,7 @@ figma.ui.onmessage = async (msg) => {
     }
     pagesRefreshInFlight = true;
     try {
+      lastPagesPayloadSignature = '';
       var resolvedRefreshFileKey = await resolveCurrentFileKey();
       globalFileKeySource = resolvedRefreshFileKey.source || globalFileKeySource || 'none';
       pluginTrace('Refreshing pages', {
