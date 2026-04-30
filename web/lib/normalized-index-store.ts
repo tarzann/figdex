@@ -35,7 +35,7 @@ type OwnerUsageDelta = {
   deltaFrames?: number;
 };
 
-const INDEXED_FRAME_UPSERT_BATCH_SIZE = 100;
+const INDEXED_FRAME_UPSERT_BATCH_SIZE = 20;
 
 function normalizeText(value?: string | null, fallback = ''): string {
   const trimmed = typeof value === 'string' ? value.trim() : '';
