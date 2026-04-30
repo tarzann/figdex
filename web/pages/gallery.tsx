@@ -1,5 +1,5 @@
 // pages/index.tsx
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   Box,
   TextField,
@@ -156,7 +156,7 @@ type FilePageInfo = {
 type DisplayFilePage = FilePageInfo & {
   isFolder?: boolean;
   childPageIds?: string[];
-  childPages?: FilePageInfo[];
+  childPages?: DisplayFilePage[];
   displayFrameCount?: number;
 };
 
@@ -473,10 +473,6 @@ function buildDisplayFilePages(pages: FilePageInfo[]): DisplayFilePage[] {
     if (lastFolder) {
       leadingChildPages.forEach((page) => {
         attachChildPageToFolder(lastFolder as DisplayFilePage, page);
-        displayPages.push({
-          ...page,
-          isFolder: false,
-        });
       });
     } else {
       leadingChildPages.forEach((page) => {
@@ -2587,6 +2583,83 @@ export default function Home() {
   const selectedPageInfo = displayFilePages.find((pageInfo) => pageInfo.id === selectedFilePageId) || null;
   const selectedPageFrameCount = Number(selectedPageInfo?.displayFrameCount || selectedPageInfo?.frameCount || 0);
   const selectedFolderChildCount = (selectedPageInfo?.childPageIds || []).length;
+
+  const renderFileTreeItem = (pageInfo: DisplayFilePage, depth = 0): React.ReactNode => {
+    const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
+    const isFolderPage = !!pageInfo.isFolder;
+    const folderChildCount = (pageInfo.childPageIds || []).length;
+    const isIndexedPage = isFolderPage
+      ? hasDisplayFrames(pageInfo)
+      : pageInfo.isIndexed !== false && hasDisplayFrames(pageInfo);
+    const isDisabledPage = !isIndexedPage;
+    const pageFrameCount = Number(pageInfo.displayFrameCount || pageInfo.frameCount || 0);
+    const inlineLabel = isFolderPage
+      ? folderChildCount > 0
+        ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
+        : pageInfo.name
+      : isIndexedPage
+        ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
+        : pageInfo.name;
+
+    return (
+      <Fragment key={pageInfo.id}>
+        <ListItemButton
+          selected={isSelectedPage}
+          disabled={isDisabledPage}
+          onClick={() => {
+            activateFilePage(pageInfo);
+          }}
+          sx={{
+            borderRadius: 1,
+            py: 0.32,
+            px: 0.7,
+            minHeight: 28,
+            mb: 0.02,
+            ml: depth > 0 ? depth * 1.15 : 0,
+            alignItems: 'center',
+            '&.Mui-selected': {
+              bgcolor: '#eef4ff',
+              color: '#3538cd',
+              '&:hover': {
+                bgcolor: '#e0ecff',
+              }
+            },
+            '&:hover': {
+              bgcolor: '#f8fafc',
+            },
+            '&.Mui-disabled': {
+              opacity: 0.58,
+              color: '#98a2b3',
+            }
+          }}
+        >
+          <Box sx={{ width: 16, minWidth: 16, mr: 0.55, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isFolderPage ? <FolderOpenIcon sx={{ fontSize: 15 }} /> : null}
+          </Box>
+          <ListItemText
+            primary={inlineLabel}
+            sx={{ minWidth: 0, my: 0 }}
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontWeight: isSelectedPage ? 700 : 500,
+              sx: {
+                lineHeight: 1.15,
+                fontSize: '0.79rem',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }
+            }}
+          />
+        </ListItemButton>
+        {isFolderPage && Array.isArray(pageInfo.childPages) && pageInfo.childPages.length > 0 && (
+          <List disablePadding dense>
+            {pageInfo.childPages.map((childPage) => renderFileTreeItem(childPage, depth + 1))}
+          </List>
+        )}
+      </Fragment>
+    );
+  };
   const pageSizeOptions = viewMode === 'allFrames' ? [24] : [24, 48, 72];
   const activeAdvancedFiltersCount = selectedSizeTags.length + selectedCustomTags.length;
   const rawSuccessFileKey = router.query.fileKey;
@@ -2789,75 +2862,7 @@ export default function Home() {
                           borderLeft: '1px solid #e5e7eb',
                         }}
                       >
-                        {displayFilePages.map((pageInfo) => {
-                          const isSelectedPage = !fileModeSearchActive && selectedFilePageId === pageInfo.id;
-                          const isFolderPage = !!pageInfo.isFolder;
-                          const folderChildCount = (pageInfo.childPageIds || []).length;
-                          const isIndexedPage = isFolderPage
-                            ? hasDisplayFrames(pageInfo)
-                            : pageInfo.isIndexed !== false && hasDisplayFrames(pageInfo);
-                          const isDisabledPage = !isIndexedPage;
-                          const pageFrameCount = Number(pageInfo.displayFrameCount || pageInfo.frameCount || 0);
-                          const inlineLabel = isFolderPage
-                            ? folderChildCount > 0
-                              ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
-                              : pageInfo.name
-                            : isIndexedPage
-                              ? `${pageInfo.name} (${pageFrameCount.toLocaleString()})`
-                              : pageInfo.name;
-                          return (
-                            <ListItemButton
-                              key={pageInfo.id}
-                              selected={isSelectedPage}
-                              disabled={isDisabledPage}
-                              onClick={() => {
-                                activateFilePage(pageInfo);
-                              }}
-                              sx={{
-                                borderRadius: 1,
-                                py: 0.32,
-                                px: 0.7,
-                                minHeight: 28,
-                                mb: 0.02,
-                                ml: 0,
-                                alignItems: 'center',
-                                '&.Mui-selected': {
-                                  bgcolor: '#eef4ff',
-                                  color: '#3538cd',
-                                  '&:hover': {
-                                    bgcolor: '#e0ecff',
-                                  }
-                                },
-                                '&:hover': {
-                                  bgcolor: '#f8fafc',
-                                },
-                                '&.Mui-disabled': {
-                                  opacity: 0.58,
-                                  color: '#98a2b3',
-                                }
-                              }}
-                            >
-                              <Box sx={{ width: 16, minWidth: 16, mr: 0.55, color: isFolderPage ? '#175cd3' : (isIndexedPage ? '#667085' : '#98a2b3'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {isFolderPage ? <FolderOpenIcon sx={{ fontSize: 15 }} /> : null}
-                              </Box>
-                              <ListItemText
-                                primary={inlineLabel}
-                                sx={{ minWidth: 0, my: 0 }}
-                                primaryTypographyProps={{
-                                  variant: 'body2',
-                                  fontWeight: isSelectedPage ? 700 : 500,
-                                  sx: {
-                                    lineHeight: 1.15,
-                                    fontSize: '0.79rem',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                  }
-                                }}
-                              />
-                            </ListItemButton>
-                          );
-                        })}
+                        {displayFilePages.map((pageInfo) => renderFileTreeItem(pageInfo))}
                       </List>
                     )}
                   </Box>
